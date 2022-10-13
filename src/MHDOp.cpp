@@ -112,7 +112,15 @@ namespace MHDOp {
 	PROTO_KERNEL_END(dot_pro_calcFF, dot_pro_calcF)
 
 
-
+	/**
+	 * @brief Function to multiply flux with cofactors. Also adds the extra term for 4th order. 
+	 * @param a_F_f_mapped1D the output mapped flux.
+	 * @param a_F_ave_f the input unmapped flux.
+	 * @param a_N_s_d_ave_f the input cofactor.
+	 * @param a_dot_pro_sum summed perpendicular dot product.
+	 * @param a_dx_d dx in d direction.
+	 * @note If no mapping is used, J = 1.
+	 */ 
 	PROTO_KERNEL_START
 	void F_f_mapped1D_calcF(State& a_F_f_mapped1D,
 	                        const State& a_F_ave_f,
@@ -130,7 +138,12 @@ namespace MHDOp {
 
 	
 
-
+	/**
+	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
+	 * @param a_Rhs the output LevelBoxData.
+	 * @param a_JU_ave the input LevelBoxData containing 4th order averaged product of Jacobian and conserved variables.
+	 * @note If no mapping is used, J = 1.
+	 */ 
 	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
 			  MHDLevelDataState& a_State,
@@ -617,6 +630,12 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(B_face_calcF, B_face_calc)
 
+
+	/**
+	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
+	 * @param a_Rhs the output LevelBoxData.
+	 * @param a_U the input LevelBoxData containing conserved variables.
+	 */
 	void step_spherical_2O(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_U,
 			  MHDLevelDataState& a_State,

@@ -15,22 +15,13 @@ class MHDLevelDataState;
 /// @brief MHDOp namespace
 namespace MHDOp
 {
-	/**
-	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
-	 * @param a_Rhs the output LevelBoxData.
-	 * @param a_U the input LevelBoxData containing conserved variables.
-	 */
+	
 	void step_spherical_2O(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_U,
 			  MHDLevelDataState& a_State,
 			  double& a_min_dt);
 
-	/**
-	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
-	 * @param a_Rhs the output LevelBoxData.
-	 * @param a_JU_ave the input LevelBoxData containing 4th order averaged product of Jacobian and conserved variables.
-	 * @note If no mapping is used, J = 1.
-	 */ 
+	
 	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
 			  MHDLevelDataState& a_State,
