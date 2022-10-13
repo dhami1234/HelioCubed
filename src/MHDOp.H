@@ -12,38 +12,25 @@ using namespace Proto;
 typedef Var<double,DIM> V;
 typedef Var<double,NUMCOMPS> State;
 class MHDLevelDataState;
+/// @brief MHDOp namespace
 namespace MHDOp
 {
-
-
-	// Compute the right-hand side for the MHD equations (i.e. div(flux)).
-	// Note: a_Rhs is NOT multiplied by the time step, which may be required
-	// by the RK4 implementation.
-
-	// void step_spherical_2O(BoxData<double,NUMCOMPS>& a_Rhs,
-	// 		               BoxData<double,NUMCOMPS>& a_Rhs_divB,
-	// 					   double& a_min_dt,	
-	//           const BoxData<double,NUMCOMPS>& a_U,
-	//           const Box& a_rangeBox,
-	// 		  BoxData<double,DIM>& a_x_sph_cc,
-	// 		  BoxData<double,DIM>& a_x_sph_fc_1,
-	// 		  BoxData<double,DIM>& a_x_sph_fc_2,
-	// 		  BoxData<double,DIM>& a_x_sph_fc_3,
-	// 		  BoxData<double,DIM>& a_dx_sph,
-	// 		  BoxData<double,DIM>& a_face_area,
-	// 		  BoxData<double,1>& a_cell_volume,
-	//           const double a_dx,
-	//           const double a_dy,
-	//           const double a_dz,
-	//           const double a_gamma,
-	//           bool a_divB_calculated,
-	//           bool a_min_dt_calculated);
-
+	/**
+	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
+	 * @param a_Rhs the output LevelBoxData.
+	 * @param a_U the input LevelBoxData containing conserved variables.
+	 */
 	void step_spherical_2O(LevelBoxData<double,NUMCOMPS>& a_Rhs,
-			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
+			  LevelBoxData<double,NUMCOMPS>& a_U,
 			  MHDLevelDataState& a_State,
 			  double& a_min_dt);
 
+	/**
+	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
+	 * @param a_Rhs the output LevelBoxData.
+	 * @param a_JU_ave the input LevelBoxData containing 4th order averaged product of Jacobian and conserved variables.
+	 * @note If no mapping is used, J = 1.
+	 */ 
 	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
 			  MHDLevelDataState& a_State,
