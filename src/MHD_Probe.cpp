@@ -13,7 +13,7 @@
 extern Parsefrominputs inputs;
 
 using namespace std;
-
+/// @brief MHD_Probe namespace
 namespace MHD_Probe {
 
     //======================================================================

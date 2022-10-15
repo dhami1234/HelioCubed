@@ -9,7 +9,7 @@
 
 typedef BoxData<double,1> Scalar;
 typedef BoxData<double,NUMCOMPS> Vector;
-
+/// @brief MHD_CFL namespace
 namespace MHD_CFL {
 
     PROTO_KERNEL_START

@@ -5,14 +5,14 @@
 //TODO: These variables need to go into a common file or be defined in a more accessible way
 constexpr unsigned int NUMCOMPS=2*DIM+2;
 
-#define NGHOST 6
+#define NGHOST 5
 
 using namespace Proto;
 
 typedef Var<double,DIM> V;
 typedef Var<double,NUMCOMPS> State;
 class MHDLevelDataState;
-/// @brief MHDOp namespace
+
 namespace MHDOp
 {
 	
@@ -32,8 +32,8 @@ namespace MHDOp
 			  MHDLevelDataState& a_State,
 			  double& a_min_dt);
 
-	void consToPrimcalc(BoxData<double,NUMCOMPS>& W_bar,
-	                    const BoxData<double,NUMCOMPS>& a_U_demapped,
+	void consToPrimcalc(BoxData<double,NUMCOMPS>& a_W,
+	                    const BoxData<double,NUMCOMPS>& a_U,
 	                    const double gamma);
 
 	void Fix_negative_P(BoxData<double,NUMCOMPS>& a_U,
@@ -51,13 +51,5 @@ namespace MHDOp
 	void consToPrimF(State&         a_W,
 	                 const State&   a_U,
 	                 double a_gamma);
-
-	PROTO_KERNEL_START
-	void upwindStateF(State& a_out,
-	                  const State& a_low,
-	                  const State& a_high,
-	                  int a_dir,
-	                  double a_gamma);
-
 
 }

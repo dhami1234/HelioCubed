@@ -11,7 +11,7 @@ typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 
 extern Parsefrominputs inputs;
-
+/// @brief MHD_Limiters namespace
 namespace MHD_Limiters {
 
 	PROTO_KERNEL_START

@@ -8,6 +8,7 @@
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 
+/// @brief MHD_Riemann_Solvers namespace
 namespace MHD_Riemann_Solvers {
 
 	PROTO_KERNEL_START

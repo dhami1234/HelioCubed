@@ -6,7 +6,7 @@
 #include "MHD_Constants.H"
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
-
+/// @brief MHD_divB_Cleaning namespace
 namespace MHD_divB_Cleaning {
 
 

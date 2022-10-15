@@ -12,7 +12,7 @@ extern Parsefrominputs inputs;
 
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
-
+/// @brief MHD_Mapping namespace
 namespace MHD_Mapping {
 
 	PROTO_KERNEL_START

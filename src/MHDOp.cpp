@@ -22,9 +22,14 @@ extern Parsefrominputs inputs;
 
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
-
+/// @brief MHDOp namespace
 namespace MHDOp {
-
+	/**
+	 * @brief Function to covert conserevd variables to primitive variables. 
+	 * @param a_W the output primitive variables.
+	 * @param a_U the input conserved variables.
+	 * @param a_gamma gamma.
+	 */ 
 	PROTO_KERNEL_START
 	void
 	consToPrimF(State&         a_W,
@@ -53,13 +58,28 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(consToPrimF, consToPrim)
 
-	void consToPrimcalc(BoxData<double,NUMCOMPS>& W_bar,
-	                    const BoxData<double,NUMCOMPS>& a_U_demapped,
+
+	/**
+	 * @brief Function to covert conserevd variables to primitive variables. 
+	 * @param a_W the output primitive variables.
+	 * @param a_U the input conserved variables.
+	 * @param a_gamma gamma.
+	 */ 
+	void consToPrimcalc(BoxData<double,NUMCOMPS>& a_W,
+	                    const BoxData<double,NUMCOMPS>& a_U,
 	                    const double gamma)
 	{
-		W_bar = forall<double,NUMCOMPS>(consToPrim,a_U_demapped, gamma);
+		a_W = forall<double,NUMCOMPS>(consToPrim,a_U, gamma);
 	}
 
+
+	/**
+	 * @brief Function to covert conserevd variables to primitive variables, used in spherical mapping. 
+	 * @param a_W_sph the output primitive variables.
+	 * @param a_U_sph the input conserved variables, but the v and B vectors are scaled with row magnitudes of A matrix (see overleaf document).
+	 * @param a_U_sph_actual the input conserved variables.
+	 * @param a_gamma gamma.
+	 */
 	PROTO_KERNEL_START
 	void
 	consToPrimSphF(State&         a_W_sph,
@@ -92,14 +112,27 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(consToPrimSphF, consToPrimSph)
 
-	void consToPrimSphcalc(BoxData<double,NUMCOMPS>& W_bar,
+	/**
+	 * @brief Function to covert conserevd variables to primitive variables, used in spherical mapping. 
+	 * @param a_W_sph the output primitive variables.
+	 * @param a_U_sph the input conserved variables, but the v and B vectors are scaled with row magnitudes of A matrix (see overleaf document).
+	 * @param a_U_sph_actual the input conserved variables.
+	 * @param a_gamma gamma.
+	 */
+	void consToPrimSphcalc(BoxData<double,NUMCOMPS>& a_W_sph,
 	                    const BoxData<double,NUMCOMPS>& a_U_sph,
 	                    const BoxData<double,NUMCOMPS>& a_U_sph_actual,
 	                    const double gamma)
 	{
-		W_bar = forall<double,NUMCOMPS>(consToPrimSph,a_U_sph,a_U_sph_actual, gamma);
+		a_W_sph = forall<double,NUMCOMPS>(consToPrimSph,a_U_sph,a_U_sph_actual, gamma);
 	}
 
+	/**
+	 * @brief Function to multiply scalar with a vector. 
+	 * @param a_dot_pro the output vector.
+	 * @param a_d_perp_N_s the input scalar.
+	 * @param a_d_perp_F the input vector.
+	 */
 	PROTO_KERNEL_START
 	void dot_pro_calcFF(State& a_dot_pro,
 	                    const Var<double,1>& a_d_perp_N_s,
@@ -119,7 +152,6 @@ namespace MHDOp {
 	 * @param a_N_s_d_ave_f the input cofactor.
 	 * @param a_dot_pro_sum summed perpendicular dot product.
 	 * @param a_dx_d dx in d direction.
-	 * @note If no mapping is used, J = 1.
 	 */ 
 	PROTO_KERNEL_START
 	void F_f_mapped1D_calcF(State& a_F_f_mapped1D,
@@ -358,7 +390,13 @@ namespace MHDOp {
 
 
 
-
+	/**
+	 * @brief Function to calculate the right hand side of the finite volume method, Magnetic field divergence, and min dt according to CFL condition. 
+	 * This function is tailored for the special mapping of the spherical grid that preserves radial flow.
+	 * @param a_Rhs the output LevelBoxData.
+	 * @param a_JU_ave the input LevelBoxData containing 4th order averaged product of Jacobian and conserved variables.
+	 * @note If no mapping is used, J = 1.
+	 */ 
 	void step_spherical(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
 			  MHDLevelDataState& a_State,
@@ -446,7 +484,11 @@ namespace MHDOp {
 		}
 	}
 
-
+	/**
+	 * @brief Function to make pressure epsilon if it goes to negative for some reason. 
+	 * @param a_U the input LevelBoxData containing conserved variables.
+	 * @param a_gamma gamma.
+	 */ 
 	PROTO_KERNEL_START
 	void
 	Fix_negative_P_calcF(const Point& a_pt,
@@ -474,13 +516,24 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(Fix_negative_P_calcF, Fix_negative_P_calc)
 
+	/**
+	 * @brief Function to make pressure epsilon if it goes to negative for some reason. 
+	 * @param a_U the input LevelBoxData containing conserved variables.
+	 * @param a_gamma gamma.
+	 */ 
 	void Fix_negative_P(BoxData<double,NUMCOMPS>& a_U,
 	                    const double gamma)
 	{
 		forallInPlace_p(Fix_negative_P_calc, a_U, gamma);
 	}
 
-
+	/**
+	 * @brief Function to scale flux with face area. 
+	 * @param a_F_scaled the output scaled flux.
+	 * @param a_F the input flux.
+	 * @param a_face_area the input face area.
+	 * @param a_d direction index.
+	 */ 
 	PROTO_KERNEL_START
 	void Scale_with_A_Ff_calcF(const Point& a_pt,
 						Var<double,NUMCOMPS>& a_F_scaled,
@@ -496,6 +549,15 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(Scale_with_A_Ff_calcF, Scale_with_A_Ff_calc)
 
+
+	/**
+	 * @brief Function to scale B at face with face area. 
+	 * @param a_B_scaled the output scaled B_face.
+	 * @param a_W_sph1 the input primitive variables on low side.
+	 * @param a_W_sph2 the input primitive variables on high side.
+	 * @param a_face_area the input face area.
+	 * @param a_d direction index.
+	 */ 
 	PROTO_KERNEL_START
 	void Scale_with_A_Bf_calcF(const Point& a_pt,
 						Var<double,1>& a_B_scaled,
@@ -511,6 +573,12 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(Scale_with_A_Bf_calcF, Scale_with_A_Bf_calc)
 
+	/**
+	 * @brief Function to scale flux at a face with cell volume. 
+	 * @param a_F_scaled the output scaled flux.
+	 * @param a_F the input flux.
+	 * @param a_cell_volume the input cell volume.
+	 */ 
 	PROTO_KERNEL_START
 	void Scale_with_V_calcF(const Point& a_pt,
 						Var<double,NUMCOMPS>& a_F_scaled,
@@ -525,7 +593,12 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(Scale_with_V_calcF, Scale_with_V_calc)
 
-
+	/**
+	 * @brief Function to scale a scalar flux at a face with cell volume. 
+	 * @param a_F_scaled the output scaled flux.
+	 * @param a_F the input flux.
+	 * @param a_cell_volume the input cell volume.
+	 */ 
 	PROTO_KERNEL_START
 	void Scale_with_V2_calcF(const Point& a_pt,
 						Var<double,NUMCOMPS>& a_F_scaled,
@@ -541,50 +614,56 @@ namespace MHDOp {
 	PROTO_KERNEL_END(Scale_with_V2_calcF, Scale_with_V2_calc)
 
 
-	PROTO_KERNEL_START
-	void Scale_Ff_calc2F(const Point& a_pt,
-						Var<double,NUMCOMPS>& a_F_scaled,
-						Var<double,NUMCOMPS>& a_F,
-	                    Var<double,DIM>& a_x_sph_cc,
-	                   	Var<double,DIM>& a_x_sph_fc,
-	                   	Var<double,DIM>& a_dx_sp,
-	                   	int a_d)
-	{
-		double r_cc = a_x_sph_cc(0);
-		double theta_cc = a_x_sph_cc(1);
+	// PROTO_KERNEL_START
+	// void Scale_Ff_calc2F(const Point& a_pt,
+	// 					Var<double,NUMCOMPS>& a_F_scaled,
+	// 					Var<double,NUMCOMPS>& a_F,
+	//                     Var<double,DIM>& a_x_sph_cc,
+	//                    	Var<double,DIM>& a_x_sph_fc,
+	//                    	Var<double,DIM>& a_dx_sp,
+	//                    	int a_d)
+	// {
+	// 	double r_cc = a_x_sph_cc(0);
+	// 	double theta_cc = a_x_sph_cc(1);
 
-		double r_fc = a_x_sph_fc(0);
-		double theta_fc = a_x_sph_fc(1);
+	// 	double r_fc = a_x_sph_fc(0);
+	// 	double theta_fc = a_x_sph_fc(1);
 
-		double dr = a_dx_sp(0);
-		double dtheta = a_dx_sp(1);
-		double dphi = a_dx_sp(2);
+	// 	double dr = a_dx_sp(0);
+	// 	double dtheta = a_dx_sp(1);
+	// 	double dphi = a_dx_sp(2);
 
-		if (a_d == 0){
-			for (int i = 0; i < NUMCOMPS; i++){
-				// a_F_scaled(i) = -a_F(i)*(r_fc*r_fc)/(dr*r_cc*r_cc);
-				a_F_scaled(i) = (r_fc*r_fc)/(dr*r_cc*r_cc);
-			}
-		}
+	// 	if (a_d == 0){
+	// 		for (int i = 0; i < NUMCOMPS; i++){
+	// 			// a_F_scaled(i) = -a_F(i)*(r_fc*r_fc)/(dr*r_cc*r_cc);
+	// 			a_F_scaled(i) = (r_fc*r_fc)/(dr*r_cc*r_cc);
+	// 		}
+	// 	}
 
-		if (a_d == 1){
-			for (int i = 0; i < NUMCOMPS; i++){
-				// a_F_scaled(i) = -a_F(i)*sin(theta_fc)/(r_cc*sin(theta_cc)*sin(dtheta));
-				a_F_scaled(i) = sin(theta_fc)/(r_cc*sin(theta_cc)*sin(dtheta));
-			}
-		}
+	// 	if (a_d == 1){
+	// 		for (int i = 0; i < NUMCOMPS; i++){
+	// 			// a_F_scaled(i) = -a_F(i)*sin(theta_fc)/(r_cc*sin(theta_cc)*sin(dtheta));
+	// 			a_F_scaled(i) = sin(theta_fc)/(r_cc*sin(theta_cc)*sin(dtheta));
+	// 		}
+	// 	}
 
-		if (a_d == 2){
-			for (int i = 0; i < NUMCOMPS; i++){
-				// a_F_scaled(i) = -a_F(i)/(r_cc*sin(theta_cc)*dphi);
-				a_F_scaled(i) = 1.0/(r_cc*sin(theta_cc)*dphi);
-			}
-		}
+	// 	if (a_d == 2){
+	// 		for (int i = 0; i < NUMCOMPS; i++){
+	// 			// a_F_scaled(i) = -a_F(i)/(r_cc*sin(theta_cc)*dphi);
+	// 			a_F_scaled(i) = 1.0/(r_cc*sin(theta_cc)*dphi);
+	// 		}
+	// 	}
 
-	}
-	PROTO_KERNEL_END(Scale_Ff_calc2F, Scale_Ff_calc2)
+	// }
+	// PROTO_KERNEL_END(Scale_Ff_calc2F, Scale_Ff_calc2)
 
-
+	/**
+	 * @brief Function to calculate Powell term for div B calculation. 
+	 * @param a_P the output powell terms.
+	 * @param a_W the input primitive variables.
+	 * @param a_F the input divB.
+	 * @param a_cell_volume the input cell volume.
+	 */
 	PROTO_KERNEL_START
 	void PowellF(const Point& a_pt,
 				 State&         a_P,
@@ -618,7 +697,13 @@ namespace MHDOp {
 
 
 
-
+	/**
+	 * @brief Function to calculate B at face. 
+	 * @param a_B_face the output B a face.
+	 * @param a_W_sph1 the input primitive variables on low side.
+	 * @param a_W_sph2 the input primitive variables on high side.
+	 * @param a_d the input direction.
+	 */
 	PROTO_KERNEL_START
 	void B_face_calcF(const Point& a_pt,
                     Var<double,1>& a_B_face,

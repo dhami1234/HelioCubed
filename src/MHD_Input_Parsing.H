@@ -4,7 +4,7 @@
 #include "InputParser.H"
 
 using namespace Proto;
-
+/// @brief Parsefrominputs class
 class Parsefrominputs {
   public:
     double tstop;

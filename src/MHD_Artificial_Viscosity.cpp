@@ -9,7 +9,7 @@ extern Parsefrominputs inputs;
 
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
-
+/// @brief MHD_Artificial_Viscosity namespace
 namespace MHD_Artificial_Viscosity {
 
 	PROTO_KERNEL_START

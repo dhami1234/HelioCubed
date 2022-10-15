@@ -10,7 +10,7 @@
 #include "MHD_Constants.H"
 #include "MHDLevelDataRK4.H"
 extern Parsefrominputs inputs;
-
+/// @brief MHD_Output_Writer namespace
 namespace MHD_Output_Writer {
 
 	void Write_data(MHDLevelDataState& state,

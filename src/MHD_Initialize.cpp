@@ -9,7 +9,7 @@ extern Parsefrominputs inputs;
 
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
-
+/// @brief MHD_Initialize namespace
 namespace MHD_Initialize {
 
 
