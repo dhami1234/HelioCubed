@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
 	//Until we have a coarsening operation for LevelBoxData, we perform the error calculations on a single patch.
 	if(pid==0 && (inputs.convTestType != 0))
 	{
-		for (int varr = 0; varr < 6; varr++) {
+		for (int varr = 0; varr < NUMCOMPS; varr++) {
 			// Reduction<double> rxn;
 			double ErrMax[2];
 			for(int ilev=0; ilev<2; ilev++)

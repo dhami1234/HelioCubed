@@ -1540,12 +1540,25 @@ namespace MHD_Mapping {
 
 
 	void Regular_map_filling_func(MHDLevelDataState& a_state){
+
+		HDF5Handler h5;
 		for (auto dit : a_state.m_Jacobian_ave){		
 			MHD_Mapping::Jacobian_Ave_calc((a_state.m_Jacobian_ave)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz,a_state.m_U[dit].box().grow(1));
 			MHD_Mapping::N_ave_f_calc_func((a_state.m_N_ave_f)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz);
+			// for (int d=0; d<DIM; d++){
+			// 	for (int s=0; s<DIM; s++){
+			// 		BoxData<double> N_s_d_ave_f = slice(a_state.m_N_ave_f[dit],d*DIM+s);
+			// 		h5.writePatch(1,N_s_d_ave_f,"NT_" + to_string(s) + "_" + to_string(d));
+			// 	}
+			// }
+			
 		}
 		(a_state.m_Jacobian_ave).exchange();
-		HDF5Handler h5;
+		
+
+		
+
+
 		double a_dx = a_state.m_dx;
 		double a_dy = a_state.m_dy;
 		double a_dz = a_state.m_dz;
@@ -1566,13 +1579,13 @@ namespace MHD_Mapping {
 			{
 				NT[dir] = Operator::cofactor(X,dir);
 				NT[dir].copyTo(a_state.m_NT[dir][dit]);
-				//h5.writePatch(h,NT[dir],"NT" + to_string(nx) + "_" + to_string(dir));
+				h5.writePatch(1,NT[dir],"NT_" + to_string(dir));
 			}
 			BoxData<double> J;
 			{
 				J = Operator::jacobian(X,NT);
 				J.copyTo(a_state.m_J[dit]);
-				// h5.writePatch(1,J,"J");
+				h5.writePatch(1,J,"J");
 			}
 
 		}

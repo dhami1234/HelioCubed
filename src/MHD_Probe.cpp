@@ -122,6 +122,7 @@ namespace MHD_Probe {
                 bool give_space)
 
     {
+        #if DIM == 3
         int pid = procID();
         ofstream outputFile;
     	outputFile.open(inputs.Probe_data_file,std::ios::app);
@@ -326,6 +327,6 @@ namespace MHD_Probe {
         }
 
         outputFile.close();
-   
+        #endif
     }
 }

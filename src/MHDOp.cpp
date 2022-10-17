@@ -18,6 +18,7 @@
 #include "MHD_CFL.H"
 #include "MHDLevelDataRK4.H"
 
+constexpr MemType MEM = MEMTYPE_DEFAULT;
 extern Parsefrominputs inputs;
 
 typedef BoxData<double,1,HOST> Scalar;
@@ -176,117 +177,6 @@ namespace MHDOp {
 	 * @param a_JU_ave the input LevelBoxData containing 4th order averaged product of Jacobian and conserved variables.
 	 * @note If no mapping is used, J = 1.
 	 */ 
-	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
-			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
-			  MHDLevelDataState& a_State,
-			  double& a_min_dt)
-	{
-
-		
-		static Stencil<double> m_laplacian;
-		static Stencil<double> m_deconvolve;
-		static Stencil<double> m_copy;
-		static Stencil<double> m_laplacian_f[DIM];
-		static Stencil<double> m_deconvolve_f[DIM];
-		static Stencil<double> m_convolve_f[DIM];
-		static Stencil<double> m_interp_H[DIM];
-		static Stencil<double> m_interp_L[DIM];
-		static Stencil<double> m_interp_edge[DIM];
-		static Stencil<double> m_divergence[DIM];
-		static Stencil<double> m_derivative[DIM];
-		static bool initialized = false;
-		if(!initialized)
-		{
-			m_laplacian = Stencil<double>::Laplacian();
-			m_deconvolve = (-1.0/24.0)*m_laplacian + (1.0)*Shift(Point::Zeros());
-			m_copy = 1.0*Shift(Point::Zeros());
-			for (int dir = 0; dir < DIM; dir++)
-			{
-				m_laplacian_f[dir] = Stencil<double>::LaplacianFace(dir);
-				m_deconvolve_f[dir] = (-1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
-				m_convolve_f[dir] = (1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
-				m_interp_H[dir] = Stencil<double>::CellToFaceH(dir);
-				m_interp_L[dir] = Stencil<double>::CellToFaceL(dir);
-				m_interp_edge[dir] = Stencil<double>::CellToFace(dir);
-				m_divergence[dir] = Stencil<double>::FluxDivergence(dir);
-				m_derivative[dir] = Stencil<double>::Derivative(1,dir,2);
-			}
-			initialized =  true;
-		}
-
-
-
-		using namespace std;
-		double a_dx = a_State.m_dx;
-		double a_dy = a_State.m_dy;
-		double a_dz = a_State.m_dz;
-		double gamma = a_State.m_gamma;
-		double dxd[3] = {a_dx, a_dy, a_dz};
-		double dt_new;
-		for (auto dit : a_State.m_U){
-			Box dbx0 = a_JU_ave[dit].box();
-			//Box dbx1 = dbx0.grow(1-NGHOST);
-			Box dbx1 = dbx0;
-			Box dbx2 = dbx0.grow(0-NGHOST);
-
-			a_Rhs[dit].setVal(0.0);
-		
-			Vector a_U_ave(dbx0);
-			MHD_Mapping::JU_to_U_calc(a_U_ave, a_JU_ave[dit], a_State.m_Jacobian_ave[dit], dbx0);
-			Vector W_bar = forall<double,NUMCOMPS>(consToPrim,a_U_ave, gamma);
-			Vector U = m_deconvolve(a_U_ave);
-			Vector W  = forall<double,NUMCOMPS>(consToPrim,U, gamma);
-			Vector W_ave = m_laplacian(W_bar,1.0/24.0);
-			W_ave += W;
-			if (!a_State.m_min_dt_calculated){ 
-				MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx0, a_dx, a_dy, a_dz, gamma);	
-				if (dt_new < a_min_dt) a_min_dt = dt_new;
-			}
-
-			for (int d = 0; d < DIM; d++)
-			{
-				Vector W_ave_low_temp(dbx0), W_ave_high_temp(dbx0);
-				Vector W_ave_low(dbx0), W_ave_high(dbx0);
-				W_ave_low_temp = m_interp_L[d](W_ave);
-				W_ave_high_temp = m_interp_H[d](W_ave);
-				MHD_Limiters::MHD_Limiters_4O(W_ave_low,W_ave_high,W_ave_low_temp,W_ave_high_temp,W_ave,W_bar,d,a_dx, a_dy, a_dz);
-				Vector W_low = m_deconvolve_f[d](W_ave_low);
-				Vector W_high = m_deconvolve_f[d](W_ave_high);
-				Vector F_f(dbx1), F_ave_f(dbx1);
-				Vector F_f_mapped(dbx1);
-				F_f_mapped.setVal(0.0);
-				double dx_d = dxd[d];
-				for (int s = 0; s < DIM; s++) {
-					if (inputs.Riemann_solver_type == 1) {
-						MHD_Riemann_Solvers::Rusanov_Solver(F_f,W_low,W_high,s,gamma);
-					}
-					if (inputs.Riemann_solver_type == 2) {
-						MHD_Riemann_Solvers::Roe8Wave_Solver(F_f,W_low,W_high,s,gamma);
-					}
-					Scalar N_s_d_ave_f = slice(a_State.m_N_ave_f[dit],d*DIM+s);
-					F_ave_f = m_convolve_f[d](F_f);
-					Vector dot_pro_sum(dbx1);
-					dot_pro_sum.setVal(0.0);
-					for (int s_temp = 0; s_temp < DIM; s_temp++) {
-						if (s_temp != d) {
-							Scalar d_perp_N_s = m_derivative[s_temp](N_s_d_ave_f);
-							Vector d_perp_F = m_derivative[s_temp](F_ave_f);
-							Vector dot_pro = forall<double,NUMCOMPS>(dot_pro_calcF,d_perp_N_s,d_perp_F);
-							dot_pro_sum += dot_pro;
-						}
-					}
-					Vector F_f_mapped1D = forall<double,NUMCOMPS>(F_f_mapped1D_calc,F_ave_f,N_s_d_ave_f,dot_pro_sum,dx_d);
-					F_f_mapped += F_f_mapped1D;
-				}
-				Vector Rhs_d = m_divergence[d](F_f_mapped);
-				Rhs_d *= -1./dx_d;
-				a_Rhs[dit] += Rhs_d;
-			}
-		}
-	}
-
-
-
 	// void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 	// 		  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
 	// 		  MHDLevelDataState& a_State,
@@ -344,9 +234,6 @@ namespace MHDOp {
 		
 	// 		Vector a_U_ave(dbx0);
 	// 		MHD_Mapping::JU_to_U_calc(a_U_ave, a_JU_ave[dit], a_State.m_Jacobian_ave[dit], dbx0);
-
-	// 		// auto a_U_ave = Operator::_cellQuotient(a_JU_ave[dit],a_State.m_J[dit],a_JU_ave[dit],a_State.m_J[dit]);
-
 	// 		Vector W_bar = forall<double,NUMCOMPS>(consToPrim,a_U_ave, gamma);
 	// 		Vector U = m_deconvolve(a_U_ave);
 	// 		Vector W  = forall<double,NUMCOMPS>(consToPrim,U, gamma);
@@ -366,7 +253,7 @@ namespace MHDOp {
 	// 			MHD_Limiters::MHD_Limiters_4O(W_ave_low,W_ave_high,W_ave_low_temp,W_ave_high_temp,W_ave,W_bar,d,a_dx, a_dy, a_dz);
 	// 			Vector W_low = m_deconvolve_f[d](W_ave_low);
 	// 			Vector W_high = m_deconvolve_f[d](W_ave_high);
-	// 			Boxarray<double,NUMCOMPS,DIM> F_f(dbx1), F_ave_f(dbx1);
+	// 			Vector F_f(dbx1), F_ave_f(dbx1);
 	// 			Vector F_f_mapped(dbx1);
 	// 			F_f_mapped.setVal(0.0);
 	// 			double dx_d = dxd[d];
@@ -377,16 +264,157 @@ namespace MHDOp {
 	// 				if (inputs.Riemann_solver_type == 2) {
 	// 					MHD_Riemann_Solvers::Roe8Wave_Solver(F_f,W_low,W_high,s,gamma);
 	// 				}
+	// 				Scalar N_s_d_ave_f = slice(a_State.m_N_ave_f[dit],d*DIM+s);
+	// 				F_ave_f = m_convolve_f[d](F_f);
+	// 				Vector dot_pro_sum(dbx1);
+	// 				dot_pro_sum.setVal(0.0);
+	// 				for (int s_temp = 0; s_temp < DIM; s_temp++) {
+	// 					if (s_temp != d) {
+	// 						Scalar d_perp_N_s = m_derivative[s_temp](N_s_d_ave_f);
+	// 						Vector d_perp_F = m_derivative[s_temp](F_ave_f);
+	// 						Vector dot_pro = forall<double,NUMCOMPS>(dot_pro_calcF,d_perp_N_s,d_perp_F);
+	// 						dot_pro_sum += dot_pro;
+	// 					}
+	// 				}
+	// 				Vector F_f_mapped1D = forall<double,NUMCOMPS>(F_f_mapped1D_calc,F_ave_f,N_s_d_ave_f,dot_pro_sum,dx_d);
+	// 				F_f_mapped += F_f_mapped1D;
 	// 			}
-
-	// 			F_ave_f = m_convolve_f[d](F_f);
-
 	// 			Vector Rhs_d = m_divergence[d](F_f_mapped);
 	// 			Rhs_d *= -1./dx_d;
 	// 			a_Rhs[dit] += Rhs_d;
 	// 		}
 	// 	}
 	// }
+
+	PROTO_KERNEL_START
+	void Fill_flux_calcF(const Point& a_pt,
+						Var<double,DIM, MEM ,NUMCOMPS>&       a_F,
+						const Var<double,NUMCOMPS>&        a_F_temp,
+	            		const int a_s)
+	{
+		for (int i=0; i<NUMCOMPS; i++){
+			a_F(a_s,i) = a_F_temp(i);
+		}
+	}
+	PROTO_KERNEL_END(Fill_flux_calcF, Fill_flux_calc)
+
+	PROTO_KERNEL_START
+	void Transpose_calcF(const Point& a_pt,
+						Var<double,NUMCOMPS>&       a_F,
+						const Var<double,1,MEM,NUMCOMPS>&        a_F_temp)
+	{
+		for (int i=0; i<NUMCOMPS; i++){
+			a_F(i) = a_F_temp(0,i);
+		}
+	}
+	PROTO_KERNEL_END(Transpose_calcF, Transpose_calc)
+
+	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
+			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
+			  MHDLevelDataState& a_State,
+			  double& a_min_dt)
+	{
+
+		
+		static Stencil<double> m_laplacian;
+		static Stencil<double> m_deconvolve;
+		static Stencil<double> m_copy;
+		static Stencil<double> m_laplacian_f[DIM];
+		static Stencil<double> m_deconvolve_f[DIM];
+		static Stencil<double> m_convolve_f[DIM];
+		static Stencil<double> m_interp_H[DIM];
+		static Stencil<double> m_interp_L[DIM];
+		static Stencil<double> m_interp_edge[DIM];
+		static Stencil<double> m_divergence[DIM];
+		static Stencil<double> m_derivative[DIM];
+		static bool initialized = false;
+		if(!initialized)
+		{
+			m_laplacian = Stencil<double>::Laplacian();
+			m_deconvolve = (-1.0/24.0)*m_laplacian + (1.0)*Shift(Point::Zeros());
+			m_copy = 1.0*Shift(Point::Zeros());
+			for (int dir = 0; dir < DIM; dir++)
+			{
+				m_laplacian_f[dir] = Stencil<double>::LaplacianFace(dir);
+				m_deconvolve_f[dir] = (-1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
+				m_convolve_f[dir] = (1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
+				m_interp_H[dir] = Stencil<double>::CellToFaceH(dir);
+				m_interp_L[dir] = Stencil<double>::CellToFaceL(dir);
+				m_interp_edge[dir] = Stencil<double>::CellToFace(dir);
+				m_divergence[dir] = Stencil<double>::FluxDivergence(dir);
+				m_derivative[dir] = Stencil<double>::Derivative(1,dir,2);
+			}
+			initialized =  true;
+		}
+
+
+
+		using namespace std;
+		double a_dx = a_State.m_dx;
+		double a_dy = a_State.m_dy;
+		double a_dz = a_State.m_dz;
+		double gamma = a_State.m_gamma;
+		double dxd[3] = {a_dx, a_dy, a_dz};
+		double dt_new;
+		for (auto dit : a_State.m_U){
+			Box dbx0 = a_JU_ave[dit].box();
+			//Box dbx1 = dbx0.grow(1-NGHOST);
+			Box dbx1 = dbx0;
+			Box dbx2 = dbx0.grow(0-NGHOST);
+
+			a_Rhs[dit].setVal(0.0);
+		
+			Vector a_U_ave(dbx0);
+			MHD_Mapping::JU_to_U_calc(a_U_ave, a_JU_ave[dit], a_State.m_Jacobian_ave[dit], dbx0);
+
+			// auto a_U_ave = Operator::_cellQuotient(a_JU_ave[dit],a_State.m_J[dit],a_JU_ave[dit],a_State.m_J[dit]);
+
+			Vector W_bar = forall<double,NUMCOMPS>(consToPrim,a_U_ave, gamma);
+			Vector U = m_deconvolve(a_U_ave);
+			Vector W  = forall<double,NUMCOMPS>(consToPrim,U, gamma);
+			Vector W_ave = m_laplacian(W_bar,1.0/24.0);
+			W_ave += W;
+			if (!a_State.m_min_dt_calculated){ 
+				MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx0, a_dx, a_dy, a_dz, gamma);	
+				if (dt_new < a_min_dt) a_min_dt = dt_new;
+			}
+
+			for (int d = 0; d < DIM; d++)
+			{
+				Vector W_ave_low_temp(dbx0), W_ave_high_temp(dbx0);
+				Vector W_ave_low(dbx0), W_ave_high(dbx0);
+				W_ave_low_temp = m_interp_L[d](W_ave);
+				W_ave_high_temp = m_interp_H[d](W_ave);
+				MHD_Limiters::MHD_Limiters_4O(W_ave_low,W_ave_high,W_ave_low_temp,W_ave_high_temp,W_ave,W_bar,d,a_dx, a_dy, a_dz);
+				Vector W_low = m_deconvolve_f[d](W_ave_low);
+				Vector W_high = m_deconvolve_f[d](W_ave_high);
+				BoxData<double,DIM,MEM,NUMCOMPS> F_f(dbx1);
+				BoxData<double,DIM,MEM,NUMCOMPS> F_ave_f(dbx1);
+				BoxData<double,NUMCOMPS> F_f_temp(dbx1);
+				Vector F_f_mapped(dbx1);
+				F_f_mapped.setVal(0.0);
+				double dx_d = dxd[d];
+				for (int s = 0; s < DIM; s++) {
+					if (inputs.Riemann_solver_type == 1) {
+						MHD_Riemann_Solvers::Rusanov_Solver(F_f_temp,W_low,W_high,s,gamma);
+					}
+					if (inputs.Riemann_solver_type == 2) {
+						MHD_Riemann_Solvers::Roe8Wave_Solver(F_f_temp,W_low,W_high,s,gamma);
+					}
+					forallInPlace_p(Fill_flux_calc, F_f, F_f_temp, s);
+				}
+
+				F_ave_f = m_convolve_f[d](F_f);
+				BoxData<double,1,MEM,NUMCOMPS> fluxdir = Operator::_faceMatrixProductATB(a_State.m_NT[d][dit],F_ave_f,a_State.m_NT[d][dit],F_ave_f,d);
+				forallInPlace_p(Transpose_calc, F_f_mapped, fluxdir);
+				Vector Rhs_d = m_divergence[d](F_f_mapped);
+				Rhs_d *= -1./dx_d;
+				Rhs_d *= 1./dx_d;
+				Rhs_d *= 1./dx_d;
+				a_Rhs[dit] += Rhs_d;
+			}
+		}
+	}
 
 
 
@@ -490,8 +518,7 @@ namespace MHDOp {
 	 * @param a_gamma gamma.
 	 */ 
 	PROTO_KERNEL_START
-	void
-	Fix_negative_P_calcF(const Point& a_pt,
+	void Fix_negative_P_calcF(const Point& a_pt,
 						State&         a_U,
 	            		double a_gamma)
 	{
