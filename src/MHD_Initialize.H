@@ -24,11 +24,5 @@ namespace MHD_Initialize
 
 
 	void initializeState_Spherical_2O(MHDLevelDataState& a_State);
-						 
-	// PROTO_KERNEL_START
-	// unsigned int InitializeStateF(const Point& a_pt,
-	// 							  State& a_U,
-	//                               const V& a_x,
-	//                               const V& a_eta,
-	//                               const double a_gamma);					 		 
+						 				 		 
 }

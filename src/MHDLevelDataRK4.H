@@ -5,7 +5,6 @@
 #include "Proto_LevelBoxData.H"
 #include "MHDOp.H"
 #include "MHD_Artificial_Viscosity.H"
-#include "MHD_divB_Cleaning.H"
 #include <iostream>
 using namespace Proto;
 

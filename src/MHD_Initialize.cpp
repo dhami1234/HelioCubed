@@ -340,26 +340,6 @@ namespace MHD_Initialize {
 			By = (2.0+abs(sin(theta)))*sin(theta)/rad/rad;
 		}
 
-		// if (inputs.init_condition_type == 21) {
-		// 	//////Modifying parameters for radially out flow in spherical grid///////
-
-		// 	double rad = sqrt(x*x+y*y+z*z);
-		// 	double phi = atan2(y,x);
-		// 	double theta = acos(z/rad);
-		// 	rho = 10.0*pow(inputs.r_in*c_AU/rad,2.0);
-		// 	p = 1.0*pow(inputs.r_in*c_AU/rad,2.0*a_gamma);
-
-		// 	if (inputs.initialize_in_spherical_coords == 1){
-		// 		u = 5.0;
-		// 		v = 0.0;
-		// 		w = 0.0; 
-		// 	} else {
-		// 		u = 5.0*sin(theta)*cos(phi);
-		// 		v = 5.0*sin(theta)*sin(phi);
-		// 		w = 5.0*cos(theta);
-		// 	}
-		// }
-
 		if (inputs.init_condition_type == 21) {
 			//////Modifying parameters for radially out flow in spherical grid///////
 			double rad = sqrt(x*x+y*y+z*z);
@@ -421,7 +401,6 @@ namespace MHD_Initialize {
 		a_U(7) = Bz; //Bz
 #endif
 
-		// return 0;
 	}
 	PROTO_KERNEL_END(InitializeStateF, InitializeState)
 
@@ -476,19 +455,16 @@ namespace MHD_Initialize {
 			Vector Lap = Lap2nd(UBig,dbx,1.0/24.0);
 			UBig +=  Lap;
 			}
-			// MHD_Output_Writer::WriteBoxData_array_nocoord(UBig, a_dx, a_dy, a_dz, "UBig");
 
 			Scalar Jacobian_ave(dbx);
-
-			a_State.m_U[dit] = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], UBig);
+			a_State.m_U[dit] = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_J[dit], UBig);
 			for (int d=0; d<DIM; d++) {
 				Vector d_UBig = m_derivative[d](UBig);
-				Scalar d_Jacobian_ave = m_derivative[d](a_State.m_Jacobian_ave[dit]);
+				Scalar d_Jacobian_ave = m_derivative[d](a_State.m_J[dit]);
 				Vector dot_pro = forall<double,NUMCOMPS>(dot_pro_calcF,d_Jacobian_ave,d_UBig);
 				dot_pro *= 1./12.;
 				a_State.m_U[dit] += dot_pro;
 			}
-			// MHD_Output_Writer::WriteBoxData_array_nocoord(a_State.m_U[dit], a_dx, a_dy, a_dz, "a_State.m_U");
 		}
 	}
 

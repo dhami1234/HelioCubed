@@ -182,10 +182,6 @@ int main(int argc, char* argv[])
 
 				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time);
 
-				if (takeviscositystep) {
-					// Take step for artificial viscosity
-					viscositystep.advance(time,dt_old,state);
-				}
 
 				if (inputs.convTestType == 1 || inputs.timeIntegratorType == 1) {
 					PR_TIME("eulerstep");
@@ -196,11 +192,18 @@ int main(int argc, char* argv[])
 					}
 				}
 
+				if (takeviscositystep) {
+					// Take step for artificial viscosity
+					viscositystep.advance(time,dt_old,state);
+				}
+
 				if (inputs.takedivBstep == 1) {
 					// Take step for divB term
 					PR_TIME("divBstep");
 					divBstep.advance(time,dt,state);
 				}
+
+				
 				time += dt;
 				dt_old = dt;
 			}
@@ -256,18 +259,14 @@ int main(int argc, char* argv[])
 	if(pid==0 && (inputs.convTestType != 0))
 	{
 		for (int varr = 0; varr < NUMCOMPS; varr++) {
-			// Reduction<double> rxn;
 			double ErrMax[2];
 			for(int ilev=0; ilev<2; ilev++)
 			{
-				// rxn.reset();
 				auto dit_lev=U[ilev].begin();
 				auto dit_levp1=U[ilev+1].begin();
 
 				BoxData<double,1> err=slice(U[ilev][*dit_lev],varr);
 				err-=Stencil<double>::AvgDown(2)(slice(U[ilev+1][*dit_levp1],varr));
-				// err.absMax(rxn);
-				// ErrMax[ilev]=rxn.fetch();
 				ErrMax[ilev]=err.absMax();
 				std::string filename="Comp_"+std::to_string(varr)+"_err_"+std::to_string(ilev);
 				//NOTE: this assumes that the domain length is 1.0, which is assumed throughout this code. May cause errors if this changes.

@@ -99,7 +99,6 @@ namespace MHD_CFL {
         for (int dir = 0; dir < DIM; dir++)
 		{
 		    Scalar Lambda_f = forall<double>(lambdacalc, a_W_ave, dir, a_gamma);
-            // Box dbx0 = a_W_ave.box();
             Box dbx0 = a_dbx1;
             BoxData<double,DIM> eta(dbx0);
             MHD_Mapping::etaFace_calc(eta, dbx0, a_dx, a_dy, a_dz, dir);
@@ -107,8 +106,6 @@ namespace MHD_CFL {
             MHD_Mapping::eta_to_x_calc(x,eta, dbx0);
             BoxData<double,DIM> x_ahead = alias(x,Point::Basis(dir)*(-1));
             Scalar dt_d = forall<double>(dt_dcalc, Lambda_f, x, x_ahead);
-			// std::string filename="dt_d";
-			// if (dir == 0) WriteBoxData(filename.c_str(),dt_d,a_dx);
             dt[dir] = dt_d.min();
         }
         #if DIM == 2

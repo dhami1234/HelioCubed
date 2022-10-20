@@ -6,7 +6,7 @@
 #include "MHD_Output_Writer.H"
 #include "MHD_Constants.H"
 extern Parsefrominputs inputs;
-
+constexpr MemType MEM = MEMTYPE_DEFAULT;
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 /// @brief MHD_Artificial_Viscosity namespace
@@ -110,34 +110,6 @@ namespace MHD_Artificial_Viscosity {
 
 
 	PROTO_KERNEL_START
-	void dot_pro_calcFF(State& a_dot_pro,
-	                    const Var<double,1>& a_d_perp_N_s,
-	                    const State& a_d_perp_F)
-	{
-		for (int i=0; i< NUMCOMPS; i++) {
-			a_dot_pro(i) = (a_d_perp_N_s(0)*a_d_perp_F(i));
-		}
-	}
-	PROTO_KERNEL_END(dot_pro_calcFF, dot_pro_calcF)
-
-
-
-	PROTO_KERNEL_START
-	void F_f_mapped1D_calcF(State& a_F_f_mapped1D,
-	                        const State& a_F_ave_f,
-	                        const Var<double,1>& a_N_s_d_ave_f,
-	                        const State& a_dot_pro_sum,
-							const double a_dx_d)
-	{
-		for (int i=0; i< NUMCOMPS; i++) {
-			// a_F_f_mapped1D(i) = (a_N_s_d_ave_f(0)*a_F_ave_f(i) + a_dot_pro_sum(i)/12.0)/(-a_dx_d);
-			a_F_f_mapped1D(i) = (a_N_s_d_ave_f(0)*a_F_ave_f(i) + a_dot_pro_sum(i)/12.0);
-		}
-	}
-	PROTO_KERNEL_END(F_f_mapped1D_calcF, F_f_mapped1D_calc)
-
-
-	PROTO_KERNEL_START
 	void lambdacalcF(State& a_lambda,
 	                 const State& a_W_edge,
 	                 int a_d,
@@ -199,7 +171,29 @@ namespace MHD_Artificial_Viscosity {
 	PROTO_KERNEL_END(sqrtCalcF, sqrtCalc)
 
 
-// Used to implement artificial viscosity
+	PROTO_KERNEL_START
+	void Fill_flux_calcF(const Point& a_pt,
+						Var<double,DIM, MEM ,NUMCOMPS>&       a_F,
+						const Var<double,NUMCOMPS>&        a_F_temp,
+	            		const int a_s)
+	{
+		for (int i=0; i<NUMCOMPS; i++){
+			a_F(a_s,i) = a_F_temp(i);
+		}
+	}
+	PROTO_KERNEL_END(Fill_flux_calcF, Fill_flux_calc)
+
+	PROTO_KERNEL_START
+	void Transpose_calcF(const Point& a_pt,
+						Var<double,NUMCOMPS>&       a_F,
+						const Var<double,1,MEM,NUMCOMPS>&        a_F_temp)
+	{
+		for (int i=0; i<NUMCOMPS; i++){
+			a_F(i) = a_F_temp(0,i);
+		}
+	}
+	PROTO_KERNEL_END(Transpose_calcF, Transpose_calc)
+
 	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_JU,
 			  MHDLevelDataState& a_State)
@@ -238,6 +232,8 @@ namespace MHD_Artificial_Viscosity {
 		double a_dx = a_State.m_dx;
 		double a_dy = a_State.m_dy;
 		double a_dz = a_State.m_dz;
+		if (DIM == 2) a_dz = 1.0;
+		double volume = a_dx*a_dy*a_dz;
 		double gamma = a_State.m_gamma;
 		double dxd[3] = {a_dx, a_dy, a_dz};
 		double retval;
@@ -246,33 +242,22 @@ namespace MHD_Artificial_Viscosity {
 			a_Rhs[dit].setVal(0.0);
 			Box dbx0 = a_JU[dit].box();
 			Box dbx1 = dbx0.grow(5-NGHOST); // Are 2 ghost cells enough here? No, atleast 5 are required or strange V_theta appears in polar pulse problem.
-			//Box dbx1 = a_JU.box();
-			Vector a_U(dbx1);
-			MHD_Mapping::JU_to_U_calc(a_U, a_JU[dit], a_State.m_Jacobian_ave[dit], dbx1);
 
+			auto a_U = Operator::_cellTensorQuotient(a_JU[dit],a_State.m_J[dit],a_JU[dit],a_State.m_J[dit]);
+			
 			Vector W_bar(dbx1);
 			MHDOp::consToPrimcalc(W_bar,a_U,gamma);
 
 
 			if (inputs.linear_visc_apply == 1) {
-				//Confirm with Phil that W_bar is fine in place of W_ave. Will help in reducing stencil.
-				//Vector U = m_deconvolve(a_U);
-				//Vector W(dbx1);
-				//MHDOp::consToPrimcalc(W,U,gamma);
-				//Vector W_ave = m_laplacian(W_bar,1.0/24.0);
-				//W_ave += W;
 				for (int d = 0; d < DIM; d++)
 				{
-
-					//Vector W_ave_edge = m_interp_edge[d](W_ave);
 					Vector W_ave_edge = m_interp_L[d](W_bar);
 					Vector Lambda_f = forall<double,NUMCOMPS>(lambdacalc, W_ave_edge, d, gamma);
-					//Scalar N_s_d_ave_f(dbx1);
 					Scalar N_d_sq(dbx1);
 					N_d_sq.setVal(0.0);
 					for (int s = 0; s < DIM; s++) {
-						//MHD_Mapping::N_ave_f_calc_func(N_s_d_ave_f,s,d,a_dx,a_dy,a_dz);
-						Scalar N_s_d_ave_f = slice(a_State.m_N_ave_f[dit],d*DIM+s);
+						Scalar N_s_d_ave_f = slice(a_State.m_NT[d][dit],s);
 						forallInPlace(N_d_sqcalc,dbx1,N_d_sq,N_s_d_ave_f);
 					}
 					double dx_d = dxd[d];
@@ -289,19 +274,19 @@ namespace MHD_Artificial_Viscosity {
 					F_f_behind *= N_d;
 
 					Vector Rhs_d = m_divergence[d](F_f_behind);
-					Rhs_d *= -1./dxd[d];
+					
+					Rhs_d *= -1./volume;
 					a_Rhs[dit] += Rhs_d;
 				}
+				
 			}
-
-
 
 			if (inputs.non_linear_visc_apply == 1) {
 				for (int d = 0; d < DIM; d++)
 				{
-					Vector F_f(dbx1), F_ave_f(dbx1);
+					double dx_d = dxd[d];
+					BoxData<double,DIM,MEM,NUMCOMPS> F_f(dbx1), F_ave_f(dbx1);
 					Scalar Lambda_f(dbx1);
-					//Scalar N_s_d_ave_f(dbx1);
 					Vector F_f_mapped(dbx1);
 					F_f_mapped.setVal(0.0);
 					for (int s = 0; s < DIM; s++) {
@@ -329,44 +314,21 @@ namespace MHD_Artificial_Viscosity {
 						Scalar Visc_coef = forall<double>(Visc_coef_calc,h_lambda,Fast_MS_speed_min);
 						Vector a_U_behind = alias(a_U,Point::Basis(d)*(1));
 						Vector mu_f = forall<double,NUMCOMPS>(mu_f_calc, Visc_coef, a_U, a_U_behind);
-						//MHD_Mapping::N_ave_f_calc_func(N_s_d_ave_f,s,d,a_dx, a_dy, a_dz);
-						Scalar N_s_d_ave_f = slice(a_State.m_N_ave_f[dit],d*DIM+s);
 
-						F_ave_f = m_convolve_f[d](mu_f);
+						forallInPlace_p(Fill_flux_calc, F_f, mu_f, s);
 
-						Vector dot_pro_sum(dbx1);
-						dot_pro_sum.setVal(0.0);
-						for (int s_temp = 0; s_temp < DIM; s_temp++) {
-							if (s_temp != d) {
-								Scalar d_perp_N_s = m_derivative[s_temp](N_s_d_ave_f);
-								Vector d_perp_F = m_derivative[s_temp](F_ave_f);
-								Vector dot_pro = forall<double,NUMCOMPS>(dot_pro_calcF,d_perp_N_s,d_perp_F);
-								dot_pro_sum += dot_pro;
-							}
-						}
-						double dx_d = dxd[d];
-						Vector F_f_mapped1D = forall<double,NUMCOMPS>(F_f_mapped1D_calc,F_ave_f,N_s_d_ave_f,dot_pro_sum,dx_d);
-
-						F_f_mapped += F_f_mapped1D;
 					}
+
+					F_ave_f = m_convolve_f[d](F_f);
+					BoxData<double,1,MEM,NUMCOMPS> fluxdir = Operator::_faceMatrixProductATB(a_State.m_NT[d][dit],F_ave_f,a_State.m_NT[d][dit],F_ave_f,d);
+					forallInPlace_p(Transpose_calc, F_f_mapped, fluxdir);
 					Vector Rhs_d = m_divergence[d](F_f_mapped);
-					Rhs_d *= -1./dxd[d];
+					Rhs_d *= -1./volume;
 					a_Rhs[dit] += Rhs_d;
 				}
 			}
 		}
 	}
-
-
-
-
-
-
-
-
-
-
-
 
 
 	PROTO_KERNEL_START

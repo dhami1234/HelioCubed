@@ -1544,24 +1544,14 @@ namespace MHD_Mapping {
 		HDF5Handler h5;
 		for (auto dit : a_state.m_Jacobian_ave){		
 			MHD_Mapping::Jacobian_Ave_calc((a_state.m_Jacobian_ave)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz,a_state.m_U[dit].box().grow(1));
-			MHD_Mapping::N_ave_f_calc_func((a_state.m_N_ave_f)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz);
-			// for (int d=0; d<DIM; d++){
-			// 	for (int s=0; s<DIM; s++){
-			// 		BoxData<double> N_s_d_ave_f = slice(a_state.m_N_ave_f[dit],d*DIM+s);
-			// 		h5.writePatch(1,N_s_d_ave_f,"NT_" + to_string(s) + "_" + to_string(d));
-			// 	}
-			// }
-			
+			MHD_Mapping::N_ave_f_calc_func((a_state.m_N_ave_f)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz);			
 		}
 		(a_state.m_Jacobian_ave).exchange();
-		
-
-		
-
 
 		double a_dx = a_state.m_dx;
 		double a_dy = a_state.m_dy;
 		double a_dz = a_state.m_dz;
+		double dxd[3] = {a_dx, a_dy, a_dz};
 		for (auto dit : a_state.m_X_corners){
 			Box bxmap = a_state.m_X_corners[dit].box();
         	for (int dir = 0;dir <DIM;dir++)
@@ -1574,18 +1564,24 @@ namespace MHD_Mapping {
 			MHD_Mapping::eta_to_x_calc(X, eta, bxmap);
 
 			std::array<BoxData<double,DIM>,DIM> NT;
-
+			
 			for (int dir = 0; dir < DIM; dir++)
 			{
+				
 				NT[dir] = Operator::cofactor(X,dir);
 				NT[dir].copyTo(a_state.m_NT[dir][dit]);
-				h5.writePatch(1,NT[dir],"NT_" + to_string(dir));
 			}
 			BoxData<double> J;
 			{
 				J = Operator::jacobian(X,NT);
 				J.copyTo(a_state.m_J[dit]);
-				h5.writePatch(1,J,"J");
+				#if DIM==2
+					a_state.m_J[dit] *= 1.0/(a_dx*a_dy);
+				#endif
+				#if DIM==3
+					a_state.m_J[dit] *= 1.0/(a_dx*a_dy*a_dz);
+				#endif
+				// h5.writePatch(1,J,"J");
 			}
 
 		}

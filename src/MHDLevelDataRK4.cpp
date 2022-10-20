@@ -182,11 +182,6 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 		MHDOp::step(a_DX.m_DU,new_state,a_State, dt_temp);
 	}
 
-	HDF5Handler h5;
-	for (auto dit : a_State.m_U){
-		// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, new_state[dit], "new_state_RK4");
-		// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, a_State.m_U[dit], "a_State.m_U_RK4");
-	}
 	if (!a_State.m_min_dt_calculated){
 		double mintime;
 		#ifdef PR_MPI
