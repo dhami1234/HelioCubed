@@ -3,14 +3,13 @@ VARS_OLD := $(.VARIABLES)
 #CXX=clang++
 DEPXX=mpicxx
 CXX=mpicxx
-DIM=2
+DIM=3
 USE_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/lib
 HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/include
 # HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/lib
 # HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/include
 BLIS_INC=/opt/homebrew/Cellar/blis/0.9.0/include/blis
-# PROTO=/Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/proto
 PROTO= ../../proto
 
 # LAPACK_LIB=-lblas -llapack

@@ -32,7 +32,6 @@ namespace MHD_Output_Writer {
 			if (inputs.grid_type_global == 2){
 				if (inputs.Spherical_2nd_order == 0){
 					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
-					// MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],state.m_U[ dit],(state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit],dx,dy,dz,inputs.gamma);
 				}
 				if (inputs.Spherical_2nd_order == 1){
 					MHDOp::consToPrimcalc(new_state3[ dit],state.m_U[ dit],inputs.gamma);
@@ -40,9 +39,8 @@ namespace MHD_Output_Writer {
 					MHD_Mapping::Cartesian_to_Spherical(new_state[ dit],new_state3[ dit],x_sph[ dit]);
 				}
 			} else {
-				//W_bar itself is not 4th order W. But it is calculated from 4th order accurate U for output.
-				//JU_to_W_calc is not suitable here as m_U doesn't have ghost cells, and deconvolve doesn't work at boundaries.
-				MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],state.m_U[ dit],(state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit],dx,dy,dz,inputs.gamma);
+				//W_bar itself is not 4th order W. But it is calculated from 4th order accurate JU for output.
+				MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],state.m_U[ dit],(state.m_J)[ dit],inputs.gamma);
 			}
 			MHD_Mapping::phys_coords_calc(phys_coords[ dit],state.m_U[ dit].box(),dx,dy,dz);
 			MHD_Mapping::out_data_calc(out_data[ dit],phys_coords[ dit],new_state[ dit]);
