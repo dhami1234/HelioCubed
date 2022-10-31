@@ -5,7 +5,7 @@
 //TODO: These variables need to go into a common file or be defined in a more accessible way
 constexpr unsigned int NUMCOMPS=2*DIM+2;
 
-#define NGHOST 7
+#define NGHOST 2
 
 using namespace Proto;
 

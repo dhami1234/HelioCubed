@@ -123,7 +123,7 @@ namespace MHD_Set_Boundary_Values {
 					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
 					
 					if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_sph_scaled_r, a_State.m_detAA_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true);
+						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_sph_scaled_r, a_State.m_detAA_avg[dit], a_State.m_A_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true);
 					} else {
 						MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
 						a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
@@ -148,7 +148,7 @@ namespace MHD_Set_Boundary_Values {
 					MHD_Initialize::InitializeStatecalc(a_U,x,eta,a_gamma,BoundBox);
 					
 					if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U, a_State.m_detAA_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true);
+						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U, a_State.m_detAA_avg[dit], a_State.m_A_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true);
 					} else {
 						a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U);
 					}
@@ -176,7 +176,7 @@ namespace MHD_Set_Boundary_Values {
 				Stencil<double> m_exterp_f_2nd;
 		
 				if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-					MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], false);
+					MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], false);
 				} else {
 					MHD_Mapping::JU_to_U_2ndOrdercalc(a_U, a_JU[dit], a_State.m_Jacobian_ave[dit], sourceBox1);
 				}
@@ -204,7 +204,7 @@ namespace MHD_Set_Boundary_Values {
 				}
 
 				if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-					MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_ghost, a_State.m_detAA_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false);
+					MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_ghost, a_State.m_detAA_avg[dit], a_State.m_A_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false);
 				} else {
 					a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
 				}

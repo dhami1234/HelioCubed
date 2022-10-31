@@ -31,7 +31,7 @@ namespace MHD_Output_Writer {
 		for (auto dit : new_state){		
 			if (inputs.grid_type_global == 2){
 				if (inputs.Spherical_2nd_order == 0){
-					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
+					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
 				}
 				if (inputs.Spherical_2nd_order == 1){
 					MHDOp::consToPrimcalc(new_state3[ dit],state.m_U[ dit],inputs.gamma);

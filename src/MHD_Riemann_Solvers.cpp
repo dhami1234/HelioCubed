@@ -3,10 +3,13 @@
 #include "CommonTemplates.H"
 #include "Proto_Timer.H"
 #include "Proto_WriteBoxData.H"
+#include "MHD_Input_Parsing.H"
 #include "MHD_Output_Writer.H"
 #include "MHD_Constants.H"
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
+
+extern Parsefrominputs inputs;
 
 /// @brief MHD_Riemann_Solvers namespace
 namespace MHD_Riemann_Solvers {
@@ -177,7 +180,8 @@ namespace MHD_Riemann_Solvers {
 		double d_4PI    = 12.566370614359172953850573533118;
 		int iAveraging = 0;
 		int iLaxFriedrix = 0;
-		double del2 = 0.1;
+		// double del2 = 0.1;
+		double del2 = inputs.entropy_fix_coeff;
 		double hgamma = gamma-1.0;
 		BxBL   = d_1_8PI*(BXL*BXL + BYL*BYL + BZL*BZL);
 		RUxUL  = half   *(RUL*UL  + RVL*VL  + RWL*WL );
@@ -1020,12 +1024,16 @@ namespace MHD_Riemann_Solvers {
 								 const Var<double,1>& a_r2detA_1_avg,
 								 const Var<double,DIM*DIM>& a_r2detAA_1_avg,
 								 const Var<double,DIM>& a_r2detAn_1_avg,
+								 const Var<double,DIM>& a_n_1_avg,
+								 const Var<double,DIM*DIM>& a_A_1_avg,
 								 const Var<double,1>& a_rrdotdetA_2_avg,
 								 const Var<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 								 const Var<double,DIM>& a_rrdotd3ncn_2_avg,
+								 const Var<double,DIM*DIM>& a_A_2_avg,
 								 const Var<double,1>& a_rrdotdetA_3_avg,
 								 const Var<double,DIM*DIM>& a_rrdotdetAA_3_avg,
 								 const Var<double,DIM>& a_rrdotncd2n_3_avg,
+								 const Var<double,DIM*DIM>& a_A_3_avg,
 	                             int a_d,
 	                             double a_gamma)
 	{
@@ -1036,17 +1044,32 @@ namespace MHD_Riemann_Solvers {
 		B2 = a_W_actual(5)*a_W_actual(5) + a_W_actual(6)*a_W_actual(6) + a_W_actual(7)*a_W_actual(7);
 		vB = a_W_actual(1)*a_W_actual(5) + a_W_actual(2)*a_W_actual(6) + a_W_actual(3)*a_W_actual(7);
 		p0 = a_W(4) + B2/8.0/c_PI;
+		// p0 = 1e-7;
 		e  = a_W(4)/(gamma-1.0) + rho*v2/2.0 + B2/8.0/c_PI;
 
+		a_F(1) = 0.0;
+		a_F(2) = 0.0;
+		a_F(3) = 0.0;
 		if (a_d == 0) {  //r
 			a_F(0) = a_r2detA_1_avg(0)*rho*a_W(1);
 
 			a_F(1) = a_r2detAA_1_avg(0)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(1)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(2)*rho*a_W(1)*a_W(3);
 			a_F(2) = a_r2detAA_1_avg(3)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(4)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(5)*rho*a_W(1)*a_W(3);
 			a_F(3) = a_r2detAA_1_avg(6)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(7)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(8)*rho*a_W(1)*a_W(3);
+			
+			// a_F(1) = a_r2detA_1_avg(0)*(a_A_1_avg(0)*rho*a_W(1)*a_W(1) + a_A_1_avg(1)*rho*a_W(1)*a_W(2) + a_A_1_avg(2)*rho*a_W(1)*a_W(3));
+			// a_F(2) = a_r2detA_1_avg(0)*(a_A_1_avg(3)*rho*a_W(1)*a_W(1) + a_A_1_avg(4)*rho*a_W(1)*a_W(2) + a_A_1_avg(5)*rho*a_W(1)*a_W(3));
+			// a_F(3) = a_r2detA_1_avg(0)*(a_A_1_avg(6)*rho*a_W(1)*a_W(1) + a_A_1_avg(7)*rho*a_W(1)*a_W(2) + a_A_1_avg(8)*rho*a_W(1)*a_W(3));
+			
+			
 			a_F(1) += a_r2detAn_1_avg(0)*p0;
 			a_F(2) += a_r2detAn_1_avg(1)*p0;
 			a_F(3) += a_r2detAn_1_avg(2)*p0;
+
+			// a_F(1) += a_r2detA_1_avg(0)*a_n_1_avg(0)*p0;
+			// a_F(2) += a_r2detA_1_avg(0)*a_n_1_avg(1)*p0;
+			// a_F(3) += a_r2detA_1_avg(0)*a_n_1_avg(2)*p0;
+
 			a_F(1) -= a_r2detAA_1_avg(0)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(1)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(2)*(1/4.0/c_PI)*a_W(5)*a_W(7);
 			a_F(2) -= a_r2detAA_1_avg(3)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(4)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(5)*(1/4.0/c_PI)*a_W(5)*a_W(7);
 			a_F(3) -= a_r2detAA_1_avg(6)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(7)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(8)*(1/4.0/c_PI)*a_W(5)*a_W(7);
@@ -1068,9 +1091,16 @@ namespace MHD_Riemann_Solvers {
 			a_F(1) = a_rrdotdetAA_2_avg(0)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(1)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(2)*rho*a_W(2)*a_W(3);
 			a_F(2) = a_rrdotdetAA_2_avg(3)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(4)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(5)*rho*a_W(2)*a_W(3);
 			a_F(3) = a_rrdotdetAA_2_avg(6)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(7)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(8)*rho*a_W(2)*a_W(3);
+			
+			// a_F(1) = a_rrdotdetA_2_avg(0)*(a_A_2_avg(0)*rho*a_W(2)*a_W(1) + a_A_2_avg(1)*rho*a_W(2)*a_W(2) + a_A_2_avg(2)*rho*a_W(2)*a_W(3));
+			// a_F(2) = a_rrdotdetA_2_avg(0)*(a_A_2_avg(3)*rho*a_W(2)*a_W(1) + a_A_2_avg(4)*rho*a_W(2)*a_W(2) + a_A_2_avg(5)*rho*a_W(2)*a_W(3));
+			// a_F(3) = a_rrdotdetA_2_avg(0)*(a_A_2_avg(6)*rho*a_W(2)*a_W(1) + a_A_2_avg(7)*rho*a_W(2)*a_W(2) + a_A_2_avg(8)*rho*a_W(2)*a_W(3));
+			
+			
 			a_F(1) += a_rrdotd3ncn_2_avg(0)*p0;
 			a_F(2) += a_rrdotd3ncn_2_avg(1)*p0;
 			a_F(3) += a_rrdotd3ncn_2_avg(2)*p0;
+
 			a_F(1) -= a_rrdotdetAA_2_avg(0)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(1)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(2)*(1/4.0/c_PI)*a_W(6)*a_W(7);
 			a_F(2) -= a_rrdotdetAA_2_avg(3)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(4)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(5)*(1/4.0/c_PI)*a_W(6)*a_W(7);
 			a_F(3) -= a_rrdotdetAA_2_avg(6)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(7)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(8)*(1/4.0/c_PI)*a_W(6)*a_W(7);
@@ -1092,9 +1122,16 @@ namespace MHD_Riemann_Solvers {
 			a_F(1) = a_rrdotdetAA_3_avg(0)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(1)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(2)*rho*a_W(3)*a_W(3);
 			a_F(2) = a_rrdotdetAA_3_avg(3)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(4)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(5)*rho*a_W(3)*a_W(3);
 			a_F(3) = a_rrdotdetAA_3_avg(6)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(7)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(8)*rho*a_W(3)*a_W(3);
+			
+			// a_F(1) = a_rrdotdetA_3_avg(0)*(a_A_3_avg(0)*rho*a_W(3)*a_W(1) + a_A_3_avg(1)*rho*a_W(3)*a_W(2) + a_A_3_avg(2)*rho*a_W(3)*a_W(3));
+			// a_F(2) = a_rrdotdetA_3_avg(0)*(a_A_3_avg(3)*rho*a_W(3)*a_W(1) + a_A_3_avg(4)*rho*a_W(3)*a_W(2) + a_A_3_avg(5)*rho*a_W(3)*a_W(3));
+			// a_F(3) = a_rrdotdetA_3_avg(0)*(a_A_3_avg(6)*rho*a_W(3)*a_W(1) + a_A_3_avg(7)*rho*a_W(3)*a_W(2) + a_A_3_avg(8)*rho*a_W(3)*a_W(3));
+			
+			
 			a_F(1) += a_rrdotncd2n_3_avg(0)*p0;
 			a_F(2) += a_rrdotncd2n_3_avg(1)*p0;
 			a_F(3) += a_rrdotncd2n_3_avg(2)*p0;
+
 			a_F(1) -= a_rrdotdetAA_3_avg(0)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(1)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(2)*(1/4.0/c_PI)*a_W(7)*a_W(7);
 			a_F(2) -= a_rrdotdetAA_3_avg(3)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(4)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(5)*(1/4.0/c_PI)*a_W(7)*a_W(7);
 			a_F(3) -= a_rrdotdetAA_3_avg(6)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(7)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(8)*(1/4.0/c_PI)*a_W(7)*a_W(7);
@@ -1126,6 +1163,7 @@ namespace MHD_Riemann_Solvers {
 	                                    const Var<double,1>& a_r2detA_1_avg,
 	                                    const Var<double,DIM*DIM>& a_r2detAA_1_avg,
 	                                    const Var<double,DIM>& a_r2detAn_1_avg,
+	                                    const Var<double,DIM>& a_n_1_avg,
 	                                    const Var<double,1>& a_rrdotdetA_2_avg,
 	                                    const Var<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 	                                    const Var<double,DIM>& a_rrdotd3ncn_2_avg,
@@ -1213,12 +1251,16 @@ namespace MHD_Riemann_Solvers {
 	                              const BoxData<double,1>& a_r2detA_1_avg,
 	                              const BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
 	                              const BoxData<double,DIM>& a_r2detAn_1_avg,
+	                              const BoxData<double,DIM>& a_n_1_avg,
+	                              const BoxData<double,DIM*DIM>& a_A_1_avg,
 	                              const BoxData<double,1>& a_rrdotdetA_2_avg,
 	                              const BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 	                              const BoxData<double,DIM>& a_rrdotd3ncn_2_avg,
+								  const BoxData<double,DIM*DIM>& a_A_2_avg,
 	                              const BoxData<double,1>& a_rrdotdetA_3_avg,
 	                              const BoxData<double,DIM*DIM>& a_rrdotdetAA_3_avg,
 	                              const BoxData<double,DIM>& a_rrdotncd2n_3_avg,
+								  const BoxData<double,DIM*DIM>& a_A_3_avg,
 	                              const int a_d,
 	                              const double a_gamma,
 								  const double a_dx,
@@ -1244,9 +1286,9 @@ namespace MHD_Riemann_Solvers {
 			initialized =  true;
 		}
 		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_d, a_gamma);
-		Vector F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg,a_d,a_gamma);
-		Vector F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg,a_d,a_gamma);
-		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
+		Vector F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
+		Vector F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
+		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
 	}
 
 }

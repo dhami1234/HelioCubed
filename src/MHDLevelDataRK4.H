@@ -44,6 +44,8 @@ public:
 	LevelBoxData<double> m_J;
 
 // Things needed by Spherical mapping with radial flow correction
+	LevelBoxData<double,DIM*DIM> m_A_avg;
+	LevelBoxData<double,DIM*DIM> m_A_inv_avg;
 	LevelBoxData<double,DIM*DIM> m_A_1_avg;
 	LevelBoxData<double,DIM*DIM> m_A_2_avg;
 	LevelBoxData<double,DIM*DIM> m_A_3_avg;
@@ -58,6 +60,7 @@ public:
 	LevelBoxData<double,1> m_r2detA_1_avg;
 	LevelBoxData<double,DIM*DIM> m_r2detAA_1_avg;
 	LevelBoxData<double,DIM> m_r2detAn_1_avg;
+	LevelBoxData<double,DIM> m_n_1_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_1_avg;
 	LevelBoxData<double,1> m_rrdotdetA_2_avg;
 	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_2_avg;
