@@ -73,6 +73,7 @@ class Parsefrominputs {
 	string Checkpoint_file_Prefix;
 	string Probe_trajectory_file;
 	string Probe_data_file;
+	double CME_Enter_Time, CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
   public:
 
 	string removeSpaces(string str)
@@ -126,6 +127,22 @@ class Parsefrominputs {
 		args.add("Checkpoint_file_Prefix",  Checkpoint_file_Prefix);
 		args.add("Probe_trajectory_file",  Probe_trajectory_file);
 		args.add("Probe_data_file",  Probe_data_file);
+		args.add("CME_Enter_Time",  CME_Enter_Time);
+		args.add("CME_r1",  CME_r1);
+		args.add("CME_r0",  CME_r0);
+		args.add("CME_halfangle",  CME_halfangle);
+		args.add("CME_pol_flux_control",  CME_pol_flux_control);
+		args.add("CME_FRiED_n",  CME_FRiED_n);
+		args.add("CME_lat",  CME_lat);
+		args.add("CME_lon",  CME_lon);
+		args.add("CME_tilt",  CME_tilt);
+		args.add("CME_Vandas_R0",  CME_Vandas_R0);
+		args.add("CME_apex_speed",  CME_apex_speed);
+		args.add("CME_energy_control",  CME_energy_control);
+		args.add("CME_density",  CME_density);
+		args.add("CME_helicity_sign",  CME_helicity_sign);
+		args.add("CME_a1",  CME_a1);
+		args.add("CME_shift",  CME_shift);
 		args.parse(argc,argv);
 		// BC_file = removeSpaces(BC_file);
 		// Data_file_Prefix = removeSpaces(Data_file_Prefix);
@@ -181,6 +198,22 @@ class Parsefrominputs {
 			cout << "Checkpoint_file_Prefix: "    << Checkpoint_file_Prefix << endl;
 			cout << "Probe_trajectory_file: "    << Probe_trajectory_file << endl;
 			cout << "Probe_data_file: "    << Probe_data_file << endl;
+			cout << "CME_Enter_Time: "    << CME_Enter_Time << endl;
+			cout << "CME_r1: "    << CME_r1 << endl;
+			cout << "CME_r0: "    << CME_r0 << endl;
+			cout << "CME_halfangle: "    << CME_halfangle << endl;
+			cout << "CME_pol_flux_control: "    << CME_pol_flux_control << endl;
+			cout << "CME_FRiED_n: "    << CME_FRiED_n << endl;
+			cout << "CME_lat: "    << CME_lat << endl;
+			cout << "CME_lon: "    << CME_lon << endl;
+			cout << "CME_tilt: "    << CME_tilt << endl;
+			cout << "CME_Vandas_R0: "    << CME_Vandas_R0 << endl;
+			cout << "CME_apex_speed: "    << CME_apex_speed << endl;
+			cout << "CME_energy_control: "    << CME_energy_control << endl;
+			cout << "CME_density: "    << CME_density << endl;
+			cout << "CME_helicity_sign: "    << CME_helicity_sign << endl;
+			cout << "CME_a1: "    << CME_a1 << endl;
+			cout << "CME_shift: "    << CME_shift << endl;
 			cout << setw(75) << setfill('-') << "-" << endl;
 		}
 

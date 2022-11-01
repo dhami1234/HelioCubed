@@ -8,4 +8,5 @@ namespace MHD_Probe {
     void Probe(MHDLevelDataState& state,
                 const double a_time,
                 bool give_space);
+    double getPhysTime(double a_time);
 }

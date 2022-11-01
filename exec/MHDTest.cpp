@@ -22,6 +22,7 @@
 #include "MHD_Constants.H"
 #include "MHD_CFL.H"
 #include "MHD_Probe.H"
+#include "MHD_Pre_Time_Step.H"
 #include <chrono> // Used by timer
 #include "MHDReader.H"
 #include "RK4.H"
@@ -161,6 +162,7 @@ int main(int argc, char* argv[])
 			state.m_divB_calculated = false;
 			state.m_Viscosity_calculated = false;
 			state.m_min_dt_calculated = false;
+			state.m_CME_inserted = false;
 			for (auto dit : state.m_U){	
 				MHDOp::Fix_negative_P(state.m_U[ dit],inputs.gamma); // Current version only for 2nd order spherical	
 			}
@@ -182,6 +184,7 @@ int main(int argc, char* argv[])
 
 				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time);
 
+				MHD_Pre_Time_Step::Insert_CME(state, time);
 
 				if (inputs.convTestType == 1 || inputs.timeIntegratorType == 1) {
 					PR_TIME("eulerstep");

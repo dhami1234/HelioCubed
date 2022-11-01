@@ -40,6 +40,7 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
 	m_divB.define(m_dbl,Point::Ones(NGHOST));
 	m_Viscosity.define(m_dbl,Point::Ones(NGHOST));
 	m_BC.define(m_dbl,Point::Ones(NGHOST));
+	m_CME.define(m_dbl,Point::Ones(NGHOST));
 	m_Jacobian_ave.define(m_dbl,Point::Ones(NGHOST));
 	m_N_ave_f.define(m_dbl,Point::Ones(NGHOST));
 	for (int i=0; i<DIM; i++){

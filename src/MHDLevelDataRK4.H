@@ -30,6 +30,7 @@ public:
 	bool m_divB_calculated;
 	bool m_Viscosity_calculated;
 	bool m_min_dt_calculated;
+	bool m_CME_inserted;
 	double m_min_dt;
 //TODO: Put in MEMTYPE so we can run on the GPU?
 	LevelBoxData<double,NUMCOMPS> m_U;
@@ -37,6 +38,7 @@ public:
 	LevelBoxData<double,NUMCOMPS> m_divB;
 	LevelBoxData<double,NUMCOMPS> m_Viscosity;
 	LevelBoxData<double,NUMCOMPS> m_BC;
+	LevelBoxData<double,NUMCOMPS> m_CME;
 	LevelBoxData<double,1> m_Jacobian_ave;
 	LevelBoxData<double,DIM*DIM> m_N_ave_f;
 	std::array<LevelBoxData<double,DIM>,DIM> m_NT;
