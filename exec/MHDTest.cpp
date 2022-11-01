@@ -161,9 +161,9 @@ int main(int argc, char* argv[])
 			state.m_divB_calculated = false;
 			state.m_Viscosity_calculated = false;
 			state.m_min_dt_calculated = false;
-			// for (auto dit : state.m_U){	
-			// 	MHDOp::Fix_negative_P(state.m_U[ dit],inputs.gamma); // Current version only for 2nd order spherical	
-			// }
+			for (auto dit : state.m_U){	
+				MHDOp::Fix_negative_P(state.m_U[ dit],inputs.gamma); // Current version only for 2nd order spherical	
+			}
 			if (k!=start_iter){
 				if (k!=start_iter+1){
 					if (inputs.convTestType == 0){

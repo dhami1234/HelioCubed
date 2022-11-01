@@ -174,13 +174,12 @@ namespace MHD_Riemann_Solvers {
 		double four = 4.0;
 		double d_SQRT_2 = 0.707106781186547524400844362104849039;
 		double d_1_4PI  = 0.079577471545947667884441881686257181;
-		double smallB = 1.0e-12;
+		double smallB = 1.0e-9;
 		double d_PI     = 3.14159265358979323846264338327950288;
 		double d_2PI    = 6.28318530717958647692528676655900576;
 		double d_4PI    = 12.566370614359172953850573533118;
 		int iAveraging = 0;
 		int iLaxFriedrix = 0;
-		// double del2 = 0.1;
 		double del2 = inputs.entropy_fix_coeff;
 		double hgamma = gamma-1.0;
 		BxBL   = d_1_8PI*(BXL*BXL + BYL*BYL + BZL*BZL);
