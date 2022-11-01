@@ -9,6 +9,8 @@ HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/lib
 HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/include
 # HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/lib
 # HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/include
+# HDF5_LIB=/cm/shared/apps/spack/cpu/opt/spack/linux-centos8-zen2/intel-19.1.1.217/hdf5-1.10.6-ow5p5eh25vi4yxdpeenmtinbjed3xt7e/lib
+# HDF5_INC=/cm/shared/apps/spack/cpu/opt/spack/linux-centos8-zen2/intel-19.1.1.217/hdf5-1.10.6-ow5p5eh25vi4yxdpeenmtinbjed3xt7e/include
 BLIS_INC=/opt/homebrew/Cellar/blis/0.9.0/include/blis
 PROTO= ../../proto
 
