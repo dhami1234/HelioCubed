@@ -156,13 +156,14 @@ int main(int argc, char* argv[])
 		bool give_space_in_probe_file = true;
 		double probe_cadence = 0;
 		double dt_old = dt;
+		state.m_CME_inserted = false;
 		for (int k = start_iter; (k <= inputs.maxStep) && (time < inputs.tstop); k++)
 		{	
 			auto start = chrono::steady_clock::now();
 			state.m_divB_calculated = false;
 			state.m_Viscosity_calculated = false;
 			state.m_min_dt_calculated = false;
-			state.m_CME_inserted = false;
+			
 			for (auto dit : state.m_U){	
 				MHDOp::Fix_negative_P(state.m_U[ dit],inputs.gamma); // Current version only for 2nd order spherical	
 			}
@@ -233,7 +234,8 @@ int main(int argc, char* argv[])
 				}
 			}
 			auto end = chrono::steady_clock::now();
-			if(pid==0) cout <<"nstep = " << k << " time = " << time << " time step = " << dt << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
+			double physical_time = MHD_Probe::getPhysTime(time);
+			if(pid==0) cout <<"nstep = " << k << " Phys Time = " << setprecision(8) << physical_time << " Sim time = " << time << " time step = " << dt << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
 
 		}	
 		
