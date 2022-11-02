@@ -5,7 +5,7 @@
 //TODO: These variables need to go into a common file or be defined in a more accessible way
 constexpr unsigned int NUMCOMPS=2*DIM+2;
 
-#define NGHOST 2
+#define NGHOST 5
 
 using namespace Proto;
 
@@ -15,7 +15,10 @@ class MHDLevelDataState;
 
 namespace MHDOp
 {
-	
+	void DimToNonDimcalc(BoxData<double,NUMCOMPS>& a_U);
+
+	void NonDimToDimcalc(BoxData<double,NUMCOMPS>& a_U);
+
 	void step_spherical_2O(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  LevelBoxData<double,NUMCOMPS>& a_U,
 			  MHDLevelDataState& a_State,

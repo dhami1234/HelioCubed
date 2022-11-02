@@ -22,6 +22,7 @@ namespace MHD_Output_Writer {
 		double dy = state.m_dy;
 		double dz = state.m_dz;
 		LevelBoxData<double,NUMCOMPS> new_state(state.m_dbl,Point::Ones(NGHOST));
+		LevelBoxData<double,NUMCOMPS> new_state2(state.m_dbl,Point::Ones(NGHOST));
 		LevelBoxData<double,NUMCOMPS> new_state3(state.m_dbl,Point::Zeros());
 		LevelBoxData<double,DIM> phys_coords(state.m_dbl,Point::Ones(NGHOST));
 		LevelBoxData<double,NUMCOMPS+DIM> out_data(state.m_dbl,Point::Ones(NGHOST));
@@ -31,16 +32,25 @@ namespace MHD_Output_Writer {
 		for (auto dit : new_state){		
 			if (inputs.grid_type_global == 2){
 				if (inputs.Spherical_2nd_order == 0){
-					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
+					state.m_U[dit].copyTo(new_state2[dit]);
+					MHDOp::NonDimToDimcalc(new_state2[dit]);
+					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], new_state2[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
+					// MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
 				}
 				if (inputs.Spherical_2nd_order == 1){
-					MHDOp::consToPrimcalc(new_state3[ dit],state.m_U[ dit],inputs.gamma);
+					state.m_U[dit].copyTo(new_state2[dit]);
+					MHDOp::NonDimToDimcalc(new_state2[dit]);
+					MHDOp::consToPrimcalc(new_state3[ dit],new_state2[ dit],inputs.gamma);
+					// MHDOp::consToPrimcalc(new_state3[ dit],state.m_U[ dit],inputs.gamma);
 					MHD_Mapping::get_sph_coords_cc(x_sph[ dit],x_sph[ dit].box(),dx, dy, dz);
 					MHD_Mapping::Cartesian_to_Spherical(new_state[ dit],new_state3[ dit],x_sph[ dit]);
 				}
 			} else {
 				//W_bar itself is not 4th order W. But it is calculated from 4th order accurate JU for output.
-				MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],state.m_U[ dit],(state.m_J)[ dit],inputs.gamma);
+				state.m_U[dit].copyTo(new_state2[dit]);
+				MHDOp::NonDimToDimcalc(new_state2[dit]);
+				MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],new_state2[ dit],(state.m_J)[ dit],inputs.gamma);
+				// MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],state.m_U[ dit],(state.m_J)[ dit],inputs.gamma);
 			}
 			MHD_Mapping::phys_coords_calc(phys_coords[ dit],state.m_U[ dit].box(),dx,dy,dz);
 			MHD_Mapping::out_data_calc(out_data[ dit],phys_coords[ dit],new_state[ dit]);

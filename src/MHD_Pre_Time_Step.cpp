@@ -328,15 +328,15 @@ namespace MHD_Pre_Time_Step {
             //V_y_dom=VCME*y_cm_dom/sqrt(x_cm_dom*x_cm_dom + y_cm_dom*y_cm_dom + z_cm_dom*z_cm_dom);
             //V_z_dom=VCME*z_cm_dom/sqrt(x_cm_dom*x_cm_dom + y_cm_dom*y_cm_dom + z_cm_dom*z_cm_dom);
             
-            a_CME(0) = inputs.CME_density;
-            a_CME(1) = V_x_dom*1.0e5;
-            a_CME(2) = V_y_dom*1.0e5;
-            a_CME(3) = V_z_dom*1.0e5;
-            a_CME(4) = inputs.CME_energy_control*e0TD;
-            a_CME(5) = B_x_dom;
-            a_CME(6) = B_y_dom;
-            a_CME(7) = B_z_dom;
-           
+            double pref = (inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+            a_CME(0) = inputs.CME_density/(inputs.density_scale*c_MP);
+            a_CME(1) = V_x_dom*1.0e5/(inputs.velocity_scale);
+            a_CME(2) = V_y_dom*1.0e5/(inputs.velocity_scale);
+            a_CME(3) = V_z_dom*1.0e5/(inputs.velocity_scale);
+            a_CME(4) = inputs.CME_energy_control*e0TD/pref;
+            a_CME(5) = B_x_dom/sqrt(pref);
+            a_CME(6) = B_y_dom/sqrt(pref);
+            a_CME(7) = B_z_dom/sqrt(pref);        
         }
 			
     }

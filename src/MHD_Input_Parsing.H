@@ -74,6 +74,8 @@ class Parsefrominputs {
 	string Probe_trajectory_file;
 	string Probe_data_file;
 	double CME_Enter_Time, CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
+	//MHD equations can be written in dimensionless variables. We use scaling for this.
+	double density_scale, velocity_scale;
   public:
 
 	string removeSpaces(string str)
@@ -143,6 +145,8 @@ class Parsefrominputs {
 		args.add("CME_helicity_sign",  CME_helicity_sign);
 		args.add("CME_a1",  CME_a1);
 		args.add("CME_shift",  CME_shift);
+		args.add("density_scale",  density_scale);
+		args.add("velocity_scale",  velocity_scale);
 		args.parse(argc,argv);
 		// BC_file = removeSpaces(BC_file);
 		// Data_file_Prefix = removeSpaces(Data_file_Prefix);
@@ -214,6 +218,8 @@ class Parsefrominputs {
 			cout << "CME_helicity_sign: "    << CME_helicity_sign << endl;
 			cout << "CME_a1: "    << CME_a1 << endl;
 			cout << "CME_shift: "    << CME_shift << endl;
+			cout << "density_scale: "    << density_scale << endl;
+			cout << "velocity_scale: "    << velocity_scale << endl;
 			cout << setw(75) << setfill('-') << "-" << endl;
 		}
 

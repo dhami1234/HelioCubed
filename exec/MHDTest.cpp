@@ -121,7 +121,7 @@ int main(int argc, char* argv[])
 		
 		double time = 0.;
 		double dt_new = 0.;
-
+		double time_seconds;
 		MHDReader reader;
 		HDF5Handler h5;
 
@@ -157,7 +157,7 @@ int main(int argc, char* argv[])
 		double probe_cadence = 0;
 		double dt_old = dt;
 		state.m_CME_inserted = false;
-		for (int k = start_iter; (k <= inputs.maxStep) && (time < inputs.tstop); k++)
+		for (int k = start_iter; (k <= inputs.maxStep) && (time/inputs.velocity_scale < inputs.tstop); k++)
 		{	
 			auto start = chrono::steady_clock::now();
 			state.m_divB_calculated = false;
@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
 				if (k!=start_iter+1){
 					if (inputs.convTestType == 0){
 						dt = inputs.CFL*state.m_min_dt;
-						if ((inputs.tstop - time) < dt) dt = inputs.tstop - time;
+						if ((inputs.tstop*inputs.velocity_scale - time) < dt) dt = inputs.tstop*inputs.velocity_scale - time;
 					}
 				}
 				// Below objects need to be created inside the time loop. Otherwise the init in dx keeps on eating memory
@@ -183,9 +183,9 @@ int main(int argc, char* argv[])
 				EulerStep<MHDLevelDataState, MHDLevelDatadivBOp, MHDLevelDataDX> divBstep;
 				EulerStep<MHDLevelDataState, MHDLevelDataViscosityOp, MHDLevelDataDX> viscositystep;
 
-				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time);
+				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time/inputs.velocity_scale);
 
-				MHD_Pre_Time_Step::Insert_CME(state, time);
+				MHD_Pre_Time_Step::Insert_CME(state, time/inputs.velocity_scale);
 
 				if (inputs.convTestType == 1 || inputs.timeIntegratorType == 1) {
 					PR_TIME("eulerstep");
@@ -210,36 +210,40 @@ int main(int argc, char* argv[])
 				
 				time += dt;
 				dt_old = dt;
+				time_seconds = time/inputs.velocity_scale;
 			}
 			
 			if (inputs.convTestType == 0)
 			{
 
-				int probe_cadence_new = floor(time/inputs.probe_cadence);
+				int probe_cadence_new = floor(time/inputs.velocity_scale/inputs.probe_cadence);
 				if (probe_cadence_new > probe_cadence){
-					MHD_Probe::Probe(state,time,give_space_in_probe_file);
+					MHD_Probe::Probe(state,time/inputs.velocity_scale,give_space_in_probe_file);
 					give_space_in_probe_file = false;
 					probe_cadence = probe_cadence_new;
 					if(pid==0) cout << "Probed" << endl;
 				}
 
-				if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time == inputs.tstop || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
+				if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
 				{	
-					MHD_Output_Writer::Write_data(state, k, time, dt);			
+					MHD_Output_Writer::Write_data(state, k, time/inputs.velocity_scale, dt);			
 					
 				}
-				if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
+				if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
 				{
 					MHD_Output_Writer::Write_checkpoint(state, k, time, dt);	
 				}
 			}
 			auto end = chrono::steady_clock::now();
-			double physical_time = MHD_Probe::getPhysTime(time);
-			if(pid==0) cout <<"nstep = " << k << " Phys Time = " << setprecision(8) << physical_time << " Sim time = " << time << " time step = " << dt << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
-
+			
+			if (inputs.sph_inner_BC_hdf5 == 1){
+				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
+				if(pid==0) cout <<"nstep = " << k << " Phys Time = " << setprecision(8) << physical_time << " time in seconds = " << time/inputs.velocity_scale << " time step in seconds = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
+			} else {
+				if(pid==0) cout <<"nstep = " << k << " time (s) = " << time/inputs.velocity_scale << " time step (s) = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
+			}
 		}	
-		
-
+	
 		if (inputs.convTestType != 0) {
 			//Solution on a single patch
 			#if DIM == 2

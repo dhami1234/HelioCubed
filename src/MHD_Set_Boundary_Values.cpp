@@ -128,6 +128,7 @@ namespace MHD_Set_Boundary_Values {
 						MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
 						a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
 					}
+					MHDOp::DimToNonDimcalc(a_JU_ghost);
 					a_JU_ghost.copyTo(a_JU[dit],BoundBox);
 
 				} else {
@@ -260,6 +261,7 @@ namespace MHD_Set_Boundary_Values {
 					MHD_Mapping::get_sph_coords_cc(x_sph,BoundBox,a_dx, a_dy, a_dz);
 					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
 					MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
+					MHDOp::DimToNonDimcalc(a_U_ghost);
 					a_U_ghost.copyTo(a_U[dit],BoundBox);
 					
 

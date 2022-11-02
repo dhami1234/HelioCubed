@@ -413,6 +413,7 @@ namespace MHD_Initialize {
 	{	
 		double gamma = a_gamma;
 		forallInPlace_p(InitializeState,a_U,a_x,a_eta,a_gamma);
+		MHDOp::DimToNonDimcalc(a_U);
 	}
 
 
@@ -465,6 +466,7 @@ namespace MHD_Initialize {
 				dot_pro *= 1./12.;
 				a_State.m_U[dit] += dot_pro;
 			}
+			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
 		}
 	}
 
@@ -501,6 +503,7 @@ namespace MHD_Initialize {
 			// MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
 			// MHDOp::consToPrimSphcalc(W_bar,a_U_Sph_ave, a_U_Sph_actual_ave, a_gamma);
 			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_bar, "W_bar_init");
+			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
 		}
 	}
 
@@ -625,6 +628,7 @@ namespace MHD_Initialize {
 			MHD_Mapping::get_sph_coords_cc(x_sph,dbx1,a_dx, a_dy, a_dz);
 			forallInPlace_p(InitializeStateSph2O,UBig_sph,x_sph,a_gamma);
 			MHD_Mapping::Spherical_to_Cartesian(a_State.m_U[dit],UBig_sph,x_sph);
+			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
 			// MHD_Output_Writer::WriteBoxData_array_nocoord(UBig, a_dx, a_dy, a_dz, "UBig_again");
 		}
 	}

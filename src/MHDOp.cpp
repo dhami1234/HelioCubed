@@ -75,6 +75,111 @@ namespace MHDOp {
 
 
 	/**
+	 * @brief Function to covert dimensional variables to non-dimensional variables. 
+	 * @param a_U will get converted from dimensional to non-dimensional.
+	 */  
+	PROTO_KERNEL_START
+	void
+	DimToNonDimF(const Point& a_pt,
+				 State& a_U)
+	{
+		// When going from cgs to non-dimensional
+		// density is divided by a scale density density_scale
+		// velocity is divided by a scale velocity velocity_scale
+		// energy is divided by density_scale*velocity_scale*velocity_scale
+		// magnetic field is divided by sqrt(density_scale*velocity_scale*velocity_scale)
+		// pref = (lismN*eos_mp)*lismV*lismV	
+		// CMEData(CHF_IX[i;j;k],0) = (mCME)/(lismN*eos_mp) !rhoTD
+		// CMEData(CHF_IX[i;j;k],1) = B_x_dom/sqrt( pref ) !Bx
+		// CMEData(CHF_IX[i;j;k],2) = B_y_dom/sqrt( pref ) !By
+		// CMEData(CHF_IX[i;j;k],3) = B_z_dom/sqrt( pref ) !Bz
+		// CMEData(CHF_IX[i;j;k],4) = energy_control*e0TD/pref !e0TD
+		// CMEData(CHF_IX[i;j;k],5) = V_x_dom*1.0e5/lismV !Vx
+		// CMEData(CHF_IX[i;j;k],6) = V_y_dom*1.0e5/lismV !Vy
+		// CMEData(CHF_IX[i;j;k],7) = V_z_dom*1.0e5/lismV !Vz
+		double pref = (inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		#if DIM == 2
+		a_U(0) = a_U(0)/(inputs.density_scale*c_MP);
+		a_U(1) = a_U(1)/(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(2) = a_U(2)/(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(3) = a_U(3)/pref;
+		a_U(4) = a_U(4)/sqrt(pref);
+		a_U(5) = a_U(5)/sqrt(pref);
+		#endif
+
+		#if DIM == 3
+		a_U(0) = a_U(0)/(inputs.density_scale*c_MP);
+		a_U(1) = a_U(1)/(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(2) = a_U(2)/(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(3) = a_U(3)/(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(4) = a_U(4)/pref;
+		a_U(5) = a_U(5)/sqrt(pref);
+		a_U(6) = a_U(6)/sqrt(pref);
+		a_U(7) = a_U(7)/sqrt(pref);
+		#endif
+	}
+	PROTO_KERNEL_END(DimToNonDimF, DimToNonDim)
+
+
+	/**
+	 * @brief Function to covert dimensional variables to non-dimensional variables. 
+	 * @param a_U will get converted from dimensional to non-dimensional.
+	 */ 
+	void DimToNonDimcalc(BoxData<double,NUMCOMPS>& a_U)
+	{
+		forallInPlace_p(DimToNonDim, a_U);
+	}
+
+	/**
+	 * @brief Function to covert non-dimensional variables to dimensional variables. 
+	 * @param a_U will get converted from non-dimensional to dimensional.
+	 */  
+	PROTO_KERNEL_START
+	void
+	NonDimToDimF(const Point& a_pt,
+				 State& a_U)
+	{
+		// When going from non-dimensional to cgs
+		// density is multiplied by a scale density density_scale
+		// velocity is multiplied by a scale velocity velocity_scale
+		// energy is multiplied by density_scale*velocity_scale*velocity_scale
+		// magnetic field is multiplied by sqrt(density_scale*velocity_scale*velocity_scale)
+
+		double pref = (inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		#if DIM == 2
+		a_U(0) = a_U(0)*(inputs.density_scale*c_MP);
+		a_U(1) = a_U(1)*(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(2) = a_U(2)*(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(3) = a_U(3)*pref;
+		a_U(4) = a_U(4)*sqrt(pref);
+		a_U(5) = a_U(5)*sqrt(pref);
+		#endif
+
+		#if DIM == 3
+		a_U(0) = a_U(0)*(inputs.density_scale*c_MP);
+		a_U(1) = a_U(1)*(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(2) = a_U(2)*(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(3) = a_U(3)*(inputs.density_scale*c_MP*inputs.velocity_scale);
+		a_U(4) = a_U(4)*pref;
+		a_U(5) = a_U(5)*sqrt(pref);
+		a_U(6) = a_U(6)*sqrt(pref);
+		a_U(7) = a_U(7)*sqrt(pref);
+		#endif
+	}
+	PROTO_KERNEL_END(NonDimToDimF, NonDimToDim)
+
+
+	/**
+	 * @brief Function to covert non-dimensional variables to dimensional variables. 
+	 * @param a_U will get converted from non-dimensional to dimensional.
+	 */ 
+	void NonDimToDimcalc(BoxData<double,NUMCOMPS>& a_U)
+	{
+		forallInPlace_p(NonDimToDim, a_U);
+	}
+
+
+	/**
 	 * @brief Function to covert conserevd variables to primitive variables, used in spherical mapping. 
 	 * @param a_W_sph the output primitive variables.
 	 * @param a_U_sph the input conserved variables, but the v and B vectors are scaled with row magnitudes of A matrix (see overleaf document).
