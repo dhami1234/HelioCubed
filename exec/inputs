@@ -7,9 +7,9 @@
 -domainSizex                     60
 -domainSizey                     60
 -domainSizez                     120
--maxStep                         10
+-maxStep                         10000
 -restartStep                     0
--outputInterval                  1
+-outputInterval                  100
 -CheckpointInterval              2000
 -BoxSize                         30
 -grid_type_global                2
