@@ -258,16 +258,24 @@ namespace MHD_Probe {
         Point index_n2(pt0_nearest,pt1_nearest,pt2_neigbor);
         for (auto dit : state.m_U){
             Box dbx0 = state.m_U[dit].box();
+            BoxData<double,NUMCOMPS> U_dim(dbx0);
+            state.m_U[dit].copyTo(U_dim);
+            MHDOp::NonDimToDimcalc(U_dim);
             BoxData<double,DIM> x_sph_cc(dbx0);
             MHD_Mapping::get_sph_coords_cc(x_sph_cc,dbx0,a_dx,a_dy,a_dz);
 
             
             if (dbx0.contains(index_cc)){
                 for(int i=0; i<NUMCOMPS; i++){
-                    probed_values[i] = state.m_U[dit](index_cc, i);
-                    if (dbx0.contains(index_n0)) probed_values[i] += (state.m_U[dit](index_n0, i)-state.m_U[dit](index_cc, i))*(r_now          - x_sph_cc(index_cc,0))/(x_sph_cc(index_n0,0) - x_sph_cc(index_cc,0));
-                    if (dbx0.contains(index_n1)) probed_values[i] += (state.m_U[dit](index_n1, i)-state.m_U[dit](index_cc, i))*(latitude_now*c_PI/180   - x_sph_cc(index_cc,1))/(x_sph_cc(index_n1,1) - x_sph_cc(index_cc,1));
-                    if (dbx0.contains(index_n2)) probed_values[i] += (state.m_U[dit](index_n2, i)-state.m_U[dit](index_cc, i))*(longitude_now*c_PI/180  - x_sph_cc(index_cc,2))/(x_sph_cc(index_n2,2) - x_sph_cc(index_cc,2));
+                    // probed_values[i] = state.m_U[dit](index_cc, i);
+                    // if (dbx0.contains(index_n0)) probed_values[i] += (state.m_U[dit](index_n0, i)-state.m_U[dit](index_cc, i))*(r_now          - x_sph_cc(index_cc,0))/(x_sph_cc(index_n0,0) - x_sph_cc(index_cc,0));
+                    // if (dbx0.contains(index_n1)) probed_values[i] += (state.m_U[dit](index_n1, i)-state.m_U[dit](index_cc, i))*(latitude_now*c_PI/180   - x_sph_cc(index_cc,1))/(x_sph_cc(index_n1,1) - x_sph_cc(index_cc,1));
+                    // if (dbx0.contains(index_n2)) probed_values[i] += (state.m_U[dit](index_n2, i)-state.m_U[dit](index_cc, i))*(longitude_now*c_PI/180  - x_sph_cc(index_cc,2))/(x_sph_cc(index_n2,2) - x_sph_cc(index_cc,2));
+                    probed_values[i] = U_dim(index_cc, i);
+                    if (dbx0.contains(index_n0)) probed_values[i] += (U_dim(index_n0, i)-U_dim(index_cc, i))*(r_now          - x_sph_cc(index_cc,0))/(x_sph_cc(index_n0,0) - x_sph_cc(index_cc,0));
+                    if (dbx0.contains(index_n1)) probed_values[i] += (U_dim(index_n1, i)-U_dim(index_cc, i))*(latitude_now*c_PI/180   - x_sph_cc(index_cc,1))/(x_sph_cc(index_n1,1) - x_sph_cc(index_cc,1));
+                    if (dbx0.contains(index_n2)) probed_values[i] += (U_dim(index_n2, i)-U_dim(index_cc, i))*(longitude_now*c_PI/180  - x_sph_cc(index_cc,2))/(x_sph_cc(index_n2,2) - x_sph_cc(index_cc,2));
+                
                 }
 
                 
