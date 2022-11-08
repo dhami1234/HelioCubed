@@ -233,7 +233,11 @@ namespace MHDOp {
 		a_W_sph = forall<double,NUMCOMPS>(consToPrimSph,a_U_sph,a_U_sph_actual, gamma);
 	}
 
-
+	/**
+	 * @brief Function to calculate the Powell term, without the divB multiplied to it. 
+	 * @param a_P the output terms.
+	 * @param a_W the input primitive variables.
+	 */
 	PROTO_KERNEL_START
 	void PowellF(State&         a_P,
 	             const State&   a_W)
@@ -263,7 +267,12 @@ namespace MHDOp {
 	PROTO_KERNEL_END(PowellF, Powell)
 
 
-
+	/**
+	 * @brief Function to average cell centered B on both sides of a face. 
+	 * @param a_Bavg the output BoxData.
+	 * @param a_W_ave the input cell averaged BoxData of primitive variables.
+	 * @param a_d direction to average.
+	 */ 
 	PROTO_KERNEL_START
 	void BavgcalcF(State& a_Bavg,
 	               const State& a_W_ave,
@@ -275,7 +284,12 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(BavgcalcF, Bavgcalc)
 	
-
+	/**
+	 * @brief Function to transfer data from lower dimensional BoxData to a higher dimensional BoxData. 
+	 * @param a_F the output BoxData.
+	 * @param a_F_temp the input BoxData.
+	 * @param a_s where to transfer.
+	 */ 
 	PROTO_KERNEL_START
 	void Fill_flux_calcF(const Point& a_pt,
 						Var<double,DIM, MEM ,NUMCOMPS>&       a_F,
@@ -288,6 +302,11 @@ namespace MHDOp {
 	}
 	PROTO_KERNEL_END(Fill_flux_calcF, Fill_flux_calc)
 
+	/**
+	 * @brief Function to transpose BoxData. 
+	 * @param a_F the output BoxData.
+	 * @param a_F_temp the input BoxData.
+	 */ 
 	PROTO_KERNEL_START
 	void Transpose_calcF(const Point& a_pt,
 						Var<double,NUMCOMPS>&       a_F,
