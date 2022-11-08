@@ -11,3 +11,6 @@
 *.dat
 *.exe
 .DS_Store
+*.err
+*.out
+*.sh
