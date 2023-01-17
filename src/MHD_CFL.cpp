@@ -3,7 +3,7 @@
 #include "MHDOp.H"
 #include "MHD_Initialize.H"
 #include "MHD_Output_Writer.H"
-#include "Proto_WriteBoxData.H"
+// #include "Proto_WriteBoxData.H"
 #include "MHD_Constants.H"
 #include <algorithm>    // std::min
 

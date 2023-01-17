@@ -11,7 +11,7 @@
 #include <iomanip>
 #include "Proto.H"
 #include "MHDLevelDataRK4.H"
-#include "Proto_WriteBoxData.H"
+// #include "Proto_WriteBoxData.H"
 #include "Proto_Timer.H"
 #include "MHD_Initialize.H"
 #include "MHD_EulerStep.H"
@@ -115,6 +115,7 @@ int main(int argc, char* argv[])
 		if (inputs.grid_type_global == 2){
 				MHD_Mapping::Spherical_2O_map_filling_func(state);
 				MHD_Mapping::Spherical_map_filling_func(state);
+				MHD_Mapping::Spherical_map_filling_func2(state);
 		} else {
 			MHD_Mapping::Regular_map_filling_func(state);
 		}

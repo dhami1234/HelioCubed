@@ -2,7 +2,7 @@
 #include "MHD_Output_Writer.H"
 #include "CommonTemplates.H"
 #include "Proto_Timer.H"
-#include "Proto_WriteBoxData.H"
+// #include "Proto_WriteBoxData.H"
 #include "Proto_LevelBoxData.H"
 #include "Proto_ProblemDomain.H"
 #include "MHD_Mapping.H"

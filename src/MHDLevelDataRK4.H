@@ -8,6 +8,8 @@
 #include <iostream>
 using namespace Proto;
 
+constexpr MemType MEM = MEMTYPE_DEFAULT;
+
 #define NCOMPS 2*DIM+2
 
 class MHDLevelDataDX;
@@ -41,7 +43,7 @@ public:
 	LevelBoxData<double,NUMCOMPS> m_CME;
 	LevelBoxData<double,1> m_Jacobian_ave;
 	LevelBoxData<double,DIM*DIM> m_N_ave_f;
-	std::array<LevelBoxData<double,DIM>,DIM> m_NT;
+	Array<LevelBoxData<double,DIM>,DIM> m_NT;
 	LevelBoxData<double,DIM> m_X_corners;
 	LevelBoxData<double> m_J;
 
@@ -72,6 +74,13 @@ public:
 	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_3_avg;
 	LevelBoxData<double,DIM> m_rrdotncd2n_3_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_3_avg;
+
+// Extra things needed by Spherical mapping with radial flow correction when using Phil's operators
+	Array<LevelBoxData<double,DIM*DIM,MEM>,DIM> m_A_face_avg;
+	Array<LevelBoxData<double,1,MEM>,DIM> m_Dr_detA_avg;
+	Array<LevelBoxData<double,DIM,MEM>,DIM> m_Dr_adjA_avg;
+
+
 // Things needed by Second order Spherical
 	LevelBoxData<double,DIM> m_x_sph_cc;
 	LevelBoxData<double,DIM> m_x_sph_fc_1;

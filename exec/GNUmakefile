@@ -26,7 +26,7 @@ CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 CXXOPTFLAGS+= -DPR_OPS=TRUE
 TARGET:=HelioCubed.exe
 
-SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/common/*.cpp) 
+SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/_common/*.cpp) 
 NODIRSRC = $(notdir $(SRC))
 NODIROBJ = $(subst .cpp,.o,$(NODIRSRC))
 OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
@@ -34,11 +34,11 @@ OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
 NODIRDEP = $(subst .cpp,.d,$(NODIRSRC))
 DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
 
-VPATH=o. ../src  $(PROTO)/examples/common
+VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/common 
+CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/_common 
 CXXFLAGS:= $(CXXOPTFLAGS) -std=c++14 -w
 
 LIBS += $(LAPACK_LIB)
@@ -107,7 +107,7 @@ vars:
 	$(foreach v,$(filter-out $(VARS_OLD) VARS_OLD,$(.VARIABLES)), $(info $(v) = $($(v))))
 
 clean:
-	rm -rf d o *.o *.exe *.d $(PROTO)/examples/common/*.o ../src/*.o $(PROTO)/examples/common/*.d ../src/*.d
+	rm -rf d o *.o *.exe *.d $(PROTO)/examples/_common/*.o ../src/*.o $(PROTO)/examples/_common/*.d ../src/*.d
 
 dataclean:
 	rm -rf *.hdf5 *.vtk *.table pout*
