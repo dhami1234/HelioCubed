@@ -855,7 +855,7 @@ namespace MHD_Mapping {
 			#define CENG 4
 			a_U_Sph_ave.setVal(0.0);
 			Box dbx0 = a_JU_ave.box();
-			cout << dbx0 << endl;
+			// cout << dbx0 << endl;
 			BoxData<double,DIM,MEM,DIM> Ainv4(dbx0);
 			MHD_Mapping::Nineto33(Ainv4, a_detAA_inv_avg);
 			auto JU4 = slice<double,NUMCOMPS,DIM,MEM>(a_JU_ave,CVELSTART);
@@ -996,7 +996,7 @@ namespace MHD_Mapping {
 			#define CENG 4
 			a_JU_ave.setVal(0.0);
 			Box dbx0 = a_U_Sph4_ave.box();
-			cout << dbx0 << endl;
+			// cout << dbx0 << endl;
 			BoxData<double,DIM,MEM,DIM> A4(dbx0);
 			MHD_Mapping::Nineto33(A4, a_detAA_avg);
 			auto w4 = slice<double,NUMCOMPS,DIM,MEM>(a_U_Sph4_ave,CVELSTART);

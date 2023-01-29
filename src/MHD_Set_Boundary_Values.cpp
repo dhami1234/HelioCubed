@@ -11,6 +11,7 @@
 #include "MHD_Input_Parsing.H"
 #include "MHD_Output_Writer.H"
 #include "MHD_Constants.H"
+#include "PolarExchangeCopier.H"
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 
@@ -423,6 +424,9 @@ namespace MHD_Set_Boundary_Values {
 
 			}
 		}
+
+		state.m_BC.defineExchange<PolarExchangeCopier>(2,1);
+		state.m_BC.exchange(); 
 		
 
 	}

@@ -241,11 +241,11 @@ namespace MHD_Initialize {
 			double pulsecenter_x = 0.0;
 			double pulsecenter_y = 0.0;
 			double pulsecenter_z = 0.0;
-			double rho_0 = 1.4;
-			double delta_rho_0 = 0.14;
+			double rho_0 = 100*1.67262192e-24;
+			double delta_rho_0 = rho_0/1000;
 			double rad = sqrt((x-pulsecenter_x)*(x-pulsecenter_x) + (y-pulsecenter_y)*(y-pulsecenter_y) + (z-pulsecenter_z)*(z-pulsecenter_z));
 			//if (rad < 0.6 && rad > 0.4){
-			rho = rho_0 + delta_rho_0*exp(-400.0*(rad-0.5)*(rad-0.5))*pow(cos(c_PI*(rad-0.5)),16.0);
+			rho = rho_0 + delta_rho_0*exp(-400.0*(rad/c_AU-0.5)*(rad/c_AU-0.5))*pow(cos(c_PI*(rad/c_AU-0.5)),16.0);
 			//} else {
 			//rho = rho_0;
 			//}
@@ -373,6 +373,7 @@ namespace MHD_Initialize {
 				v = 0.0;
 				w = 0.0; 
 				Bx = -0.005*(atan(12*(theta-c_PI/2))/atan(12*(100-c_PI/2)))*pow(inputs.r_in*c_AU/rad,2.0); // Br at 21.5 c_SR is about 0.005 G
+				// Bx = -0.005*pow(inputs.r_in*c_AU/rad,2.0); // Br at 21.5 c_SR is about 0.005 G
 			} else {
 				u = 5.0*sin(theta)*cos(phi);
 				v = 5.0*sin(theta)*sin(phi);
@@ -491,18 +492,8 @@ namespace MHD_Initialize {
 			Stencil<double> Lap2nd = Stencil<double>::Laplacian();
 			Vector Lap = Lap2nd(UBig,dbx,1.0/24.0);
 			UBig +=  Lap;
-
 			HDF5Handler h5;
-			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, UBig, "UBig");
 			MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_State.m_U[dit], UBig, a_State.m_detAA_avg[dit], a_State.m_A_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 4);
-			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, a_State.m_U[dit], "a_State_init");
-			
-			// Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), W_bar(dbx0);
-			// MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_State.m_U[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false);
-			// MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_State.m_U[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true);
-			// MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
-			// MHDOp::consToPrimSphcalc(W_bar,a_U_Sph_ave, a_U_Sph_actual_ave, a_gamma);
-			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_bar, "W_bar_init");
 			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
 		}
 	}
@@ -569,9 +560,8 @@ namespace MHD_Initialize {
 				u = 500.0*1e5;  // v at 21.5 c_SR is about 500 km/s
 				v = 0.0;
 				w = 0.0; 
-				// Bx = 1.0;
 				Bx = -0.005*(atan(12*(theta-c_PI/2))/atan(12*(100-c_PI/2)))*pow(inputs.r_in*c_AU/rad,2.0); // Br at 21.5 c_SR is about 0.005 G
-				// Bx = 1.0*pow(inputs.r_in*c_AU/rad,2.0);
+				// Bx = -0.005*pow(inputs.r_in*c_AU/rad,2.0);
 			} else {
 				u = 5.0*sin(theta)*cos(phi);
 				v = 5.0*sin(theta)*sin(phi);
@@ -599,8 +589,6 @@ namespace MHD_Initialize {
 		a_U(6) = By; //By
 		a_U(7) = Bz; //Bz
 #endif
-
-		// return 0;
 	}
 	PROTO_KERNEL_END(InitializeStateSph2OF, InitializeStateSph2O)
 
@@ -611,6 +599,7 @@ namespace MHD_Initialize {
 	{	
 		double gamma = a_gamma;
 		forallInPlace_p(InitializeStateSph2O,a_U,a_x,a_gamma);
+		MHDOp::DimToNonDimcalc(a_U);
 	}
 
 	void initializeState_Spherical_2O(MHDLevelDataState& a_State)
@@ -629,7 +618,6 @@ namespace MHD_Initialize {
 			forallInPlace_p(InitializeStateSph2O,UBig_sph,x_sph,a_gamma);
 			MHD_Mapping::Spherical_to_Cartesian(a_State.m_U[dit],UBig_sph,x_sph);
 			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
-			// MHD_Output_Writer::WriteBoxData_array_nocoord(UBig, a_dx, a_dy, a_dz, "UBig_again");
 		}
 	}
 

@@ -176,7 +176,7 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 		}
 	} 
 	
-	double dt_temp = 1.0e10;
+	double dt_temp = 1.0e10*inputs.velocity_scale;
 	double dt_new;
 		
 	

@@ -1290,4 +1290,161 @@ namespace MHD_Riemann_Solvers {
 		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
 	}
 
+
+	void MHDSphericalFlux(
+					BoxData<double,NUMCOMPS,MEM>& a_flux,                     
+					const BoxData<double,NUMCOMPS,MEM>& a_prim4,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim2,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual4,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual2,
+					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA4,
+					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA2,
+					const BoxData<double,DIM,MEM,DIM>& a_A4,
+					const BoxData<double,DIM,MEM,DIM>& a_A2,
+					const BoxData<double,1,MEM>& a_DrDetA4,                    
+					const BoxData<double,1,MEM>& a_DrDetA2,
+					const BoxData<double,DIM,MEM>& a_DrAdjA4,                    
+					const BoxData<double,DIM,MEM>& a_DrAdjA2,
+					const double& a_gamma,
+					int a_dir)
+	{
+		#define CRHO 0
+		#define CVELSTART 1
+		#define CBSTART 5
+		#define CPRES 4
+		#define CENG 4
+		
+		auto wnorm4 = slice(a_prim4,CVELSTART+a_dir);
+		auto bnorm4 = slice(a_prim4,CBSTART+a_dir);
+		auto wnorm2 = slice(a_prim2,CVELSTART+a_dir);
+		auto bnorm2 = slice(a_prim2,CBSTART+a_dir);
+		// Volumetric flow rates V_u,V_b.
+		auto Vu4 = Operator::_faceProduct(a_DrDetA4,wnorm4,a_DrDetA2,wnorm2,a_dir);
+		auto Vb4 = Operator::_faceProduct(a_DrDetA4,bnorm4,a_DrDetA2,bnorm2,a_dir);
+		auto Vu2 = a_DrDetA2*wnorm2; // Placeholder for forall.
+		auto Vb2 = a_DrDetA2*bnorm2; // Placeholder for forall.
+
+		// Advective fluxes of density, energy.
+		
+		auto rho4 = slice(a_prim4,CRHO);
+		auto rho2 = slice(a_prim2,CRHO);
+		auto fluxRho4 = Operator::_faceProduct(Vu4,rho4,Vu2,rho2,a_dir);
+		auto fluxRho2 = Operator::_matrixProductAB2(Vu2,rho2);
+		auto p4 = slice(a_prim4,CPRES); 
+		auto p2 = slice(a_prim2,CPRES);
+
+		// Cartesian B, velocities.
+		auto w4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim4,CVELSTART);
+		auto b4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim4,CBSTART);  
+		auto w2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CVELSTART);
+		auto b2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CBSTART);
+		
+		BoxData<double,DIM,MEM> Uface4 = Operator::_faceMatrixProductAB(a_A4,w4,a_A2,w2,a_dir);
+		BoxData<double,DIM,MEM> Bface4 = Operator::_faceMatrixProductAB(a_A4,b4,a_A2,b2,a_dir);
+		BoxData<double,DIM,MEM> Uface2 = Operator::_matrixProductAB2(a_A2,w2);
+		BoxData<double,DIM,MEM> Bface2 = Operator::_matrixProductAB2(a_A2,b2);
+
+		// Fluxes for velocity, magnetic fields.
+		// BoxData<double,DIM,MEM> fluxuu = Operator::_faceMatrixProductAB(Uface4,fluxRho4,Uface2,fluxRho2,a_dir);
+		// auto fluxub = Operator::_faceMatrixProductAB(Bface4,Vu4,Bface2,Vu2,a_dir);
+		// auto fluxbu = Operator::_faceMatrixProductAB(Bface4,Vb4,Bface2,Vb2,a_dir);
+		// auto fluxbb = Operator::_faceMatrixProductAB(Bface4,Vb4,Bface2,Vb2,a_dir);
+		// fluxbb *= 1.0/(4*M_PI);
+
+
+		// Fluxes for velocity, magnetic fields with Talwinder's method.
+		auto wdrho4 = Operator::_faceProduct(wnorm4,rho4,wnorm2,rho2,a_dir);
+		auto wdrho2 = wnorm2*rho2; // Placeholder for forall.
+		BoxData<double,DIM,MEM> Uface_temp4 = Operator::_faceMatrixProductAB(a_DrDetAA4,w4,a_DrDetAA2,w2,a_dir);
+		BoxData<double,DIM,MEM> Uface_temp2 = Operator::_matrixProductAB2(a_DrDetAA2,w2);
+		BoxData<double,DIM,MEM> fluxuu = Operator::_faceTensorProduct(Uface_temp4,wdrho4,Uface_temp2,wdrho2,a_dir);
+
+
+		BoxData<double,DIM,MEM> Bface_temp4 = Operator::_faceMatrixProductAB(a_DrDetAA4,b4,a_DrDetAA2,b2,a_dir);
+		BoxData<double,DIM,MEM> Bface_temp2 = Operator::_matrixProductAB2(a_DrDetAA2,b2);
+		BoxData<double,DIM,MEM> fluxub = Operator::_faceTensorProduct(Bface_temp4,wnorm4,Bface_temp2,wnorm2,a_dir);
+
+		BoxData<double,DIM,MEM> fluxbu = Operator::_faceTensorProduct(Uface_temp4,bnorm4,Uface_temp2,bnorm2,a_dir);
+
+		BoxData<double,DIM,MEM> fluxbb = Operator::_faceTensorProduct(Bface_temp4,bnorm4,Bface_temp2,bnorm2,a_dir);
+		fluxbb *= 1.0/(4*M_PI);
+
+		// Energy as a function of the primitive (Cartesian) variables.
+		// auto Beng4 = Operator::_faceMatrixProductATB(Bface4,Bface4,Bface2,Bface2,a_dir);
+		// auto Beng2 = Operator::_matrixProductATB2(Bface2,Bface2);  
+		// Beng4 *= 1.0/(8.0*M_PI);
+		// Beng2 *= 1.0/(8.0*M_PI);
+		
+		// auto Ueng4 = Operator::_faceMatrixProductATB(Uface4,Uface4,Uface2,Uface2,a_dir);
+		// auto Ueng2 = Operator::_matrixProductATB2(Uface2,Uface2);
+		// Ueng4 *= .5;
+		// Ueng2 *= .5; 
+
+		//Talwinder's definition of magnetic and kinetic energy
+		auto b_actual4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual4,CBSTART);
+		auto b_actual2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual2,CBSTART);
+		auto Beng4 = Operator::_faceMatrixProductATB(b_actual4,b_actual4,b_actual2,b_actual2,a_dir);
+		auto Beng2 = Operator::_matrixProductATB2(b_actual2,b_actual2);  
+		Beng4 *= 1.0/(8.0*M_PI);
+		Beng2 *= 1.0/(8.0*M_PI);
+
+
+		auto w_actual4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual4,CVELSTART);
+		auto w_actual2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual2,CVELSTART);
+		auto Ueng4 = Operator::_faceMatrixProductATB(w_actual4,w_actual4,w_actual2,w_actual2,a_dir);
+		auto Ueng2 = Operator::_matrixProductATB2(w_actual2,w_actual2);
+		Ueng4 *= .5;
+		Ueng2 *= .5;
+		
+		// Kinetic energy advective contribution.
+		auto fluxUEng = Operator::_faceProduct(fluxRho4,Ueng4,fluxRho2,Ueng2,a_dir);
+		
+		// pzero = sum of thermal and magnetic pressures.
+		auto pzero4 = p4 + Beng4;
+		auto pzero2 = p2 + Beng2;
+
+		// Advective + p d(1/rho) work contribution to the energy flux.
+		p4 *= 1./(a_gamma - 1.0);
+		p2 *= 1./(a_gamma - 1.0);
+		auto thermBEng4 = Beng4 + p4 + pzero4;
+		auto thermBEng2 = Beng2 + p2 + pzero2;
+		
+		auto fluxThermBAdv = Operator::_faceProduct(Vu4,thermBEng4,Vu2,thermBEng2,a_dir);
+		
+		// Non-gradient magnetic field contribution to the energy flux.
+		BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(Uface4,Bface4,Uface2,Bface2,a_dir);
+		BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(Uface2,Bface2);
+		auto fluxBEng = Operator::_faceProduct(Vb4,UDotB4,Vb2,UDotB2,a_dir);
+		fluxBEng *= (-1.0/(4.0*M_PI));
+
+		// Pressure forces on the fluid.
+		auto pForce = Operator::_faceMatrixProductAB(a_DrAdjA4,pzero4,a_DrAdjA2,pzero2,a_dir);
+		
+		// Assemble into flux vector.
+		a_flux = forall<double,NUMCOMPS,MEM,1>
+			([ ] PROTO_LAMBDA(
+							Var<double,NUMCOMPS,MEM,1>& a_retval,
+							Var<double,1,MEM>& a_fluxRho,
+							Var<double,DIM,MEM>& a_fluxuu,
+							Var<double,DIM,MEM>& a_fluxub,
+							Var<double,DIM,MEM>& a_fluxbu,
+							Var<double,DIM,MEM>& a_fluxbb,
+							Var<double,1,MEM>& a_fluxThermBAdv,
+							Var<double,1,MEM>& a_fluxUEng,
+							Var<double,1,MEM>& a_fluxBEng,
+							Var<double,DIM,MEM>& a_pforce)
+			{
+			a_retval(0) = a_fluxRho(0);
+			for (int dir = 0; dir < DIM; dir++)
+				{
+				a_retval(CVELSTART+dir) = a_fluxuu(dir) + a_pforce(dir) + a_fluxbb(dir);
+				a_retval(CBSTART+dir) = a_fluxub(dir) - a_fluxbu(dir);
+				}
+			a_retval(CENG) = a_fluxThermBAdv(0) + a_fluxUEng(0) + a_fluxBEng(0);
+			},
+			fluxRho4,fluxuu,fluxub,fluxbu,fluxbb,fluxThermBAdv,fluxUEng,fluxBEng,pForce);
+			// fluxRho4,fluxuu,fluxub,fluxbu,fluxbb,fluxThermBAdv,fluxUEng,fluxBEng,pForce);
+		
+	}
+
 }

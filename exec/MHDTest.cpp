@@ -85,13 +85,13 @@ int main(int argc, char* argv[])
 		// Following is done for required dt control in convergence tests
 		if (inputs.convTestType == 1)
 		{
-			dt = inputs.CFL*(1.0/1024.);
+			dt = inputs.CFL*inputs.velocity_scale;
 		} else {
 			#if DIM == 2
-			dt = inputs.CFL*std::min({dx,dy});
+			dt = inputs.CFL*std::min({dx,dy})*inputs.velocity_scale;
 			#endif
 			#if DIM == 3
-			dt = inputs.CFL*std::min({dx,dy,dz});
+			dt = inputs.CFL*std::min({dx,dy,dz})*inputs.velocity_scale;
 			#endif
 		}
 		if (inputs.convTestType == 2)
