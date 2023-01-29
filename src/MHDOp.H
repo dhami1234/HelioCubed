@@ -6,6 +6,11 @@
 constexpr unsigned int NUMCOMPS=2*DIM+2;
 
 #define NGHOST 8
+#define CRHO 0
+#define CVELSTART 1
+#define CBSTART 5
+#define CPRES 4
+#define CENG 4
 
 using namespace Proto;
 

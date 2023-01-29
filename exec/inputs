@@ -20,7 +20,7 @@
 -slope_flattening_apply          0
 -non_linear_visc_apply           0
 -linear_visc_apply               0
--takedivBstep                    0
+-takedivBstep                    1
 -timeIntegratorType              1
 -init_condition_type             22
 -Riemann_solver_type             1

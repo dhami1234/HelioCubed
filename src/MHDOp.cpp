@@ -694,13 +694,21 @@ namespace MHDOp {
 			Box dbx0 = a_JU_ave[dit].box();
 			Box dbx1 = dbx0.grow(0-NGHOST);
 			a_Rhs[dit].setVal(0.0);
-			Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0);
+			if (!a_State.m_divB_calculated) a_State.m_divB[dit].setVal(0.0);
+			Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), a_U_cart_ave(dbx0), a_U_cart_ave_temp(dbx0), Powell_term(dbx0), F_ave_f(dbx0);
+			Scalar RhsV_divB(dbx0), NTB(dbx0);
+			if (!a_State.m_divB_calculated) RhsV_divB.setVal(0.0);
 			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 4);
 			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 4);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_actual_ave, a_dx, a_dy, a_dz);
 			Vector W_bar = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_ave, a_U_Sph_actual_ave, gamma);
-			Vector W_ave = m_copy(W_bar);
+			Vector U = m_deconvolve(a_U_Sph_ave);
+			Vector U_actual = m_deconvolve(a_U_Sph_actual_ave);
+			Vector W = forall<double,NUMCOMPS>(consToPrimSph, U, U_actual, gamma);
+			Vector W_ave = m_laplacian(W_bar,1.0/24.0);
+			W_ave += W;
+
 			HDF5Handler h5;
 			if (!a_State.m_min_dt_calculated){ 
 				MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx1, a_dx, a_dy, a_dz, gamma);	
@@ -721,17 +729,15 @@ namespace MHDOp {
 
 				MHD_Limiters::MHD_Limiters_4O(W_ave_low,W_ave_high,W_ave_low_temp,W_ave_high_temp,W_ave,W_bar,d,a_dx, a_dy, a_dz);			
 				MHD_Mapping::W_Sph_to_W_normalized_sph(W_ave_high_actual, W_ave_low, a_State.m_A_row_mag_1_avg[dit], a_State.m_A_row_mag_2_avg[dit], a_State.m_A_row_mag_3_avg[dit], d);
-				
-
-				// Box bxFace = dbx0.grow(NGHOST).extrude(d);
-				Vector F_ave_f(dbx0);
 				F_ave_f.setVal(0.0);
+				auto bnorm4 = slice(W_ave_high,CBSTART+d);
 				double dx_d = dxd[d];
 				if (d==0) {
 					MHD_Mapping::Nineto33(A4, a_State.m_A_1_avg[dit]);
 					MHD_Mapping::Nineto33(DrDetAA4, a_State.m_r2detAA_1_avg[dit]);
 					MHD_Riemann_Solvers::MHDSphericalFlux
                     (F_ave_f,W_ave_high,W_ave_high,W_ave_high_actual,W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_State.m_r2detA_1_avg[dit],a_State.m_r2detA_1_avg[dit],a_State.m_r2detAn_1_avg[dit], a_State.m_r2detAn_1_avg[dit],gamma,d);
+					if (!a_State.m_divB_calculated) NTB = Operator::_faceProduct(a_State.m_r2detA_1_avg[dit],bnorm4,a_State.m_r2detA_1_avg[dit],bnorm4,d);
 				}
 
 				if (d==1) {
@@ -739,6 +745,7 @@ namespace MHDOp {
 					MHD_Mapping::Nineto33(DrDetAA4, a_State.m_rrdotdetAA_2_avg[dit]);
 					MHD_Riemann_Solvers::MHDSphericalFlux
                     (F_ave_f,W_ave_high,W_ave_high,W_ave_high_actual,W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_State.m_rrdotdetA_2_avg[dit],a_State.m_rrdotdetA_2_avg[dit],a_State.m_rrdotd3ncn_2_avg[dit], a_State.m_rrdotd3ncn_2_avg[dit],gamma,d);
+					if (!a_State.m_divB_calculated) NTB = Operator::_faceProduct(a_State.m_rrdotdetA_2_avg[dit],bnorm4,a_State.m_rrdotdetA_2_avg[dit],bnorm4,d);
 				}
 
 				if (d==2) {
@@ -746,12 +753,29 @@ namespace MHDOp {
 					MHD_Mapping::Nineto33(DrDetAA4, a_State.m_rrdotdetAA_3_avg[dit]);
 					MHD_Riemann_Solvers::MHDSphericalFlux
                     (F_ave_f,W_ave_high,W_ave_high,W_ave_high_actual,W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_State.m_rrdotdetA_3_avg[dit],a_State.m_rrdotdetA_3_avg[dit],a_State.m_rrdotncd2n_3_avg[dit], a_State.m_rrdotncd2n_3_avg[dit],gamma,d);
+					if (!a_State.m_divB_calculated) NTB = Operator::_faceProduct(a_State.m_rrdotdetA_3_avg[dit],bnorm4,a_State.m_rrdotdetA_3_avg[dit],bnorm4,d);
 				}
 				// if (procID() == 1) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, F_ave_f, "F_ave_f_"+to_string(d));
 				Vector Rhs_d = m_divergence[d](F_ave_f);
 				Rhs_d *= -1./dx_d;
 				a_Rhs[dit] += Rhs_d;
+
+				if (!a_State.m_divB_calculated){
+					Scalar B_Rhs_d = m_divergence[d](NTB);
+					B_Rhs_d *= -1./dx_d;
+					RhsV_divB += B_Rhs_d;
+				}
+
 			}
+
+			if (!a_State.m_divB_calculated){
+				a_U_cart_ave_temp = Operator::_cellTensorQuotient(a_JU_ave[dit],a_State.m_r2rdot_avg[dit],a_JU_ave[dit],a_State.m_r2rdot_avg[dit]);
+				a_U_cart_ave = Operator::_cellTensorQuotient(a_U_cart_ave_temp,a_State.m_detA_avg[dit],a_U_cart_ave_temp,a_State.m_detA_avg[dit]);
+				Vector W_cart = forall<double,NUMCOMPS>(consToPrim,a_U_cart_ave, gamma);
+				Powell_term = forall<double,NUMCOMPS>(Powell,W_cart);
+				a_State.m_divB[dit] = Operator::_cellTensorProduct(Powell_term,RhsV_divB,Powell_term,RhsV_divB);
+			}
+			
 			// if (procID() == 1) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, a_Rhs[dit], "a_Rhs");
 		}
 	}

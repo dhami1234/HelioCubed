@@ -1308,11 +1308,11 @@ namespace MHD_Riemann_Solvers {
 					const double& a_gamma,
 					int a_dir)
 	{
-		#define CRHO 0
-		#define CVELSTART 1
-		#define CBSTART 5
-		#define CPRES 4
-		#define CENG 4
+		// #define CRHO 0
+		// #define CVELSTART 1
+		// #define CBSTART 5
+		// #define CPRES 4
+		// #define CENG 4
 		
 		auto wnorm4 = slice(a_prim4,CVELSTART+a_dir);
 		auto bnorm4 = slice(a_prim4,CBSTART+a_dir);
@@ -1443,7 +1443,6 @@ namespace MHD_Riemann_Solvers {
 			a_retval(CENG) = a_fluxThermBAdv(0) + a_fluxUEng(0) + a_fluxBEng(0);
 			},
 			fluxRho4,fluxuu,fluxub,fluxbu,fluxbb,fluxThermBAdv,fluxUEng,fluxBEng,pForce);
-			// fluxRho4,fluxuu,fluxub,fluxbu,fluxbb,fluxThermBAdv,fluxUEng,fluxBEng,pForce);
 		
 	}
 
