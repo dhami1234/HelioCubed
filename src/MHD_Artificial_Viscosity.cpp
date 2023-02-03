@@ -333,26 +333,11 @@ namespace MHD_Artificial_Viscosity {
 
 	PROTO_KERNEL_START
 	void lambda_sph_calcF(Var<double,1>& a_lambda,
-	                 const State& a_W_edge,
 	                 const State& a_W_edge_actual,
-					 const Var<double,1>& a_r2detA_1_avg,                 
-					 const Var<double,1>& a_rrdotdetA_2_avg,
-					 const Var<double,1>& a_rrdotdetA_3_avg,
 	                 int a_d,
 	                 double a_gamma)
 	{
 		double gamma = a_gamma;
-		double rho=0., u=0., v=0., w=0., p=0., Bx=0., By=0., Bz=0., ce, af, B_mag, u_mag, Bdir, udir;
-
-		rho = a_W_edge(0);
-		u   = a_W_edge(1);
-		v   = a_W_edge(2);
-		w   = a_W_edge(3);
-		p   = a_W_edge(4);
-		Bx  = a_W_edge(5);
-		By  = a_W_edge(6);
-		Bz  = a_W_edge(7);
-
 		double rho_actual=0., u_actual=0., v_actual=0., w_actual=0., p_actual=0., Bx_actual=0., By_actual=0., Bz_actual=0.;
 
 		rho_actual = a_W_edge_actual(0);
@@ -363,18 +348,15 @@ namespace MHD_Artificial_Viscosity {
 		Bx_actual  = a_W_edge_actual(5);
 		By_actual  = a_W_edge_actual(6);
 		Bz_actual  = a_W_edge_actual(7);
-
+		double u_mag,af;
 		if (p_actual < 0.0) p_actual = 0.0;
-		ce = sqrt(gamma*p_actual/rho_actual);
-		B_mag = sqrt(Bx_actual*Bx_actual+By_actual*By_actual+Bz_actual*Bz_actual);
-		if (a_d == 0) u_mag = abs(u);
-		if (a_d == 1) u_mag = abs(v);
-		if (a_d == 2) u_mag = abs(w);
+		double ce = sqrt(gamma*p_actual/rho_actual);
+		double B_mag = sqrt(Bx_actual*Bx_actual+By_actual*By_actual+Bz_actual*Bz_actual);
+		if (a_d == 0) u_mag = abs(u_actual);
+		if (a_d == 1) u_mag = abs(v_actual);
+		if (a_d == 2) u_mag = abs(w_actual);
 		af = sqrt(ce*ce + B_mag*B_mag/4.0/c_PI/rho_actual);
 		double lambda = af + u_mag;
-		// if (a_d == 0) lambda = lambda * a_r2detA_1_avg(0);
-		// if (a_d == 1) lambda = lambda * a_rrdotdetA_2_avg(0);
-		// if (a_d == 2) lambda = lambda * a_rrdotdetA_3_avg(0);
 		a_lambda(0) = lambda;
 		
 	}
@@ -527,7 +509,7 @@ namespace MHD_Artificial_Viscosity {
 					// Vector W_ave_edge = m_interp_f_2nd[d](W_bar);
 					// Vector W_ave_edge_actual = m_interp_f_2nd[d](W_bar_actual);
 
-					Scalar Lambda_f = forall<double,1>(lambda_sph_calc, W_ave_edge, W_ave_edge_actual, a_State.m_r2detA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], d, a_gamma);  
+					Scalar Lambda_f = forall<double,1>(lambda_sph_calc, W_ave_edge_actual, d, a_gamma);  
 					double dx_d = dxd[d];
 					Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
 					Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));

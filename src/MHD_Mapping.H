@@ -97,7 +97,7 @@ namespace MHD_Mapping {
 	void Regular_map_filling_func(MHDLevelDataState& a_state);
 
 	void Nineto33(BoxData<double,DIM,MEM,DIM>& a_A_face_avg,
-						BoxData<double,DIM*DIM>& a_A_avg);
+					const	BoxData<double,DIM*DIM>& a_A_avg);
 
 	void Spherical_map_filling_func(MHDLevelDataState& a_state);
 

@@ -469,6 +469,7 @@ namespace MHD_Mapping {
 			a_A_row_mag_1_avg(0) = 1.0;
 			a_A_row_mag_1_avg(1) = c_PI;
 			a_A_row_mag_1_avg(2) = (4*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
+			// a_A_row_mag_1_avg(2) = (2*c_PI*dE2)/(log(abs(tan((E2+dE2/2)/2)))-log(abs(tan((E2-dE2/2)/2))));
 
 			a_A_1_avg(0) = (2*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(E2*c_PI))/(dE2*dE3*pow(c_PI,2));
 			a_A_1_avg(1) = (2*cos(E2*c_PI)*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI))/(dE2*dE3*c_PI);
@@ -639,6 +640,8 @@ namespace MHD_Mapping {
 			a_A_row_mag_3_avg(0) = 1.0;
 			a_A_row_mag_3_avg(1) = c_PI;
 			a_A_row_mag_3_avg(2) = (4*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
+			// a_A_row_mag_3_avg(2) = (2*c_PI*dE2)/(log(abs(tan((E2+dE2/2)/2)))-log(abs(tan((E2-dE2/2)/2))));
+
 
 			a_A_3_avg(0) = (2*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/(dE2*c_PI);
 			a_A_3_avg(1) = (2*cos(E2*c_PI)*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.))/dE2;
@@ -1085,6 +1088,8 @@ namespace MHD_Mapping {
 	{
 
 		a_U_ave = forall<double,NUMCOMPS>(JU_to_U_ave_calc,a_JU_ave,a_r2rdot_avg,a_detA_avg);
+		// BoxData<double,NUMCOMPS> a_U_cart_ave_temp = Operator::_cellTensorQuotient(a_JU_ave,a_r2rdot_avg,a_JU_ave,a_r2rdot_avg);
+		// a_U_ave = Operator::_cellTensorQuotient(a_U_cart_ave_temp,a_detA_avg,a_U_cart_ave_temp,a_detA_avg);
 	}
 
 	PROTO_KERNEL_START
@@ -1269,7 +1274,7 @@ namespace MHD_Mapping {
 	PROTO_KERNEL_END(Nineto33_calcF, Nineto33_calc)
 
 	void Nineto33(BoxData<double,DIM,MEM,DIM>& a_A_face_avg,
-						BoxData<double,DIM*DIM>& a_A_avg)
+					const	BoxData<double,DIM*DIM>& a_A_avg)
 	{
 		forallInPlace_p(Nineto33_calc, a_A_face_avg, a_A_avg);
 	}
@@ -1713,12 +1718,7 @@ namespace MHD_Mapping {
 	                          const double a_dy,
 	                          const double a_dz)
 	{
-
-		double E1, E2, E3;
-		E1 = (a_pt[0] + 0.5)*a_dx;
-		E2 = (a_pt[1] + 0.5)*a_dy;
-		E3 = (a_pt[2] + 0.5)*a_dz;
-
+		double E2 = (a_pt[1] + 0.5)*a_dy;
 		if (E2 < 0.0 || E2 > 1.0){
 			a_U_Sph_ave(2) *= -1.0;
 			a_U_Sph_ave(3) *= -1.0;
@@ -1726,7 +1726,6 @@ namespace MHD_Mapping {
 			a_U_Sph_ave(6) *= -1.0;
 			a_U_Sph_ave(7) *= -1.0;
 		}
-
 	}
 	PROTO_KERNEL_END(Correct_V_theta_phi_at_poles_calcF, Correct_V_theta_phi_at_poles_calc)
 
