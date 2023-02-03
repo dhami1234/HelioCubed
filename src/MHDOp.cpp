@@ -566,7 +566,7 @@ namespace MHDOp {
 			Box dbx2 = dbx0.grow(0-NGHOST);
 
 			a_Rhs[dit].setVal(0.0);
-			if (!a_State.m_divB_calculated) a_State.m_divB[dit].setVal(0.0);
+			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) a_State.m_divB[dit].setVal(0.0);
 
 			HDF5Handler h5;
 
@@ -599,7 +599,7 @@ namespace MHDOp {
 				F_f_mapped.setVal(0.0);
 				BoxData<double,DIM,MEM,NUMCOMPS> BF_f(dbx1), BF_ave_f(dbx1);
 				Vector BF_f_mapped(dbx1);
-				if (!a_State.m_divB_calculated) {BF_f_mapped.setVal(0.0);}
+				if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) {BF_f_mapped.setVal(0.0);}
 				double dx_d = dxd[d];
 				for (int s = 0; s < DIM; s++) {
 					if (inputs.Riemann_solver_type == 1) {
@@ -609,7 +609,7 @@ namespace MHDOp {
 						MHD_Riemann_Solvers::Roe8Wave_Solver(F_f_temp,W_low,W_high,s,gamma);
 					}
 					forallInPlace_p(Fill_flux_calc, F_f, F_f_temp, s);
-					if (!a_State.m_divB_calculated){
+					if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 						Vector B_ave_f = forall<double,NUMCOMPS>(Bavgcalc, W_ave_edge, s);
 						forallInPlace_p(Fill_flux_calc, BF_ave_f, B_ave_f, s);
 					}
@@ -623,7 +623,7 @@ namespace MHDOp {
 				Rhs_d *= -1./volume;
 				a_Rhs[dit] += Rhs_d;
 
-				if (!a_State.m_divB_calculated){
+				if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 					BoxData<double,1,MEM,NUMCOMPS> Bfluxdir = Operator::_faceMatrixProductATB(a_State.m_NT[d][dit],BF_ave_f,a_State.m_NT[d][dit],BF_ave_f,d);
 					forallInPlace_p(Transpose_calc, BF_f_mapped, Bfluxdir);
 					Vector B_Rhs_d = m_divergence[d](BF_f_mapped);
@@ -632,7 +632,7 @@ namespace MHDOp {
 					a_State.m_divB[dit] += B_Rhs_d;
 				}
 			}
-			if (!a_State.m_divB_calculated){
+			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 				Vector Powell_term = forall<double,NUMCOMPS>(Powell,W_ave);
 				a_State.m_divB[dit] *= Powell_term;
 			}
@@ -719,7 +719,7 @@ namespace MHDOp {
 			a_Rhs[dit].setVal(0.0);
 			Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), a_U_cart_ave(dbx0), a_U_cart_ave_temp(dbx0), Powell_term(dbx0), F_ave_f(dbx0);
 			Scalar RhsV_divB(dbx0), NTB(dbx0);
-			if (!a_State.m_divB_calculated) RhsV_divB.setVal(0.0);
+			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) RhsV_divB.setVal(0.0);
 			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 2);
 			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 2);
 			MHD_Mapping::JU_to_U_ave_calc_func(a_U_cart_ave, a_JU_ave[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit]);
@@ -775,7 +775,7 @@ namespace MHDOp {
 				Vector Rhs_d = m_divergence[d](F_ave_f);
 				Rhs_d *= -1./dx_d;
 				a_Rhs[dit] += Rhs_d;
-				if (!a_State.m_divB_calculated){
+				if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 					// if (d==0) NTB = Operator::_faceProduct(a_State.m_r2detA_1_avg[dit],bnorm4,a_State.m_r2detA_1_avg[dit],bnorm4,d);
 					if (d==0) NTB = a_State.m_r2detA_1_avg[dit]*bnorm4;
 					// if (d==1) NTB = Operator::_faceProduct(a_State.m_rrdotdetA_2_avg[dit],bnorm4,a_State.m_rrdotdetA_2_avg[dit],bnorm4,d);
@@ -789,7 +789,7 @@ namespace MHDOp {
 				}
 			}
 
-			if (!a_State.m_divB_calculated){
+			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 				
 				Vector W_cart = forall<double,NUMCOMPS>(consToPrim,a_U_cart_ave, gamma);
 				Powell_term = forall<double,NUMCOMPS>(Powell,W_cart);
@@ -877,14 +877,14 @@ namespace MHDOp {
 				Rhs_d = m_divergence[d](F_f_scaled);
 				RhsV += Rhs_d;
 
-				if (!a_State.m_divB_calculated){
+				if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
 					forallInPlace_p(Scale_with_A_Bf_calc, B_f_scaled, W_low,W_high, a_State.m_face_area[dit], d);
 					Rhs_d_divB = m_divergence[d](B_f_scaled);
 					RhsV_divB += Rhs_d_divB;
 				}
 			}
 			forallInPlace_p(Scale_with_V_calc, a_Rhs[dit], RhsV, a_State.m_cell_volume[dit]);
-			if (!a_State.m_divB_calculated) forallInPlace_p(Powell_Sph_2O,a_State.m_divB[dit],W_cart,RhsV_divB,a_State.m_cell_volume[dit]);		
+			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) forallInPlace_p(Powell_Sph_2O,a_State.m_divB[dit],W_cart,RhsV_divB,a_State.m_cell_volume[dit]);		
 			// Vector RHS(dbx1);
 			// a_State.m_divB[dit].copyTo(RHS);
 			// a_Rhs[dit].copyTo(RHS);
