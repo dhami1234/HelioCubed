@@ -1003,9 +1003,6 @@ namespace MHD_Riemann_Solvers {
 		p0 = a_W(4) + B2/8.0/c_PI;
 		e  = a_W(4)/(gamma-1.0) + rho*v2/2.0 + B2/8.0/c_PI;
 
-		a_F(1) = 0.0;
-		a_F(2) = 0.0;
-		a_F(3) = 0.0;
 		if (a_d == 0) {  //r
 			a_F(0) = a_r2detA_1_avg(0)*rho*a_W(1);
 
@@ -1024,12 +1021,13 @@ namespace MHD_Riemann_Solvers {
 			a_F(4) = a_r2detA_1_avg(0)*(e+p0)*a_W(1);
 			a_F(4) -= a_r2detA_1_avg(0)*(1/4.0/c_PI)*(vB)*a_W(5);
 
-			a_F(5) = 0.;//a_r2detAA_1_avg(0)*a_W(5)*a_W(1) + a_r2detAA_1_avg(1)*a_W(5)*a_W(2) + a_r2detAA_1_avg(2)*a_W(5)*a_W(3);
-			a_F(6) = a_r2detAA_1_avg(3)*a_W(5)*a_W(1) + a_r2detAA_1_avg(4)*a_W(5)*a_W(2) + a_r2detAA_1_avg(5)*a_W(5)*a_W(3);
-			a_F(7) = a_r2detAA_1_avg(6)*a_W(5)*a_W(1) + a_r2detAA_1_avg(7)*a_W(5)*a_W(2) + a_r2detAA_1_avg(8)*a_W(5)*a_W(3);
-			a_F(5) -= 0.;//a_r2detAA_1_avg(0)*a_W(1)*a_W(5) + a_r2detAA_1_avg(1)*a_W(1)*a_W(6) + a_r2detAA_1_avg(2)*a_W(1)*a_W(7);
-			a_F(6) -= a_r2detAA_1_avg(3)*a_W(1)*a_W(5) + a_r2detAA_1_avg(4)*a_W(1)*a_W(6) + a_r2detAA_1_avg(5)*a_W(1)*a_W(7);
-			a_F(7) -= a_r2detAA_1_avg(6)*a_W(1)*a_W(5) + a_r2detAA_1_avg(7)*a_W(1)*a_W(6) + a_r2detAA_1_avg(8)*a_W(1)*a_W(7);
+			a_F(5) = a_r2detAA_1_avg(0)*a_W(1)*a_W(5) + a_r2detAA_1_avg(1)*a_W(1)*a_W(6) + a_r2detAA_1_avg(2)*a_W(1)*a_W(7);
+			a_F(6) = a_r2detAA_1_avg(3)*a_W(1)*a_W(5) + a_r2detAA_1_avg(4)*a_W(1)*a_W(6) + a_r2detAA_1_avg(5)*a_W(1)*a_W(7);
+			a_F(7) = a_r2detAA_1_avg(6)*a_W(1)*a_W(5) + a_r2detAA_1_avg(7)*a_W(1)*a_W(6) + a_r2detAA_1_avg(8)*a_W(1)*a_W(7);
+			a_F(5) -= a_r2detAA_1_avg(0)*a_W(5)*a_W(1) + a_r2detAA_1_avg(1)*a_W(5)*a_W(2) + a_r2detAA_1_avg(2)*a_W(5)*a_W(3);
+			a_F(6) -= a_r2detAA_1_avg(3)*a_W(5)*a_W(1) + a_r2detAA_1_avg(4)*a_W(5)*a_W(2) + a_r2detAA_1_avg(5)*a_W(5)*a_W(3);
+			a_F(7) -= a_r2detAA_1_avg(6)*a_W(5)*a_W(1) + a_r2detAA_1_avg(7)*a_W(5)*a_W(2) + a_r2detAA_1_avg(8)*a_W(5)*a_W(3);
+
 		}
 
 		if (a_d == 1) {  // theta
@@ -1050,12 +1048,12 @@ namespace MHD_Riemann_Solvers {
 			a_F(4) = a_rrdotdetA_2_avg(0)*(e+p0)*a_W(2);
 			a_F(4) -= a_rrdotdetA_2_avg(0)*(1/4.0/c_PI)*(vB)*a_W(6);
 
-			a_F(5) = a_rrdotdetAA_2_avg(0)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(1)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(2)*a_W(6)*a_W(3);
-			a_F(6) = 0.;//a_rrdotdetAA_2_avg(3)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(4)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(5)*a_W(6)*a_W(3);
-			a_F(7) = a_rrdotdetAA_2_avg(6)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(7)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(8)*a_W(6)*a_W(3);
-			a_F(5) -= a_rrdotdetAA_2_avg(0)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(1)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(2)*a_W(2)*a_W(7);
-			a_F(6) -= 0.;//a_rrdotdetAA_2_avg(3)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(4)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(5)*a_W(2)*a_W(7);
-			a_F(7) -= a_rrdotdetAA_2_avg(6)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(7)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(8)*a_W(2)*a_W(7);
+			a_F(5)  = a_rrdotdetAA_2_avg(0)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(1)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(2)*a_W(2)*a_W(7);
+			a_F(6)  = a_rrdotdetAA_2_avg(3)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(4)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(5)*a_W(2)*a_W(7);
+			a_F(7)  = a_rrdotdetAA_2_avg(6)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(7)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(8)*a_W(2)*a_W(7);
+			a_F(5) -= a_rrdotdetAA_2_avg(0)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(1)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(2)*a_W(6)*a_W(3);
+			a_F(6) -= a_rrdotdetAA_2_avg(3)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(4)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(5)*a_W(6)*a_W(3);
+			a_F(7) -= a_rrdotdetAA_2_avg(6)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(7)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(8)*a_W(6)*a_W(3);
 		}
 
 		if (a_d == 2) {  // phi
@@ -1076,12 +1074,12 @@ namespace MHD_Riemann_Solvers {
 			a_F(4) = a_rrdotdetA_3_avg(0)*(e+p0)*a_W(3);
 			a_F(4) -= a_rrdotdetA_3_avg(0)*(1/4.0/c_PI)*(vB)*a_W(7);
 
-			a_F(5) = a_rrdotdetAA_3_avg(0)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(1)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(2)*a_W(7)*a_W(3);
-			a_F(6) = a_rrdotdetAA_3_avg(3)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(4)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(5)*a_W(7)*a_W(3);
-			a_F(7) = 0.;//a_rrdotdetAA_3_avg(6)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(7)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(8)*a_W(7)*a_W(3);
-			a_F(5) -= a_rrdotdetAA_3_avg(0)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(1)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(2)*a_W(3)*a_W(7);
-			a_F(6) -= a_rrdotdetAA_3_avg(3)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(4)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(5)*a_W(3)*a_W(7);
-			a_F(7) -= 0.;//a_rrdotdetAA_3_avg(6)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(7)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(8)*a_W(3)*a_W(7);
+			a_F(5)  = a_rrdotdetAA_3_avg(0)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(1)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(2)*a_W(3)*a_W(7);
+			a_F(6)  = a_rrdotdetAA_3_avg(3)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(4)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(5)*a_W(3)*a_W(7);
+			a_F(7)  = a_rrdotdetAA_3_avg(6)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(7)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(8)*a_W(3)*a_W(7);
+			a_F(5) -= a_rrdotdetAA_3_avg(0)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(1)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(2)*a_W(7)*a_W(3);
+			a_F(6) -= a_rrdotdetAA_3_avg(3)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(4)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(5)*a_W(7)*a_W(3);
+			a_F(7) -= a_rrdotdetAA_3_avg(6)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(7)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(8)*a_W(7)*a_W(3);
 		}
 	}
 	PROTO_KERNEL_END(Get_mapped_flux_calcF, Get_mapped_flux_calc)
@@ -1103,12 +1101,7 @@ namespace MHD_Riemann_Solvers {
 					const double& a_gamma,
 					int a_dir)
 	{
-		// #define CRHO 0
-		// #define CVELSTART 1
-		// #define CBSTART 5
-		// #define CPRES 4
-		// #define CENG 4
-		
+
 		auto wnorm4 = slice(a_prim4,CVELSTART+a_dir);
 		auto bnorm4 = slice(a_prim4,CBSTART+a_dir);
 		auto wnorm2 = slice(a_prim2,CVELSTART+a_dir);
@@ -1381,7 +1374,8 @@ namespace MHD_Riemann_Solvers {
 	                              const double a_gamma,
 								  const double a_dx,
 	                    		  const double a_dy,
-	                    		  const double a_dz)
+	                    		  const double a_dz,
+								  const int a_order)
 	{
 
 		static Stencil<double> m_laplacian_f[DIM];
@@ -1401,41 +1395,47 @@ namespace MHD_Riemann_Solvers {
 			}
 			initialized =  true;
 		}
+		Box dbx0 = a_W_ave_high.box();
+		Vector F_f_low_mapped(dbx0), F_f_high_mapped(dbx0);
+
 		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_d, a_gamma);
-		Vector F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
-		Vector F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
 		
-		// Box dbx0 = a_W_ave_high.box();
-		// BoxData<double,DIM,MEM,DIM> A4(dbx0);
-		// BoxData<double,DIM,MEM,DIM> DrDetAA4(dbx0);
-		// Vector F_f_low_mapped(dbx0), F_f_high_mapped(dbx0);
+		if (a_order == 2){
+			F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
+			F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
+		}
 
-		// if (a_d==0) {
-		// 	MHD_Mapping::Nineto33(A4, a_A_1_avg);
-		// 	MHD_Mapping::Nineto33(DrDetAA4, a_r2detAA_1_avg);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
-		// }
+		if (a_order == 4){
+			BoxData<double,DIM,MEM,DIM> A4(dbx0);
+			BoxData<double,DIM,MEM,DIM> DrDetAA4(dbx0);
 
-		// if (a_d==1) {
-		// 	MHD_Mapping::Nineto33(A4, a_A_2_avg);
-		// 	MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_2_avg);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
-		// }
+			if (a_d==0) {
+				MHD_Mapping::Nineto33(A4, a_A_1_avg);
+				MHD_Mapping::Nineto33(DrDetAA4, a_r2detAA_1_avg);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
+			}
 
-		// if (a_d==2) {
-		// 	MHD_Mapping::Nineto33(A4, a_A_3_avg);
-		// 	MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_3_avg);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
-		// 	MHD_Riemann_Solvers::MHDSphericalFlux
-		// 	(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
-		// }
+			if (a_d==1) {
+				MHD_Mapping::Nineto33(A4, a_A_2_avg);
+				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_2_avg);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
+			}
+
+			if (a_d==2) {
+				MHD_Mapping::Nineto33(A4, a_A_3_avg);
+				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_3_avg);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
+				MHD_Riemann_Solvers::MHDSphericalFlux
+				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
+			}
+		}
 		
 		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
 	}

@@ -43,7 +43,8 @@ namespace MHD_Riemann_Solvers {
 	                              const double a_gamma,
 								  const double a_dx,
 	                    		  const double a_dy,
-	                    		  const double a_dz);
+	                    		  const double a_dz,
+								  const int a_order);
 
 	void MHDSphericalFlux(
 					BoxData<double,NUMCOMPS,MEM>& a_flux,                     
