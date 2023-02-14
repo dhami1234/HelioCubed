@@ -258,8 +258,10 @@ namespace MHD_Probe {
         Point index_n2(pt0_nearest,pt1_nearest,pt2_neigbor);
         for (auto dit : state.m_U){
             Box dbx0 = state.m_U[dit].box();
+            if (inputs.Spherical_2nd_order == 0) dbx0 = dbx0.grow(-NGHOST);
             BoxData<double,NUMCOMPS> U_dim(dbx0);
-            state.m_U[dit].copyTo(U_dim);
+            if (inputs.Spherical_2nd_order == 1) state.m_U[dit].copyTo(U_dim);
+            if (inputs.Spherical_2nd_order == 0) MHD_Mapping::JU_to_U_ave_calc_func(U_dim, state.m_U[dit], state.m_r2rdot_avg[dit], state.m_detA_avg[dit]);
             MHDOp::NonDimToDimcalc(U_dim);
             BoxData<double,DIM> x_sph_cc(dbx0);
             MHD_Mapping::get_sph_coords_cc(x_sph_cc,dbx0,a_dx,a_dy,a_dz);
@@ -311,7 +313,7 @@ namespace MHD_Probe {
                 BT = H3_to_RTN_10*Bx + H3_to_RTN_11*By + H3_to_RTN_12*Bz;
                 BN = H3_to_RTN_20*Bx + H3_to_RTN_21*By + H3_to_RTN_22*Bz;
 
-                if (probed_values[0] != 0) {
+                // if (probed_values[0] != 0) {
                     outputFile << setw(16) << setprecision(12) << physical_time
                     << setw(11) << setprecision(4) << r_now/c_AU		
                     << setw(11) << setprecision(4) << 90-latitude_now
@@ -325,7 +327,7 @@ namespace MHD_Probe {
                     << setw(11) << setprecision(4) << BT
                     << setw(11) << setprecision(4) << BN
                     << endl;
-                }
+                // }
             }
         }
 

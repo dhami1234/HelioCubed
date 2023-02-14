@@ -17,6 +17,7 @@
 #include "MHD_Constants.H"
 #include "MHD_CFL.H"
 #include "MHDLevelDataRK4.H"
+#include "MHD_Operator.H"
 
 extern Parsefrominputs inputs;
 
@@ -726,11 +727,11 @@ namespace MHDOp {
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_actual_ave, a_dx, a_dy, a_dz);
 			Vector W_bar = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_ave, a_U_Sph_actual_ave, gamma);
-			Vector U = m_deconvolve(a_U_Sph_ave);
-			Vector U_actual = m_deconvolve(a_U_Sph_actual_ave);
-			Vector W = forall<double,NUMCOMPS>(consToPrimSph, U, U_actual, gamma);
-			Vector W_ave = m_laplacian(W_bar,1.0/24.0);
-			W_ave += W;
+			// Vector U = m_deconvolve(a_U_Sph_ave);
+			// Vector U_actual = m_deconvolve(a_U_Sph_actual_ave);
+			// Vector W = forall<double,NUMCOMPS>(consToPrimSph, U, U_actual, gamma);
+			// Vector W_ave = m_laplacian(W_bar,1.0/24.0);
+			// W_ave += W;
 			
 
 			// Vector W_actual = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_actual_ave, a_U_Sph_actual_ave, gamma);
@@ -740,12 +741,10 @@ namespace MHDOp {
 
 			
 			if (!a_State.m_min_dt_calculated){ 
-				MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx1, a_dx, a_dy, a_dz, gamma);	
+				// MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx1, a_dx, a_dy, a_dz, gamma);	
+				MHD_CFL::Min_dt_calc_func(dt_new, W_bar, dbx1, a_dx, a_dy, a_dz, gamma);	
 				if (dt_new < a_min_dt) a_min_dt = dt_new;
 			}
-
-			BoxData<double,DIM,MEM,DIM> A4(dbx0);
-			BoxData<double,DIM,MEM,DIM> DrDetAA4(dbx0);
 
 			for (int d = 0; d < DIM; d++)
 			{
@@ -753,11 +752,10 @@ namespace MHDOp {
 				Vector W_ave_low(dbx0), W_ave_high(dbx0);
 				Vector W_ave_low_actual(dbx0), W_ave_high_actual(dbx0);
 
-				W_ave_low_temp = m_interp_L[d](W_ave);
-				W_ave_high_temp = m_interp_H[d](W_ave);
+				// W_ave_low_temp = m_interp_L[d](W_ave);
+				// W_ave_high_temp = m_interp_H[d](W_ave);
 				// MHD_Limiters::MHD_Limiters_4O(W_ave_low,W_ave_high,W_ave_low_temp,W_ave_high_temp,W_ave,W_bar,d,a_dx, a_dy, a_dz);		
 				
-				// MHD_Limiters::MHD_Limiters_minmod(W_ave_low,W_ave_high,W_ave,a_State.m_x_sph_cc[dit],a_State.m_dx_sph[dit],d);
 				MHD_Limiters::MHD_Limiters_minmod(W_ave_low,W_ave_high,W_bar,a_State.m_x_sph_cc[dit],a_State.m_dx_sph[dit],d);
 				
 				
@@ -766,12 +764,12 @@ namespace MHDOp {
 				// Vector W_low_boxed(dbx1);
 				// W_ave_low_actual.copyTo(W_low_boxed);
 				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_low_boxed, "W_low_4O_"+to_string(d));
-				F_ave_f.setVal(0.0);
+				// F_ave_f.setVal(0.0);
 				auto bnorm4 = slice(W_ave_low,CBSTART+d)+slice(W_ave_high,CBSTART+d);
 				bnorm4 *= 0.5;
 				double dx_d = dxd[d];
 				MHD_Riemann_Solvers::Spherical_Riemann_Solver(F_ave_f, W_ave_low, W_ave_high, W_ave_low_actual, W_ave_high_actual, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_r2detAn_1_avg[dit], a_State.m_n_1_avg[dit], a_State.m_A_1_avg[dit], a_State.m_A_row_mag_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotd3ncn_2_avg[dit],a_State.m_A_2_avg[dit], a_State.m_A_row_mag_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], a_State.m_rrdotncd2n_3_avg[dit],a_State.m_A_3_avg[dit], a_State.m_A_row_mag_3_avg[dit], d, gamma, a_dx, a_dy, a_dz, 2);	
-				// if (procID() == 1) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, F_ave_f, "F_ave_f_"+to_string(d));
+				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, F_ave_f, "F_ave_f_"+to_string(d));
 				Vector Rhs_d = m_divergence[d](F_ave_f);
 				Rhs_d *= -1./dx_d;
 				a_Rhs[dit] += Rhs_d;
@@ -794,7 +792,7 @@ namespace MHDOp {
 				Vector W_cart = forall<double,NUMCOMPS>(consToPrim,a_U_cart_ave, gamma);
 				Powell_term = forall<double,NUMCOMPS>(Powell,W_cart);
 				a_State.m_divB[dit] = forall<double,NUMCOMPS>(Product,Powell_term,RhsV_divB);
-				// a_State.m_divB[dit] = Operator::_cellTensorProduct(Powell_term,RhsV_divB,Powell_term,RhsV_divB);
+				// a_State.m_divB[dit] = MHD_Operator::_cellTensorProduct(Powell_term,RhsV_divB,Powell_term,RhsV_divB);
 			}
 			// Vector RHSbyJ = forall<double,NUMCOMPS>(Quotient,a_State.m_divB[dit],a_State.m_Jacobian_ave[dit]);
 			// Vector RHSbyJ = forall<double,NUMCOMPS>(Quotient,a_Rhs[dit],a_State.m_Jacobian_ave[dit]);
