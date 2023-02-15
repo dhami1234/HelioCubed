@@ -778,6 +778,9 @@ namespace MHD_Riemann_Solvers {
 	void fastMSspeedcalcF(Var<double,1>& a_fastMSspeed,
 	                 const State& a_W_low,
 	                 const State& a_W_high,
+	                 const Var<double,DIM>& a_A_mag_1,
+	                 const Var<double,DIM>& a_A_mag_2,
+	                 const Var<double,DIM>& a_A_mag_3,
 	                 int a_d,
 	                 double a_gamma)
 	{
@@ -819,7 +822,9 @@ namespace MHD_Riemann_Solvers {
 		B_mag = sqrt(Bx*Bx+By*By+Bz*Bz);
 		af = sqrt(ce*ce + B_mag*B_mag/4.0/c_PI/rho);
 		a_fastMSspeed(0) = af;
-
+		if (a_d == 0) a_fastMSspeed(0) /= a_A_mag_1(0);
+		if (a_d == 1) a_fastMSspeed(0) /= a_A_mag_2(1);
+		if (a_d == 2) a_fastMSspeed(0) /= a_A_mag_3(2);
 	}
 	PROTO_KERNEL_END(fastMSspeedcalcF, fastMSspeedcalc)
 
@@ -1398,7 +1403,7 @@ namespace MHD_Riemann_Solvers {
 		Box dbx0 = a_W_ave_high.box();
 		Vector F_f_low_mapped(dbx0), F_f_high_mapped(dbx0);
 
-		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_d, a_gamma);
+		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_A_row_mag_1_avg, a_A_row_mag_2_avg, a_A_row_mag_3_avg, a_d, a_gamma);
 		
 		if (a_order == 2){
 			F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
