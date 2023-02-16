@@ -7,10 +7,11 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         14000
+-maxStep                         50
 -restartStep                     0
 -outputInterval                  10
--CheckpointInterval              500
+-CheckpointInterval              10
+-MaxCheckpointFiles              3
 -BoxSize                         15
 -grid_type_global                2
 -LowBoundType                    1

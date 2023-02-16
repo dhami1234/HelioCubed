@@ -20,6 +20,7 @@ class Parsefrominputs {
 	int restartStep;
 	int outputInterval;
 	int CheckpointInterval;
+	int MaxCheckpointFiles;
     int BoxSize;
     int grid_type_global; // 0: 2D-Rectangular/3D-Rectangular;  1: 2D-Wavy/3D-Not implemented;  2: 2D-Polar/3D-Spherical
     int LowBoundType;  // 0 for periodic, 1 for Dirichlet, 2 for open. This is for dir==0 only
@@ -99,6 +100,7 @@ class Parsefrominputs {
 		args.add("restartStep",  restartStep);
 		args.add("outputInterval",  outputInterval);
 		args.add("CheckpointInterval",  CheckpointInterval);
+		args.add("MaxCheckpointFiles",  MaxCheckpointFiles);
 		args.add("BoxSize",  BoxSize);
 		args.add("grid_type_global",  grid_type_global);
 		args.add("LowBoundType",  LowBoundType);
@@ -172,6 +174,7 @@ class Parsefrominputs {
 			cout << "restartStep: "    << restartStep << endl;
 			cout << "outputInterval: "    << outputInterval << endl;	
 			cout << "CheckpointInterval: "    << CheckpointInterval << endl;	
+			cout << "MaxCheckpointFiles: "    << MaxCheckpointFiles << endl;	
 			cout << "BoxSize: "    << BoxSize << endl;
 			cout << "grid_type_global: "    << grid_type_global << endl;
 			cout << "LowBoundType: "    << LowBoundType << endl;

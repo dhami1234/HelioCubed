@@ -233,6 +233,9 @@ int main(int argc, char* argv[])
 				if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
 				{
 					MHD_Output_Writer::Write_checkpoint(state, k, time, dt);	
+					std::string filename_to_delete=inputs.Checkpoint_file_Prefix+std::to_string(k-(inputs.CheckpointInterval*inputs.MaxCheckpointFiles))+".hdf5";
+					const char* str = filename_to_delete.c_str();
+					if (procID() == 0) std::remove(str);
 				}
 			}
 			auto end = chrono::steady_clock::now();
