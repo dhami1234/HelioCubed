@@ -721,8 +721,8 @@ namespace MHDOp {
 			Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), a_U_cart_ave(dbx0), a_U_cart_ave_temp(dbx0), Powell_term(dbx0), F_ave_f(dbx0);
 			Scalar RhsV_divB(dbx0), NTB(dbx0);
 			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) RhsV_divB.setVal(0.0);
-			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 2);
-			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_A_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 2);
+			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 2);
+			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_JU_ave[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 2);
 			MHD_Mapping::JU_to_U_ave_calc_func(a_U_cart_ave, a_JU_ave[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit]);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_actual_ave, a_dx, a_dy, a_dz);

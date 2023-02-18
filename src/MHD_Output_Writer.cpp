@@ -34,8 +34,8 @@ namespace MHD_Output_Writer {
 				if (inputs.Spherical_2nd_order == 0){
 					state.m_U[dit].copyTo(new_state2[dit]);
 					MHDOp::NonDimToDimcalc(new_state2[dit]);
-					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], new_state2[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
-					// MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_A_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
+					MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], new_state2[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
+					// MHD_Mapping::JU_to_W_Sph_ave_calc_func(new_state[ dit], state.m_U[ dit], (state.m_detAA_inv_avg)[ dit], (state.m_r2rdot_avg)[ dit], (state.m_detA_avg)[ dit], (state.m_A_row_mag_avg)[ dit], inputs.gamma, true);
 				}
 				if (inputs.Spherical_2nd_order == 1){
 					state.m_U[dit].copyTo(new_state2[dit]);

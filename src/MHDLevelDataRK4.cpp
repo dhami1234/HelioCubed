@@ -49,14 +49,7 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
 	m_X_corners.define(m_dbl,Point::Ones(NGHOST));
 	m_J.define(m_dbl,Point::Ones(NGHOST));
 
-    m_A_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_inv_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_2_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_3_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_inv_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_inv_2_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_inv_3_avg.define(m_dbl,Point::Ones(NGHOST));
+    
     m_detAA_avg.define(m_dbl,Point::Ones(NGHOST));
     m_detAA_inv_avg.define(m_dbl,Point::Ones(NGHOST));
     m_r2rdot_avg.define(m_dbl,Point::Ones(NGHOST));
@@ -65,7 +58,6 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
     m_r2detA_1_avg.define(m_dbl,Point::Ones(NGHOST));
     m_r2detAA_1_avg.define(m_dbl,Point::Ones(NGHOST));
     m_r2detAn_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_n_1_avg.define(m_dbl,Point::Ones(NGHOST));
 	m_A_row_mag_1_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetA_2_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetAA_2_avg.define(m_dbl,Point::Ones(NGHOST));

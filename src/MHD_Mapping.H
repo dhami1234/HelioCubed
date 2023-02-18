@@ -62,14 +62,6 @@ namespace MHD_Mapping {
 	                   const BoxData<double,NUMCOMPS>& a_W);
 
 	void Spherical_map_calc_func(BoxData<double,1>& a_Jacobian_ave,
-								 BoxData<double,DIM*DIM>& a_A_avg,
-								 BoxData<double,DIM*DIM>& a_A_inv_avg,
-	                             BoxData<double,DIM*DIM>& a_A_1_avg,
-	                             BoxData<double,DIM*DIM>& a_A_2_avg,
-	                             BoxData<double,DIM*DIM>& a_A_3_avg,
-								 BoxData<double,DIM*DIM>& a_A_inv_1_avg,
-	                             BoxData<double,DIM*DIM>& a_A_inv_2_avg,
-	                             BoxData<double,DIM*DIM>& a_A_inv_3_avg,
 	                             BoxData<double,DIM*DIM>& a_detAA_avg,
 	                             BoxData<double,DIM*DIM>& a_detAA_inv_avg,
 	                             BoxData<double,1>& a_r2rdot_avg,
@@ -78,7 +70,6 @@ namespace MHD_Mapping {
 	                             BoxData<double,1>& a_r2detA_1_avg,
 	                             BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
 	                             BoxData<double,DIM>& a_r2detAn_1_avg,
-	                             BoxData<double,DIM>& a_n_1_avg,
 								 BoxData<double,DIM>& a_A_row_mag_1_avg,
 	                             BoxData<double,1>& a_rrdotdetA_2_avg,
 	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
@@ -111,7 +102,6 @@ namespace MHD_Mapping {
 	void JU_to_U_Sph_ave_calc_func(BoxData<double,NUMCOMPS>& a_U_Sph_ave,
 	                  const BoxData<double,NUMCOMPS>& a_JU_ave,
 	                  BoxData<double,DIM*DIM>& a_detAA_inv_avg,
-	                  BoxData<double,DIM*DIM>& a_A_inv_avg,
 	                  BoxData<double,1>& a_r2rdot_avg,
 	                  BoxData<double,1>& a_detA_avg,
 	                  BoxData<double,DIM>& a_A_row_mag_avg,
@@ -121,7 +111,6 @@ namespace MHD_Mapping {
 	void JU_to_W_Sph_ave_calc_func(BoxData<double,NUMCOMPS>& a_W_Sph_ave,
 	                  const BoxData<double,NUMCOMPS>& a_JU_ave,
 	                  BoxData<double,DIM*DIM>& a_detAA_inv_avg,
-	                  BoxData<double,DIM*DIM>& a_A_inv_avg,
 	                  BoxData<double,1>& a_r2rdot_avg,
 	                  BoxData<double,1>& a_detA_avg,
 					  BoxData<double,DIM>& a_A_row_mag_avg,
@@ -131,7 +120,6 @@ namespace MHD_Mapping {
 	void JU_to_W_Sph_ave_calc_func2(BoxData<double,NUMCOMPS>& a_W_Sph_ave,
 	                  const BoxData<double,NUMCOMPS>& a_JU_ave,
 	                  BoxData<double,DIM*DIM>& a_detAA_inv_avg,
-	                  BoxData<double,DIM*DIM>& a_A_inv_avg,
 	                  BoxData<double,1>& a_r2rdot_avg,
 	                  BoxData<double,1>& a_detA_avg,
 					  BoxData<double,DIM>& a_A_row_mag_avg,
@@ -141,7 +129,6 @@ namespace MHD_Mapping {
     void U_Sph_ave_to_JU_calc_func(BoxData<double,NUMCOMPS>& a_JU_ave,
 	                  const BoxData<double,NUMCOMPS>& a_U_Sph4_ave,
 	                  BoxData<double,DIM*DIM>& a_detAA_avg,
-	                  BoxData<double,DIM*DIM>& a_A_avg,
 	                  BoxData<double,DIM*DIM>& a_detAA_inv_avg,
 	                  BoxData<double,1>& a_r2rdot_avg,
 	                  BoxData<double,1>& a_detA_avg,
@@ -152,14 +139,7 @@ namespace MHD_Mapping {
 	void JU_to_U_ave_calc_func(BoxData<double,NUMCOMPS>& a_U_ave,
 	                  const BoxData<double,NUMCOMPS>& a_JU_ave,
 	                  BoxData<double,1>& a_r2rdot_avg,
-	                  BoxData<double,1>& a_detA_avg);		
-
-	void W_Sph_to_W_Cart(BoxData<double,NUMCOMPS>& W_cart,
-	                    const BoxData<double,NUMCOMPS>& W,
-						BoxData<double,DIM*DIM>& a_A_1_avg,
-						BoxData<double,DIM*DIM>& a_A_2_avg,
-						BoxData<double,DIM*DIM>& a_A_3_avg,
-	                    int a_d);		
+	                  BoxData<double,1>& a_detA_avg);			
 
 	void W_Sph_to_W_normalized_sph(BoxData<double,NUMCOMPS>& W_normalized_sph,
 	                    const BoxData<double,NUMCOMPS>& W_Sph,
