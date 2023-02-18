@@ -150,12 +150,8 @@ class Parsefrominputs {
 		args.add("density_scale",  density_scale);
 		args.add("velocity_scale",  velocity_scale);
 		args.parse(argc,argv);
-		// BC_file = removeSpaces(BC_file);
-		// Data_file_Prefix = removeSpaces(Data_file_Prefix);
-		// Checkpoint_file_Prefix = removeSpaces(Checkpoint_file_Prefix);
-		// Probe_trajectory_file = removeSpaces(Probe_trajectory_file);
-		// Probe_data_file = removeSpaces(Probe_data_file);
-		// args.print();
+		// args.print(); //It prints, but not in the order I want.
+
 		int pid = procID();
 
 		if (pid == 0){

@@ -7,6 +7,7 @@
 #include "MHD_Output_Writer.H"
 #include "MHD_Constants.H"
 #include "MHD_Mapping.H"
+#include "MHD_Operator.H"
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 
@@ -999,7 +1000,10 @@ namespace MHD_Riemann_Solvers {
 	                             int a_d,
 	                             double a_gamma)
 	{
-		double rho, p0, e, v2, B2, vB;
+		double rho, p0, e, v2, B2, vB, v_d, b_d;
+		double DrDetAA[DIM*DIM];
+		double DrDetA;
+		double DrAdjA[DIM];
 		double gamma = a_gamma;
 		rho = a_W(0);
 		v2 = a_W_actual(1)*a_W_actual(1) + a_W_actual(2)*a_W_actual(2) + a_W_actual(3)*a_W_actual(3);
@@ -1007,85 +1011,49 @@ namespace MHD_Riemann_Solvers {
 		vB = a_W_actual(1)*a_W_actual(5) + a_W_actual(2)*a_W_actual(6) + a_W_actual(3)*a_W_actual(7);
 		p0 = a_W(4) + B2/8.0/c_PI;
 		e  = a_W(4)/(gamma-1.0) + rho*v2/2.0 + B2/8.0/c_PI;
-
-		if (a_d == 0) {  //r
-			a_F(0) = a_r2detA_1_avg(0)*rho*a_W(1);
-
-			a_F(1) = a_r2detAA_1_avg(0)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(1)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(2)*rho*a_W(1)*a_W(3);
-			a_F(2) = a_r2detAA_1_avg(3)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(4)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(5)*rho*a_W(1)*a_W(3);
-			a_F(3) = a_r2detAA_1_avg(6)*rho*a_W(1)*a_W(1) + a_r2detAA_1_avg(7)*rho*a_W(1)*a_W(2) + a_r2detAA_1_avg(8)*rho*a_W(1)*a_W(3);
-				
-			a_F(1) += a_r2detAn_1_avg(0)*p0;
-			a_F(2) += a_r2detAn_1_avg(1)*p0;
-			a_F(3) += a_r2detAn_1_avg(2)*p0;
-
-			a_F(1) -= a_r2detAA_1_avg(0)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(1)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(2)*(1/4.0/c_PI)*a_W(5)*a_W(7);
-			a_F(2) -= a_r2detAA_1_avg(3)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(4)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(5)*(1/4.0/c_PI)*a_W(5)*a_W(7);
-			a_F(3) -= a_r2detAA_1_avg(6)*(1/4.0/c_PI)*a_W(5)*a_W(5) + a_r2detAA_1_avg(7)*(1/4.0/c_PI)*a_W(5)*a_W(6) + a_r2detAA_1_avg(8)*(1/4.0/c_PI)*a_W(5)*a_W(7);
-
-			a_F(4) = a_r2detA_1_avg(0)*(e+p0)*a_W(1);
-			a_F(4) -= a_r2detA_1_avg(0)*(1/4.0/c_PI)*(vB)*a_W(5);
-
-			a_F(5) = a_r2detAA_1_avg(0)*a_W(1)*a_W(5) + a_r2detAA_1_avg(1)*a_W(1)*a_W(6) + a_r2detAA_1_avg(2)*a_W(1)*a_W(7);
-			a_F(6) = a_r2detAA_1_avg(3)*a_W(1)*a_W(5) + a_r2detAA_1_avg(4)*a_W(1)*a_W(6) + a_r2detAA_1_avg(5)*a_W(1)*a_W(7);
-			a_F(7) = a_r2detAA_1_avg(6)*a_W(1)*a_W(5) + a_r2detAA_1_avg(7)*a_W(1)*a_W(6) + a_r2detAA_1_avg(8)*a_W(1)*a_W(7);
-			a_F(5) -= a_r2detAA_1_avg(0)*a_W(5)*a_W(1) + a_r2detAA_1_avg(1)*a_W(5)*a_W(2) + a_r2detAA_1_avg(2)*a_W(5)*a_W(3);
-			a_F(6) -= a_r2detAA_1_avg(3)*a_W(5)*a_W(1) + a_r2detAA_1_avg(4)*a_W(5)*a_W(2) + a_r2detAA_1_avg(5)*a_W(5)*a_W(3);
-			a_F(7) -= a_r2detAA_1_avg(6)*a_W(5)*a_W(1) + a_r2detAA_1_avg(7)*a_W(5)*a_W(2) + a_r2detAA_1_avg(8)*a_W(5)*a_W(3);
-
+		v_d = a_W(1+a_d);
+		b_d = a_W(5+a_d);
+		for (int i=0;i<DIM*DIM;i++)
+		{
+			if (a_d == 0) DrDetAA[i] = a_r2detAA_1_avg(i);
+			if (a_d == 1) DrDetAA[i] = a_rrdotdetAA_2_avg(i);
+			if (a_d == 2) DrDetAA[i] = a_rrdotdetAA_3_avg(i);
 		}
-
-		if (a_d == 1) {  // theta
-			a_F(0) = a_rrdotdetA_2_avg(0)*rho*a_W(2);
-
-			a_F(1) = a_rrdotdetAA_2_avg(0)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(1)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(2)*rho*a_W(2)*a_W(3);
-			a_F(2) = a_rrdotdetAA_2_avg(3)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(4)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(5)*rho*a_W(2)*a_W(3);
-			a_F(3) = a_rrdotdetAA_2_avg(6)*rho*a_W(2)*a_W(1) + a_rrdotdetAA_2_avg(7)*rho*a_W(2)*a_W(2) + a_rrdotdetAA_2_avg(8)*rho*a_W(2)*a_W(3);
-			
-			a_F(1) += a_rrdotd3ncn_2_avg(0)*p0;
-			a_F(2) += a_rrdotd3ncn_2_avg(1)*p0;
-			a_F(3) += a_rrdotd3ncn_2_avg(2)*p0;
-
-			a_F(1) -= a_rrdotdetAA_2_avg(0)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(1)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(2)*(1/4.0/c_PI)*a_W(6)*a_W(7);
-			a_F(2) -= a_rrdotdetAA_2_avg(3)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(4)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(5)*(1/4.0/c_PI)*a_W(6)*a_W(7);
-			a_F(3) -= a_rrdotdetAA_2_avg(6)*(1/4.0/c_PI)*a_W(6)*a_W(5) + a_rrdotdetAA_2_avg(7)*(1/4.0/c_PI)*a_W(6)*a_W(6) + a_rrdotdetAA_2_avg(8)*(1/4.0/c_PI)*a_W(6)*a_W(7);
-
-			a_F(4) = a_rrdotdetA_2_avg(0)*(e+p0)*a_W(2);
-			a_F(4) -= a_rrdotdetA_2_avg(0)*(1/4.0/c_PI)*(vB)*a_W(6);
-
-			a_F(5)  = a_rrdotdetAA_2_avg(0)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(1)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(2)*a_W(2)*a_W(7);
-			a_F(6)  = a_rrdotdetAA_2_avg(3)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(4)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(5)*a_W(2)*a_W(7);
-			a_F(7)  = a_rrdotdetAA_2_avg(6)*a_W(2)*a_W(5) + a_rrdotdetAA_2_avg(7)*a_W(2)*a_W(6) + a_rrdotdetAA_2_avg(8)*a_W(2)*a_W(7);
-			a_F(5) -= a_rrdotdetAA_2_avg(0)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(1)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(2)*a_W(6)*a_W(3);
-			a_F(6) -= a_rrdotdetAA_2_avg(3)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(4)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(5)*a_W(6)*a_W(3);
-			a_F(7) -= a_rrdotdetAA_2_avg(6)*a_W(6)*a_W(1) + a_rrdotdetAA_2_avg(7)*a_W(6)*a_W(2) + a_rrdotdetAA_2_avg(8)*a_W(6)*a_W(3);
+		for (int i=0;i<DIM;i++)
+		{
+			if (a_d == 0) DrAdjA[i] = a_r2detAn_1_avg(i);
+			if (a_d == 1) DrAdjA[i] = a_rrdotd3ncn_2_avg(i);
+			if (a_d == 2) DrAdjA[i] = a_rrdotncd2n_3_avg(i);
 		}
+		if (a_d == 0) DrDetA = a_r2detA_1_avg(0);
+		if (a_d == 1) DrDetA = a_rrdotdetA_2_avg(0);
+		if (a_d == 2) DrDetA = a_rrdotdetA_3_avg(0);
 
-		if (a_d == 2) {  // phi
-			a_F(0) = a_rrdotdetA_3_avg(0)*rho*a_W(3);
+	
+		a_F(0) = DrDetA*rho*v_d;
+	
+		a_F(1) = rho*v_d*(DrDetAA[0]*a_W(1) + DrDetAA[1]*a_W(2) + DrDetAA[2]*a_W(3));
+		a_F(2) = rho*v_d*(DrDetAA[3]*a_W(1) + DrDetAA[4]*a_W(2) + DrDetAA[5]*a_W(3));
+		a_F(3) = rho*v_d*(DrDetAA[6]*a_W(1) + DrDetAA[7]*a_W(2) + DrDetAA[8]*a_W(3));
 
-			a_F(1) = a_rrdotdetAA_3_avg(0)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(1)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(2)*rho*a_W(3)*a_W(3);
-			a_F(2) = a_rrdotdetAA_3_avg(3)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(4)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(5)*rho*a_W(3)*a_W(3);
-			a_F(3) = a_rrdotdetAA_3_avg(6)*rho*a_W(3)*a_W(1) + a_rrdotdetAA_3_avg(7)*rho*a_W(3)*a_W(2) + a_rrdotdetAA_3_avg(8)*rho*a_W(3)*a_W(3);
-			
-			a_F(1) += a_rrdotncd2n_3_avg(0)*p0;
-			a_F(2) += a_rrdotncd2n_3_avg(1)*p0;
-			a_F(3) += a_rrdotncd2n_3_avg(2)*p0;
+		a_F(1) += DrAdjA[0]*p0;
+		a_F(2) += DrAdjA[1]*p0;
+		a_F(3) += DrAdjA[2]*p0;
 
-			a_F(1) -= a_rrdotdetAA_3_avg(0)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(1)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(2)*(1/4.0/c_PI)*a_W(7)*a_W(7);
-			a_F(2) -= a_rrdotdetAA_3_avg(3)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(4)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(5)*(1/4.0/c_PI)*a_W(7)*a_W(7);
-			a_F(3) -= a_rrdotdetAA_3_avg(6)*(1/4.0/c_PI)*a_W(7)*a_W(5) + a_rrdotdetAA_3_avg(7)*(1/4.0/c_PI)*a_W(7)*a_W(6) + a_rrdotdetAA_3_avg(8)*(1/4.0/c_PI)*a_W(7)*a_W(7);
+		a_F(1) -= (1/4.0/c_PI)*b_d*(DrDetAA[0]*a_W(5) + DrDetAA[1]*a_W(6) + DrDetAA[2]*a_W(7));
+		a_F(2) -= (1/4.0/c_PI)*b_d*(DrDetAA[3]*a_W(5) + DrDetAA[4]*a_W(6) + DrDetAA[5]*a_W(7));
+		a_F(3) -= (1/4.0/c_PI)*b_d*(DrDetAA[6]*a_W(5) + DrDetAA[7]*a_W(6) + DrDetAA[8]*a_W(7));
 
-			a_F(4) = a_rrdotdetA_3_avg(0)*(e+p0)*a_W(3);
-			a_F(4) -= a_rrdotdetA_3_avg(0)*(1/4.0/c_PI)*(vB)*a_W(7);
+		a_F(4) = DrDetA*(e+p0)*v_d;
+		a_F(4) -= DrDetA*(1/4.0/c_PI)*(vB)*b_d;
 
-			a_F(5)  = a_rrdotdetAA_3_avg(0)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(1)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(2)*a_W(3)*a_W(7);
-			a_F(6)  = a_rrdotdetAA_3_avg(3)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(4)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(5)*a_W(3)*a_W(7);
-			a_F(7)  = a_rrdotdetAA_3_avg(6)*a_W(3)*a_W(5) + a_rrdotdetAA_3_avg(7)*a_W(3)*a_W(6) + a_rrdotdetAA_3_avg(8)*a_W(3)*a_W(7);
-			a_F(5) -= a_rrdotdetAA_3_avg(0)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(1)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(2)*a_W(7)*a_W(3);
-			a_F(6) -= a_rrdotdetAA_3_avg(3)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(4)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(5)*a_W(7)*a_W(3);
-			a_F(7) -= a_rrdotdetAA_3_avg(6)*a_W(7)*a_W(1) + a_rrdotdetAA_3_avg(7)*a_W(7)*a_W(2) + a_rrdotdetAA_3_avg(8)*a_W(7)*a_W(3);
-		}
+		a_F(5) =  v_d*(DrDetAA[0]*a_W(5) + DrDetAA[1]*a_W(6) + DrDetAA[2]*a_W(7));
+		a_F(6) =  v_d*(DrDetAA[3]*a_W(5) + DrDetAA[4]*a_W(6) + DrDetAA[5]*a_W(7));
+		a_F(7) =  v_d*(DrDetAA[6]*a_W(5) + DrDetAA[7]*a_W(6) + DrDetAA[8]*a_W(7));
+		a_F(5) -= b_d*(DrDetAA[0]*a_W(1) + DrDetAA[1]*a_W(2) + DrDetAA[2]*a_W(3));
+		a_F(6) -= b_d*(DrDetAA[3]*a_W(1) + DrDetAA[4]*a_W(2) + DrDetAA[5]*a_W(3));
+		a_F(7) -= b_d*(DrDetAA[6]*a_W(1) + DrDetAA[7]*a_W(2) + DrDetAA[8]*a_W(3));
+
 	}
 	PROTO_KERNEL_END(Get_mapped_flux_calcF, Get_mapped_flux_calc)
 
@@ -1160,7 +1128,7 @@ namespace MHD_Riemann_Solvers {
 		BoxData<double,DIM,MEM> fluxbu = Operator::_faceTensorProduct(Uface_temp4,bnorm4,Uface_temp2,bnorm2,a_dir);
 
 		BoxData<double,DIM,MEM> fluxbb = Operator::_faceTensorProduct(Bface_temp4,bnorm4,Bface_temp2,bnorm2,a_dir);
-		fluxbb *= 1.0/(4*M_PI);
+		fluxbb *= (-1.0/(4*M_PI));
 
 		// Energy as a function of the primitive (Cartesian) variables.
 		// auto Beng4 = Operator::_faceMatrixProductATB(Bface4,Bface4,Bface2,Bface2,a_dir);
@@ -1205,8 +1173,13 @@ namespace MHD_Riemann_Solvers {
 		auto fluxThermBAdv = Operator::_faceProduct(Vu4,thermBEng4,Vu2,thermBEng2,a_dir);
 		
 		// Non-gradient magnetic field contribution to the energy flux.
-		BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(Uface4,Bface4,Uface2,Bface2,a_dir);
-		BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(Uface2,Bface2);
+		// BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(Uface4,Bface4,Uface2,Bface2,a_dir);
+		// BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(Uface2,Bface2);
+
+		BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(w_actual4,b_actual4,w_actual2,b_actual2,a_dir);
+		BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(w_actual2,b_actual2);
+
+
 		auto fluxBEng = Operator::_faceProduct(Vb4,UDotB4,Vb2,UDotB2,a_dir);
 		fluxBEng *= (-1.0/(4.0*M_PI));
 
@@ -1239,6 +1212,113 @@ namespace MHD_Riemann_Solvers {
 		
 	}
 
+
+
+	void MHDSphericalFlux_2O(
+					BoxData<double,NUMCOMPS,MEM>& a_flux,                     
+					const BoxData<double,NUMCOMPS,MEM>& a_prim4,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim2,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual4,
+					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual2,
+					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA4,
+					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA2,
+					const BoxData<double,DIM,MEM,DIM>& a_A4,
+					const BoxData<double,DIM,MEM,DIM>& a_A2,
+					const BoxData<double,1,MEM>& a_DrDetA4,                    
+					const BoxData<double,1,MEM>& a_DrDetA2,
+					const BoxData<double,DIM,MEM>& a_DrAdjA4,                    
+					const BoxData<double,DIM,MEM>& a_DrAdjA2,
+					const double& a_gamma,
+					int a_dir)
+	{
+
+		auto wnorm2 = slice(a_prim2,CVELSTART+a_dir);
+		auto bnorm2 = slice(a_prim2,CBSTART+a_dir);
+		// Volumetric flow rates V_u,V_b.
+		auto Vu2 = a_DrDetA2*wnorm2; // Placeholder for forall.
+		auto Vb2 = a_DrDetA2*bnorm2; // Placeholder for forall.
+
+		// Advective fluxes of density, energy.
+		auto rho2 = slice(a_prim2,CRHO);
+		auto fluxRho2 = Operator::_matrixProductAB2(Vu2,rho2);
+		auto p2 = slice(a_prim2,CPRES);
+
+		// B, velocities vectors.
+		auto w2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CVELSTART);
+		auto b2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CBSTART);
+
+		// Fluxes for velocity, magnetic fields with Talwinder's method.
+		auto wdrho2 = wnorm2*rho2; // Placeholder for forall.
+		BoxData<double,DIM,MEM> Uface_temp2 = Operator::_matrixProductAB2(a_DrDetAA2,w2);
+		BoxData<double,DIM,MEM> fluxuu = Operator::_matrixProductAB2(Uface_temp2,wdrho2);
+
+		BoxData<double,DIM,MEM> Bface_temp2 = Operator::_matrixProductAB2(a_DrDetAA2,b2);
+		BoxData<double,DIM,MEM> fluxub = Operator::_matrixProductAB2(Bface_temp2,wnorm2);
+
+		BoxData<double,DIM,MEM> fluxbu = Operator::_matrixProductAB2(Uface_temp2,bnorm2);
+
+		BoxData<double,DIM,MEM> fluxbb = Operator::_matrixProductAB2(Bface_temp2,bnorm2);
+		fluxbb *= (-1.0/(4*M_PI));
+
+		//Talwinder's definition of magnetic and kinetic energy
+		auto b_actual2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual2,CBSTART);
+		auto Beng2 = Operator::_matrixProductATB2(b_actual2,b_actual2);  
+		Beng2 *= 1.0/(8.0*M_PI);
+
+		auto w_actual2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual2,CVELSTART);
+		auto Ueng2 = Operator::_matrixProductATB2(w_actual2,w_actual2);
+		Ueng2 *= .5;
+		
+		// Kinetic energy advective contribution.
+		auto fluxUEng = fluxRho2*Ueng2;
+
+		// pzero = sum of thermal and magnetic pressures.
+		auto pzero2 = p2 + Beng2;
+
+		// Advective + p d(1/rho) work contribution to the energy flux.
+		p2 *= 1./(a_gamma - 1.0);
+		auto thermBEng2 = Beng2 + p2 + pzero2;
+		
+		// auto fluxThermBAdv = Operator::_faceProduct(Vu4,thermBEng4,Vu2,thermBEng2,a_dir);
+		auto fluxThermBAdv = Vu2*thermBEng2;
+
+		// Non-gradient magnetic field contribution to the energy flux.
+		BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(w_actual2,b_actual2);
+
+
+		auto fluxBEng = Vb2*UDotB2;
+		fluxBEng *= (-1.0/(4.0*M_PI));
+
+		// Pressure forces on the fluid.
+		auto pForce = Operator::_matrixProductAB2(a_DrAdjA2,pzero2);
+
+
+		// Assemble into flux vector.
+		a_flux = forall<double,NUMCOMPS,MEM,1>
+			([ ] PROTO_LAMBDA(
+							Var<double,NUMCOMPS,MEM,1>& a_retval,
+							Var<double,1,MEM>& a_fluxRho,
+							Var<double,DIM,MEM>& a_fluxuu,
+							Var<double,DIM,MEM>& a_fluxub,
+							Var<double,DIM,MEM>& a_fluxbu,
+							Var<double,DIM,MEM>& a_fluxbb,
+							Var<double,1,MEM>& a_fluxThermBAdv,
+							Var<double,1,MEM>& a_fluxUEng,
+							Var<double,1,MEM>& a_fluxBEng,
+							Var<double,DIM,MEM>& a_pforce)
+			{
+			a_retval(0) = a_fluxRho(0);
+			for (int dir = 0; dir < DIM; dir++)
+				{
+				a_retval(CVELSTART+dir) = a_fluxuu(dir) + a_pforce(dir) + a_fluxbb(dir);
+				a_retval(CBSTART+dir) = a_fluxub(dir) - a_fluxbu(dir);
+				}
+			a_retval(CENG) = a_fluxThermBAdv(0) + a_fluxUEng(0) + a_fluxBEng(0);
+			},
+			fluxRho2,fluxuu,fluxub,fluxbu,fluxbb,fluxThermBAdv,fluxUEng,fluxBEng,pForce);
+		
+	}
+
 	PROTO_KERNEL_START
 	void Spherical_Riemann_SolverStateF(const Point& a_pt,
 										State& a_F_ave_f,
@@ -1266,7 +1346,6 @@ namespace MHD_Riemann_Solvers {
 	                    		  		const double a_dz)
 	{
 		double rho_lo, rho_hi, rhou_lo, rhou_hi, rhov_lo, rhov_hi, rhow_lo, rhow_hi, p_lo, p_hi, v2_lo, v2_hi, e_lo, e_hi, Bx_lo, Bx_hi,  By_lo, By_hi,  Bz_lo, Bz_hi, b2_lo, b2_hi;    
-		bool add_Rusanov_flux = true;
 		double Rusanov_flux_rho, Rusanov_flux_u, Rusanov_flux_v, Rusanov_flux_w, Rusanov_flux_e, Rusanov_flux_Bx, Rusanov_flux_By, Rusanov_flux_Bz;
 		rho_lo  = a_W_low(0);
 		rho_hi  = a_W_high(0);
@@ -1293,54 +1372,28 @@ namespace MHD_Riemann_Solvers {
 		e_lo    = p_lo/(a_gamma-1.0) + rho_lo*v2_lo/2.0 + b2_lo/8.0/M_PI;
 		e_hi    = p_hi/(a_gamma-1.0) + rho_hi*v2_hi/2.0 + b2_hi/8.0/M_PI;
 		
+		double DrDetAA[DIM*DIM];
+		double DrDetA;
+		for (int i=0;i<DIM*DIM;i++)
+		{
+			if (a_d == 0) DrDetAA[i] = a_r2detAA_1_avg(i);
+			if (a_d == 1) DrDetAA[i] = a_rrdotdetAA_2_avg(i);
+			if (a_d == 2) DrDetAA[i] = a_rrdotdetAA_3_avg(i);
+		}
+		if (a_d == 0) DrDetA = a_r2detA_1_avg(0);
+		if (a_d == 1) DrDetA = a_rrdotdetA_2_avg(0);
+		if (a_d == 2) DrDetA = a_rrdotdetA_3_avg(0);
 		
-		if (a_d == 0) {  //r
-		    double w_d = 0.5*abs(a_W_low_actual(1)+a_W_high_actual(1)) + a_af(0);
-			Rusanov_flux_rho = (a_r2detA_1_avg(0)*w_d)*(rho_hi-rho_lo);
-			Rusanov_flux_u = a_r2detAA_1_avg(0)*w_d*(rhou_hi-rhou_lo) + a_r2detAA_1_avg(1)*w_d*(rhov_hi-rhov_lo) + a_r2detAA_1_avg(2)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_v = a_r2detAA_1_avg(3)*w_d*(rhou_hi-rhou_lo) + a_r2detAA_1_avg(4)*w_d*(rhov_hi-rhov_lo) + a_r2detAA_1_avg(5)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_w = a_r2detAA_1_avg(6)*w_d*(rhou_hi-rhou_lo) + a_r2detAA_1_avg(7)*w_d*(rhov_hi-rhov_lo) + a_r2detAA_1_avg(8)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_e = (a_r2detA_1_avg(0)*w_d)*(e_hi-e_lo);	
-			Rusanov_flux_Bx = a_r2detAA_1_avg(0)*w_d*(Bx_hi-Bx_lo) + a_r2detAA_1_avg(1)*w_d*(By_hi-By_lo) + a_r2detAA_1_avg(2)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_By = a_r2detAA_1_avg(3)*w_d*(Bx_hi-Bx_lo) + a_r2detAA_1_avg(4)*w_d*(By_hi-By_lo) + a_r2detAA_1_avg(5)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_Bz = a_r2detAA_1_avg(6)*w_d*(Bx_hi-Bx_lo) + a_r2detAA_1_avg(7)*w_d*(By_hi-By_lo) + a_r2detAA_1_avg(8)*w_d*(Bz_hi-Bz_lo);
-		}
-
-		if (a_d == 1) {  // theta
-		    
-			double w_d = 0.5*abs(a_W_low_actual(2)+a_W_high_actual(2)) + a_af(0);
-			Rusanov_flux_rho = (a_rrdotdetA_2_avg(0)*w_d)*(rho_hi-rho_lo);
-			Rusanov_flux_u = a_rrdotdetAA_2_avg(0)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_2_avg(1)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_2_avg(2)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_v = a_rrdotdetAA_2_avg(3)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_2_avg(4)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_2_avg(5)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_w = a_rrdotdetAA_2_avg(6)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_2_avg(7)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_2_avg(8)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_e = (a_rrdotdetA_2_avg(0)*w_d)*(e_hi-e_lo);
-			Rusanov_flux_Bx = a_rrdotdetAA_2_avg(0)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_2_avg(1)*w_d*(By_hi-By_lo) + a_rrdotdetAA_2_avg(2)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_By = a_rrdotdetAA_2_avg(3)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_2_avg(4)*w_d*(By_hi-By_lo) + a_rrdotdetAA_2_avg(5)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_Bz = a_rrdotdetAA_2_avg(6)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_2_avg(7)*w_d*(By_hi-By_lo) + a_rrdotdetAA_2_avg(8)*w_d*(Bz_hi-Bz_lo);
-		}
-
-		if (a_d == 2) {  // phi
-		    double w_d = 0.5*abs(a_W_low_actual(3)+a_W_high_actual(3)) + a_af(0);
-			Rusanov_flux_rho = (a_rrdotdetA_3_avg(0)*w_d)*(rho_hi-rho_lo);
-			Rusanov_flux_u = a_rrdotdetAA_3_avg(0)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_3_avg(1)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_3_avg(2)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_v = a_rrdotdetAA_3_avg(3)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_3_avg(4)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_3_avg(5)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_w = a_rrdotdetAA_3_avg(6)*w_d*(rhou_hi-rhou_lo) + a_rrdotdetAA_3_avg(7)*w_d*(rhov_hi-rhov_lo) + a_rrdotdetAA_3_avg(8)*w_d*(rhow_hi-rhow_lo);
-			Rusanov_flux_e = (a_rrdotdetA_3_avg(0)*w_d)*(e_hi-e_lo);			
-			Rusanov_flux_Bx = a_rrdotdetAA_3_avg(0)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_3_avg(1)*w_d*(By_hi-By_lo) + a_rrdotdetAA_3_avg(2)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_By = a_rrdotdetAA_3_avg(3)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_3_avg(4)*w_d*(By_hi-By_lo) + a_rrdotdetAA_3_avg(5)*w_d*(Bz_hi-Bz_lo);
-			Rusanov_flux_Bz = a_rrdotdetAA_3_avg(6)*w_d*(Bx_hi-Bx_lo) + a_rrdotdetAA_3_avg(7)*w_d*(By_hi-By_lo) + a_rrdotdetAA_3_avg(8)*w_d*(Bz_hi-Bz_lo);
-		}
-
-		if (!add_Rusanov_flux){
-				Rusanov_flux_rho = 0;
-				Rusanov_flux_u = 0;
-				Rusanov_flux_v = 0;
-				Rusanov_flux_w = 0;
-				Rusanov_flux_e = 0;
-				Rusanov_flux_Bx = 0;
-				Rusanov_flux_By = 0;
-				Rusanov_flux_Bz = 0;
-		}
+		
+		double w_d = 0.5*abs(a_W_low_actual(1+a_d)+a_W_high_actual(1+a_d)) + a_af(0);
+		Rusanov_flux_rho = (DrDetA*w_d)*(rho_hi-rho_lo);
+		Rusanov_flux_u = DrDetAA[0]*w_d*(rhou_hi-rhou_lo) + DrDetAA[1]*w_d*(rhov_hi-rhov_lo) + DrDetAA[2]*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_v = DrDetAA[3]*w_d*(rhou_hi-rhou_lo) + DrDetAA[4]*w_d*(rhov_hi-rhov_lo) + DrDetAA[5]*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_w = DrDetAA[6]*w_d*(rhou_hi-rhou_lo) + DrDetAA[7]*w_d*(rhov_hi-rhov_lo) + DrDetAA[8]*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_e = (DrDetA*w_d)*(e_hi-e_lo);	
+		Rusanov_flux_Bx = DrDetAA[0]*w_d*(Bx_hi-Bx_lo) + DrDetAA[1]*w_d*(By_hi-By_lo) + DrDetAA[2]*w_d*(Bz_hi-Bz_lo);
+		Rusanov_flux_By = DrDetAA[3]*w_d*(Bx_hi-Bx_lo) + DrDetAA[4]*w_d*(By_hi-By_lo) + DrDetAA[5]*w_d*(Bz_hi-Bz_lo);
+		Rusanov_flux_Bz = DrDetAA[6]*w_d*(Bx_hi-Bx_lo) + DrDetAA[7]*w_d*(By_hi-By_lo) + DrDetAA[8]*w_d*(Bz_hi-Bz_lo);
 
 		a_F_ave_f(0) = 0.5*(a_F_lo_map(0) + a_F_hi_map(0) - Rusanov_flux_rho);
 		a_F_ave_f(1) = 0.5*(a_F_lo_map(1) + a_F_hi_map(1) - Rusanov_flux_u);
@@ -1417,27 +1470,27 @@ namespace MHD_Riemann_Solvers {
 			if (a_d==0) {
 				MHD_Mapping::Nineto33(A4, a_A_1_avg);
 				MHD_Mapping::Nineto33(DrDetAA4, a_r2detAA_1_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
 			}
 
 			if (a_d==1) {
 				MHD_Mapping::Nineto33(A4, a_A_2_avg);
 				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_2_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
 			}
 
 			if (a_d==2) {
 				MHD_Mapping::Nineto33(A4, a_A_3_avg);
 				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_3_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux
+				MHD_Riemann_Solvers::MHDSphericalFlux_2O
 				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
 			}
 		}

@@ -1,5 +1,5 @@
 -tstop                           360861.49
--CFL                             0.15
+-CFL                             0.6
 -domsizex                        1.0
 -domsizey                        1.0
 -domsizez                        1.0
@@ -7,7 +7,7 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         50
+-maxStep                         50000
 -restartStep                     0
 -outputInterval                  10
 -CheckpointInterval              10
@@ -38,8 +38,8 @@
 -BC_cadence                      24.0
 -probe_cadence                   3600
 -BC_file                         BC/Fixeddtheta/POT3D360x180_2020020222_fixeddtheta.hdf5
--Data_file_Prefix                Data_
--Checkpoint_file_Prefix          Checkpoint_
+-Data_file_Prefix                Data2_
+-Checkpoint_file_Prefix          Checkpoint2_
 -Probe_trajectory_file           Probe/trajEarth2020.dat
 -Probe_data_file                 Probe/probed_data.dat 
 -CME_Enter_Time                  202000.106

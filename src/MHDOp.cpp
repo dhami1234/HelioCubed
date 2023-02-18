@@ -727,22 +727,18 @@ namespace MHDOp {
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
 			MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_actual_ave, a_dx, a_dy, a_dz);
 			Vector W_bar = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_ave, a_U_Sph_actual_ave, gamma);
+			Vector W_bar_actual = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_actual_ave, a_U_Sph_actual_ave, gamma);
 			// Vector U = m_deconvolve(a_U_Sph_ave);
 			// Vector U_actual = m_deconvolve(a_U_Sph_actual_ave);
 			// Vector W = forall<double,NUMCOMPS>(consToPrimSph, U, U_actual, gamma);
 			// Vector W_ave = m_laplacian(W_bar,1.0/24.0);
 			// W_ave += W;
-			
-
 			// Vector W_actual = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_actual_ave, a_U_Sph_actual_ave, gamma);
-			// Vector W_boxed(dbx1);
-			// W_actual.copyTo(W_boxed);
-			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_boxed, "W_4");
 
 			
 			if (!a_State.m_min_dt_calculated){ 
-				// MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx1, a_dx, a_dy, a_dz, gamma);	
-				MHD_CFL::Min_dt_calc_func(dt_new, W_bar, dbx1, a_dx, a_dy, a_dz, gamma);	
+				// MHD_CFL::Min_dt_calc_func(dt_new, W_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
+				MHD_CFL::Min_dt_calc_func(dt_new, W_bar_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
 				if (dt_new < a_min_dt) a_min_dt = dt_new;
 			}
 

@@ -46,4 +46,22 @@ namespace MHD_Operator {
                 }
         return quot;
     }
+    template<class T, unsigned int C, unsigned char D, unsigned char E, MemType MEM>
+    BoxData<T,C,MEM,D,E>
+    _faceTensorProduct2(const BoxData<T,C,MEM,D,E>& a_ql2,
+                        const BoxData<T,1,MEM,1,1>& a_qr2)
+    {
+    Box bx = a_ql2.box()&a_qr2.box();
+
+    BoxData<T,C,MEM,D,E> quot(bx);
+    for (int ee = 0; ee < E;ee++)
+        for (int dd = 0; dd < D; dd++)
+        for (int cc = 0; cc < C; cc++)
+            {
+            auto quotcomp = slice(quot,cc,dd,ee);
+            auto ql2comp = slice(a_ql2,cc,dd,ee);
+            quotcomp=ql2comp*a_qr2;;
+            }
+    return quot;
+    }
 }
