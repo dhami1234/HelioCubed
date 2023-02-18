@@ -163,9 +163,7 @@ namespace MHD_Mapping {
 
 	void W_Sph_to_W_normalized_sph(BoxData<double,NUMCOMPS>& W_normalized_sph,
 	                    const BoxData<double,NUMCOMPS>& W_Sph,
-						BoxData<double,DIM>& a_A_row_mag_1_avg,
-						BoxData<double,DIM>& a_A_row_mag_2_avg,
-						BoxData<double,DIM>& a_A_row_mag_3_avg,
+						BoxData<double,DIM>& a_A_row_mag_face_avg,
 	                    int a_d);
 
 	void Cartesian_to_Spherical(BoxData<double,NUMCOMPS>& a_W_Sph,
