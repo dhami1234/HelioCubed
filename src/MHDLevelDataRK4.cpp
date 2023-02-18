@@ -77,9 +77,10 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
 	m_A_row_mag_3_avg.define(m_dbl,Point::Ones(NGHOST));
 
 	for (int i=0; i<DIM; i++){
-		m_A_face_avg[i].define(m_dbl,Point::Ones(NGHOST));
+		m_Dr_detA_A_avg[i].define(m_dbl,Point::Ones(NGHOST));
 		m_Dr_detA_avg[i].define(m_dbl,Point::Ones(NGHOST));
-		m_Dr_adjA_avg[i].define(m_dbl,Point::Ones(NGHOST));
+		m_Dr_AdjA_avg[i].define(m_dbl,Point::Ones(NGHOST));
+		m_A_row_mag_face_avg[i].define(m_dbl,Point::Ones(NGHOST));
 	}
 
 	m_x_sph_cc.define(m_dbl,Point::Ones(NGHOST));

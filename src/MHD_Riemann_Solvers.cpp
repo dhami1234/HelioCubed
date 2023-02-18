@@ -774,14 +774,11 @@ namespace MHD_Riemann_Solvers {
 	}
 	PROTO_KERNEL_END(lambdacalcF, lambdacalc)
 
-
 	PROTO_KERNEL_START
 	void fastMSspeedcalcF(Var<double,1>& a_fastMSspeed,
 	                 const State& a_W_low,
 	                 const State& a_W_high,
-	                 const Var<double,DIM>& a_A_mag_1,
-	                 const Var<double,DIM>& a_A_mag_2,
-	                 const Var<double,DIM>& a_A_mag_3,
+	                 const Var<double,DIM>& a_A_mag_face,
 	                 int a_d,
 	                 double a_gamma)
 	{
@@ -822,10 +819,7 @@ namespace MHD_Riemann_Solvers {
 		ce = sqrt(gamma*p/rho);
 		B_mag = sqrt(Bx*Bx+By*By+Bz*Bz);
 		af = sqrt(ce*ce + B_mag*B_mag/4.0/c_PI/rho);
-		a_fastMSspeed(0) = af;
-		if (a_d == 0) a_fastMSspeed(0) /= a_A_mag_1(0);
-		if (a_d == 1) a_fastMSspeed(0) /= a_A_mag_2(1);
-		if (a_d == 2) a_fastMSspeed(0) /= a_A_mag_3(2);
+		a_fastMSspeed(0) = af/a_A_mag_face(a_d);
 	}
 	PROTO_KERNEL_END(fastMSspeedcalcF, fastMSspeedcalc)
 
@@ -984,26 +978,13 @@ namespace MHD_Riemann_Solvers {
 	void Get_mapped_flux_calcF(State& a_F,
 	                             const State& a_W,
 	                             const State& a_W_actual,
-								 const Var<double,1>& a_r2detA_1_avg,
-								 const Var<double,DIM*DIM>& a_r2detAA_1_avg,
-								 const Var<double,DIM>& a_r2detAn_1_avg,
-								 const Var<double,DIM>& a_n_1_avg,
-								 const Var<double,DIM*DIM>& a_A_1_avg,
-								 const Var<double,1>& a_rrdotdetA_2_avg,
-								 const Var<double,DIM*DIM>& a_rrdotdetAA_2_avg,
-								 const Var<double,DIM>& a_rrdotd3ncn_2_avg,
-								 const Var<double,DIM*DIM>& a_A_2_avg,
-								 const Var<double,1>& a_rrdotdetA_3_avg,
-								 const Var<double,DIM*DIM>& a_rrdotdetAA_3_avg,
-								 const Var<double,DIM>& a_rrdotncd2n_3_avg,
-								 const Var<double,DIM*DIM>& a_A_3_avg,
+								 const Var<double,1>& a_Dr_detA_avg,
+								 const Var<double,DIM*DIM>& a_Dr_detA_A_avg,
+								 const Var<double,DIM>& a_Dr_adjA_avg,
 	                             int a_d,
 	                             double a_gamma)
 	{
 		double rho, p0, e, v2, B2, vB, v_d, b_d;
-		double DrDetAA[DIM*DIM];
-		double DrDetA;
-		double DrAdjA[DIM];
 		double gamma = a_gamma;
 		rho = a_W(0);
 		v2 = a_W_actual(1)*a_W_actual(1) + a_W_actual(2)*a_W_actual(2) + a_W_actual(3)*a_W_actual(3);
@@ -1013,46 +994,31 @@ namespace MHD_Riemann_Solvers {
 		e  = a_W(4)/(gamma-1.0) + rho*v2/2.0 + B2/8.0/c_PI;
 		v_d = a_W(1+a_d);
 		b_d = a_W(5+a_d);
-		for (int i=0;i<DIM*DIM;i++)
-		{
-			if (a_d == 0) DrDetAA[i] = a_r2detAA_1_avg(i);
-			if (a_d == 1) DrDetAA[i] = a_rrdotdetAA_2_avg(i);
-			if (a_d == 2) DrDetAA[i] = a_rrdotdetAA_3_avg(i);
-		}
-		for (int i=0;i<DIM;i++)
-		{
-			if (a_d == 0) DrAdjA[i] = a_r2detAn_1_avg(i);
-			if (a_d == 1) DrAdjA[i] = a_rrdotd3ncn_2_avg(i);
-			if (a_d == 2) DrAdjA[i] = a_rrdotncd2n_3_avg(i);
-		}
-		if (a_d == 0) DrDetA = a_r2detA_1_avg(0);
-		if (a_d == 1) DrDetA = a_rrdotdetA_2_avg(0);
-		if (a_d == 2) DrDetA = a_rrdotdetA_3_avg(0);
 
 	
-		a_F(0) = DrDetA*rho*v_d;
+		a_F(0) = a_Dr_detA_avg(0)*rho*v_d;
 	
-		a_F(1) = rho*v_d*(DrDetAA[0]*a_W(1) + DrDetAA[1]*a_W(2) + DrDetAA[2]*a_W(3));
-		a_F(2) = rho*v_d*(DrDetAA[3]*a_W(1) + DrDetAA[4]*a_W(2) + DrDetAA[5]*a_W(3));
-		a_F(3) = rho*v_d*(DrDetAA[6]*a_W(1) + DrDetAA[7]*a_W(2) + DrDetAA[8]*a_W(3));
+		a_F(1) = rho*v_d*(a_Dr_detA_A_avg(0)*a_W(1) + a_Dr_detA_A_avg(1)*a_W(2) + a_Dr_detA_A_avg(2)*a_W(3));
+		a_F(2) = rho*v_d*(a_Dr_detA_A_avg(3)*a_W(1) + a_Dr_detA_A_avg(4)*a_W(2) + a_Dr_detA_A_avg(5)*a_W(3));
+		a_F(3) = rho*v_d*(a_Dr_detA_A_avg(6)*a_W(1) + a_Dr_detA_A_avg(7)*a_W(2) + a_Dr_detA_A_avg(8)*a_W(3));
 
-		a_F(1) += DrAdjA[0]*p0;
-		a_F(2) += DrAdjA[1]*p0;
-		a_F(3) += DrAdjA[2]*p0;
+		a_F(1) += a_Dr_adjA_avg(0)*p0;
+		a_F(2) += a_Dr_adjA_avg(1)*p0;
+		a_F(3) += a_Dr_adjA_avg(2)*p0;
 
-		a_F(1) -= (1/4.0/c_PI)*b_d*(DrDetAA[0]*a_W(5) + DrDetAA[1]*a_W(6) + DrDetAA[2]*a_W(7));
-		a_F(2) -= (1/4.0/c_PI)*b_d*(DrDetAA[3]*a_W(5) + DrDetAA[4]*a_W(6) + DrDetAA[5]*a_W(7));
-		a_F(3) -= (1/4.0/c_PI)*b_d*(DrDetAA[6]*a_W(5) + DrDetAA[7]*a_W(6) + DrDetAA[8]*a_W(7));
+		a_F(1) -= (1/4.0/c_PI)*b_d*(a_Dr_detA_A_avg(0)*a_W(5) + a_Dr_detA_A_avg(1)*a_W(6) + a_Dr_detA_A_avg(2)*a_W(7));
+		a_F(2) -= (1/4.0/c_PI)*b_d*(a_Dr_detA_A_avg(3)*a_W(5) + a_Dr_detA_A_avg(4)*a_W(6) + a_Dr_detA_A_avg(5)*a_W(7));
+		a_F(3) -= (1/4.0/c_PI)*b_d*(a_Dr_detA_A_avg(6)*a_W(5) + a_Dr_detA_A_avg(7)*a_W(6) + a_Dr_detA_A_avg(8)*a_W(7));
 
-		a_F(4) = DrDetA*(e+p0)*v_d;
-		a_F(4) -= DrDetA*(1/4.0/c_PI)*(vB)*b_d;
+		a_F(4) = a_Dr_detA_avg(0)*(e+p0)*v_d;
+		a_F(4) -= a_Dr_detA_avg(0)*(1/4.0/c_PI)*(vB)*b_d;
 
-		a_F(5) =  v_d*(DrDetAA[0]*a_W(5) + DrDetAA[1]*a_W(6) + DrDetAA[2]*a_W(7));
-		a_F(6) =  v_d*(DrDetAA[3]*a_W(5) + DrDetAA[4]*a_W(6) + DrDetAA[5]*a_W(7));
-		a_F(7) =  v_d*(DrDetAA[6]*a_W(5) + DrDetAA[7]*a_W(6) + DrDetAA[8]*a_W(7));
-		a_F(5) -= b_d*(DrDetAA[0]*a_W(1) + DrDetAA[1]*a_W(2) + DrDetAA[2]*a_W(3));
-		a_F(6) -= b_d*(DrDetAA[3]*a_W(1) + DrDetAA[4]*a_W(2) + DrDetAA[5]*a_W(3));
-		a_F(7) -= b_d*(DrDetAA[6]*a_W(1) + DrDetAA[7]*a_W(2) + DrDetAA[8]*a_W(3));
+		a_F(5) =  v_d*(a_Dr_detA_A_avg(0)*a_W(5) + a_Dr_detA_A_avg(1)*a_W(6) + a_Dr_detA_A_avg(2)*a_W(7));
+		a_F(6) =  v_d*(a_Dr_detA_A_avg(3)*a_W(5) + a_Dr_detA_A_avg(4)*a_W(6) + a_Dr_detA_A_avg(5)*a_W(7));
+		a_F(7) =  v_d*(a_Dr_detA_A_avg(6)*a_W(5) + a_Dr_detA_A_avg(7)*a_W(6) + a_Dr_detA_A_avg(8)*a_W(7));
+		a_F(5) -= b_d*(a_Dr_detA_A_avg(0)*a_W(1) + a_Dr_detA_A_avg(1)*a_W(2) + a_Dr_detA_A_avg(2)*a_W(3));
+		a_F(6) -= b_d*(a_Dr_detA_A_avg(3)*a_W(1) + a_Dr_detA_A_avg(4)*a_W(2) + a_Dr_detA_A_avg(5)*a_W(3));
+		a_F(7) -= b_d*(a_Dr_detA_A_avg(6)*a_W(1) + a_Dr_detA_A_avg(7)*a_W(2) + a_Dr_detA_A_avg(8)*a_W(3));
 
 	}
 	PROTO_KERNEL_END(Get_mapped_flux_calcF, Get_mapped_flux_calc)
@@ -1065,8 +1031,6 @@ namespace MHD_Riemann_Solvers {
 					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual2,
 					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA4,
 					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA2,
-					const BoxData<double,DIM,MEM,DIM>& a_A4,
-					const BoxData<double,DIM,MEM,DIM>& a_A2,
 					const BoxData<double,1,MEM>& a_DrDetA4,                    
 					const BoxData<double,1,MEM>& a_DrDetA2,
 					const BoxData<double,DIM,MEM>& a_DrAdjA4,                    
@@ -1094,24 +1058,11 @@ namespace MHD_Riemann_Solvers {
 		auto p4 = slice(a_prim4,CPRES); 
 		auto p2 = slice(a_prim2,CPRES);
 
-		// Cartesian B, velocities.
+		// B, velocity vectors.
 		auto w4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim4,CVELSTART);
 		auto b4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim4,CBSTART);  
 		auto w2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CVELSTART);
 		auto b2 = slice<double,NUMCOMPS,DIM,MEM>(a_prim2,CBSTART);
-		
-		BoxData<double,DIM,MEM> Uface4 = Operator::_faceMatrixProductAB(a_A4,w4,a_A2,w2,a_dir);
-		BoxData<double,DIM,MEM> Bface4 = Operator::_faceMatrixProductAB(a_A4,b4,a_A2,b2,a_dir);
-		BoxData<double,DIM,MEM> Uface2 = Operator::_matrixProductAB2(a_A2,w2);
-		BoxData<double,DIM,MEM> Bface2 = Operator::_matrixProductAB2(a_A2,b2);
-
-		// Fluxes for velocity, magnetic fields.
-		// BoxData<double,DIM,MEM> fluxuu = Operator::_faceMatrixProductAB(Uface4,fluxRho4,Uface2,fluxRho2,a_dir);
-		// auto fluxub = Operator::_faceMatrixProductAB(Bface4,Vu4,Bface2,Vu2,a_dir);
-		// auto fluxbu = Operator::_faceMatrixProductAB(Bface4,Vb4,Bface2,Vb2,a_dir);
-		// auto fluxbb = Operator::_faceMatrixProductAB(Bface4,Vb4,Bface2,Vb2,a_dir);
-		// fluxbb *= 1.0/(4*M_PI);
-
 
 		// Fluxes for velocity, magnetic fields with Talwinder's method.
 		auto wdrho4 = Operator::_faceProduct(wnorm4,rho4,wnorm2,rho2,a_dir);
@@ -1131,15 +1082,6 @@ namespace MHD_Riemann_Solvers {
 		fluxbb *= (-1.0/(4*M_PI));
 
 		// Energy as a function of the primitive (Cartesian) variables.
-		// auto Beng4 = Operator::_faceMatrixProductATB(Bface4,Bface4,Bface2,Bface2,a_dir);
-		// auto Beng2 = Operator::_matrixProductATB2(Bface2,Bface2);  
-		// Beng4 *= 1.0/(8.0*M_PI);
-		// Beng2 *= 1.0/(8.0*M_PI);
-		
-		// auto Ueng4 = Operator::_faceMatrixProductATB(Uface4,Uface4,Uface2,Uface2,a_dir);
-		// auto Ueng2 = Operator::_matrixProductATB2(Uface2,Uface2);
-		// Ueng4 *= .5;
-		// Ueng2 *= .5; 
 
 		//Talwinder's definition of magnetic and kinetic energy
 		auto b_actual4 = slice<double,NUMCOMPS,DIM,MEM>(a_prim_actual4,CBSTART);
@@ -1173,9 +1115,6 @@ namespace MHD_Riemann_Solvers {
 		auto fluxThermBAdv = Operator::_faceProduct(Vu4,thermBEng4,Vu2,thermBEng2,a_dir);
 		
 		// Non-gradient magnetic field contribution to the energy flux.
-		// BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(Uface4,Bface4,Uface2,Bface2,a_dir);
-		// BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(Uface2,Bface2);
-
 		BoxData<double,1,MEM> UDotB4 = Operator::_faceMatrixProductATB(w_actual4,b_actual4,w_actual2,b_actual2,a_dir);
 		BoxData<double,1,MEM> UDotB2 = Operator::_matrixProductATB2(w_actual2,b_actual2);
 
@@ -1222,8 +1161,6 @@ namespace MHD_Riemann_Solvers {
 					const BoxData<double,NUMCOMPS,MEM>& a_prim_actual2,
 					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA4,
 					const BoxData<double,DIM,MEM,DIM>& a_DrDetAA2,
-					const BoxData<double,DIM,MEM,DIM>& a_A4,
-					const BoxData<double,DIM,MEM,DIM>& a_A2,
 					const BoxData<double,1,MEM>& a_DrDetA4,                    
 					const BoxData<double,1,MEM>& a_DrDetA2,
 					const BoxData<double,DIM,MEM>& a_DrAdjA4,                    
@@ -1328,16 +1265,8 @@ namespace MHD_Riemann_Solvers {
 	                                    const State& a_W_high,
 										const State& a_W_low_actual,
 	                                    const State& a_W_high_actual,
-	                                    const Var<double,1>& a_r2detA_1_avg,
-	                                    const Var<double,DIM*DIM>& a_r2detAA_1_avg,
-	                                    const Var<double,DIM>& a_r2detAn_1_avg,
-	                                    const Var<double,DIM>& a_n_1_avg,
-	                                    const Var<double,1>& a_rrdotdetA_2_avg,
-	                                    const Var<double,DIM*DIM>& a_rrdotdetAA_2_avg,
-	                                    const Var<double,DIM>& a_rrdotd3ncn_2_avg,
-	                                    const Var<double,1>& a_rrdotdetA_3_avg,
-	                                    const Var<double,DIM*DIM>& a_rrdotdetAA_3_avg,
-	                                    const Var<double,DIM>& a_rrdotncd2n_3_avg,
+	                                    const Var<double,1>& a_Dr_detA_avg,
+	                                    const Var<double,DIM*DIM>& a_Dr_detA_A_avg,
 										const Var<double,1>& a_af,
 	                                    int a_d,
 	                                    double a_gamma,
@@ -1372,28 +1301,16 @@ namespace MHD_Riemann_Solvers {
 		e_lo    = p_lo/(a_gamma-1.0) + rho_lo*v2_lo/2.0 + b2_lo/8.0/M_PI;
 		e_hi    = p_hi/(a_gamma-1.0) + rho_hi*v2_hi/2.0 + b2_hi/8.0/M_PI;
 		
-		double DrDetAA[DIM*DIM];
-		double DrDetA;
-		for (int i=0;i<DIM*DIM;i++)
-		{
-			if (a_d == 0) DrDetAA[i] = a_r2detAA_1_avg(i);
-			if (a_d == 1) DrDetAA[i] = a_rrdotdetAA_2_avg(i);
-			if (a_d == 2) DrDetAA[i] = a_rrdotdetAA_3_avg(i);
-		}
-		if (a_d == 0) DrDetA = a_r2detA_1_avg(0);
-		if (a_d == 1) DrDetA = a_rrdotdetA_2_avg(0);
-		if (a_d == 2) DrDetA = a_rrdotdetA_3_avg(0);
-		
 		
 		double w_d = 0.5*abs(a_W_low_actual(1+a_d)+a_W_high_actual(1+a_d)) + a_af(0);
-		Rusanov_flux_rho = (DrDetA*w_d)*(rho_hi-rho_lo);
-		Rusanov_flux_u = DrDetAA[0]*w_d*(rhou_hi-rhou_lo) + DrDetAA[1]*w_d*(rhov_hi-rhov_lo) + DrDetAA[2]*w_d*(rhow_hi-rhow_lo);
-		Rusanov_flux_v = DrDetAA[3]*w_d*(rhou_hi-rhou_lo) + DrDetAA[4]*w_d*(rhov_hi-rhov_lo) + DrDetAA[5]*w_d*(rhow_hi-rhow_lo);
-		Rusanov_flux_w = DrDetAA[6]*w_d*(rhou_hi-rhou_lo) + DrDetAA[7]*w_d*(rhov_hi-rhov_lo) + DrDetAA[8]*w_d*(rhow_hi-rhow_lo);
-		Rusanov_flux_e = (DrDetA*w_d)*(e_hi-e_lo);	
-		Rusanov_flux_Bx = DrDetAA[0]*w_d*(Bx_hi-Bx_lo) + DrDetAA[1]*w_d*(By_hi-By_lo) + DrDetAA[2]*w_d*(Bz_hi-Bz_lo);
-		Rusanov_flux_By = DrDetAA[3]*w_d*(Bx_hi-Bx_lo) + DrDetAA[4]*w_d*(By_hi-By_lo) + DrDetAA[5]*w_d*(Bz_hi-Bz_lo);
-		Rusanov_flux_Bz = DrDetAA[6]*w_d*(Bx_hi-Bx_lo) + DrDetAA[7]*w_d*(By_hi-By_lo) + DrDetAA[8]*w_d*(Bz_hi-Bz_lo);
+		Rusanov_flux_rho = (a_Dr_detA_avg(0)*w_d)*(rho_hi-rho_lo);
+		Rusanov_flux_u = a_Dr_detA_A_avg(0)*w_d*(rhou_hi-rhou_lo) + a_Dr_detA_A_avg(1)*w_d*(rhov_hi-rhov_lo) + a_Dr_detA_A_avg(2)*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_v = a_Dr_detA_A_avg(3)*w_d*(rhou_hi-rhou_lo) + a_Dr_detA_A_avg(4)*w_d*(rhov_hi-rhov_lo) + a_Dr_detA_A_avg(5)*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_w = a_Dr_detA_A_avg(6)*w_d*(rhou_hi-rhou_lo) + a_Dr_detA_A_avg(7)*w_d*(rhov_hi-rhov_lo) + a_Dr_detA_A_avg(8)*w_d*(rhow_hi-rhow_lo);
+		Rusanov_flux_e = (a_Dr_detA_avg(0)*w_d)*(e_hi-e_lo);	
+		Rusanov_flux_Bx = a_Dr_detA_A_avg(0)*w_d*(Bx_hi-Bx_lo) + a_Dr_detA_A_avg(1)*w_d*(By_hi-By_lo) + a_Dr_detA_A_avg(2)*w_d*(Bz_hi-Bz_lo);
+		Rusanov_flux_By = a_Dr_detA_A_avg(3)*w_d*(Bx_hi-Bx_lo) + a_Dr_detA_A_avg(4)*w_d*(By_hi-By_lo) + a_Dr_detA_A_avg(5)*w_d*(Bz_hi-Bz_lo);
+		Rusanov_flux_Bz = a_Dr_detA_A_avg(6)*w_d*(Bx_hi-Bx_lo) + a_Dr_detA_A_avg(7)*w_d*(By_hi-By_lo) + a_Dr_detA_A_avg(8)*w_d*(Bz_hi-Bz_lo);
 
 		a_F_ave_f(0) = 0.5*(a_F_lo_map(0) + a_F_hi_map(0) - Rusanov_flux_rho);
 		a_F_ave_f(1) = 0.5*(a_F_lo_map(1) + a_F_hi_map(1) - Rusanov_flux_u);
@@ -1406,28 +1323,15 @@ namespace MHD_Riemann_Solvers {
 	}
 	PROTO_KERNEL_END(Spherical_Riemann_SolverStateF, Spherical_Riemann_SolverState)
 
-
 	void Spherical_Riemann_Solver(BoxData<double,NUMCOMPS>& a_F_ave_f,
 	                              const BoxData<double,NUMCOMPS>& a_W_ave_low,
 	                              const BoxData<double,NUMCOMPS>& a_W_ave_high,
 								  const BoxData<double,NUMCOMPS>& a_W_ave_low_actual,
 	                              const BoxData<double,NUMCOMPS>& a_W_ave_high_actual,
-	                              const BoxData<double,1>& a_r2detA_1_avg,
-	                              const BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
-	                              const BoxData<double,DIM>& a_r2detAn_1_avg,
-	                              const BoxData<double,DIM>& a_n_1_avg,
-	                              const BoxData<double,DIM*DIM>& a_A_1_avg,
-	                              const BoxData<double,DIM>& a_A_row_mag_1_avg,
-	                              const BoxData<double,1>& a_rrdotdetA_2_avg,
-	                              const BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
-	                              const BoxData<double,DIM>& a_rrdotd3ncn_2_avg,
-								  const BoxData<double,DIM*DIM>& a_A_2_avg,
-								  const BoxData<double,DIM>& a_A_row_mag_2_avg,
-	                              const BoxData<double,1>& a_rrdotdetA_3_avg,
-	                              const BoxData<double,DIM*DIM>& a_rrdotdetAA_3_avg,
-	                              const BoxData<double,DIM>& a_rrdotncd2n_3_avg,
-								  const BoxData<double,DIM*DIM>& a_A_3_avg,
-								  const BoxData<double,DIM>& a_A_row_mag_3_avg,
+	                              const BoxData<double,1>& a_Dr_detA_avg,
+	                              const BoxData<double,DIM*DIM>& a_Dr_detA_A_avg,
+	                              const BoxData<double,DIM>& a_Dr_adjA_avg,
+	                              const BoxData<double,DIM>& a_A_row_mag_face_avg,
 	                              const int a_d,
 	                              const double a_gamma,
 								  const double a_dx,
@@ -1436,69 +1340,25 @@ namespace MHD_Riemann_Solvers {
 								  const int a_order)
 	{
 
-		static Stencil<double> m_laplacian_f[DIM];
-		static Stencil<double> m_deconvolve_f[DIM];
-		static Stencil<double> m_convolve_f[DIM];
-		static Stencil<double> m_copy;
-
-		static bool initialized = false;
-		if(!initialized)
-		{
-			m_copy = 1.0*Shift(Point::Zeros());
-			for (int dir = 0; dir < DIM; dir++)
-			{
-				m_laplacian_f[dir] = Stencil<double>::LaplacianFace(dir);
-				m_deconvolve_f[dir] = (-1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
-				m_convolve_f[dir] = (1.0/24.0)*m_laplacian_f[dir] + 1.0*Shift(Point::Zeros());
-			}
-			initialized =  true;
-		}
 		Box dbx0 = a_W_ave_high.box();
 		Vector F_f_low_mapped(dbx0), F_f_high_mapped(dbx0);
 
-		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_A_row_mag_1_avg, a_A_row_mag_2_avg, a_A_row_mag_3_avg, a_d, a_gamma);
+		Scalar fastMSspeed_f = forall<double>(fastMSspeedcalc, a_W_ave_low_actual, a_W_ave_high_actual, a_A_row_mag_face_avg, a_d, a_gamma);
 		
 		if (a_order == 2){
-			F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
-			F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_3_avg, a_d,a_gamma);
+			F_f_low_mapped  = forall<double,NUMCOMPS>(Get_mapped_flux_calc, a_W_ave_low, a_W_ave_low_actual,  a_Dr_detA_avg, a_Dr_detA_A_avg, a_Dr_adjA_avg, a_d,a_gamma);
+			F_f_high_mapped = forall<double,NUMCOMPS>(Get_mapped_flux_calc,a_W_ave_high, a_W_ave_high_actual, a_Dr_detA_avg, a_Dr_detA_A_avg, a_Dr_adjA_avg, a_d,a_gamma);
 		}
 
 		if (a_order == 4){
-			BoxData<double,DIM,MEM,DIM> A4(dbx0);
 			BoxData<double,DIM,MEM,DIM> DrDetAA4(dbx0);
-
-			if (a_d==0) {
-				MHD_Mapping::Nineto33(A4, a_A_1_avg);
-				MHD_Mapping::Nineto33(DrDetAA4, a_r2detAA_1_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_r2detA_1_avg,a_r2detA_1_avg,a_r2detAn_1_avg, a_r2detAn_1_avg,a_gamma,a_d);
-			}
-
-			if (a_d==1) {
-				MHD_Mapping::Nineto33(A4, a_A_2_avg);
-				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_2_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_2_avg,a_rrdotdetA_2_avg,a_rrdotd3ncn_2_avg, a_rrdotd3ncn_2_avg,a_gamma,a_d);
-			}
-
-			if (a_d==2) {
-				MHD_Mapping::Nineto33(A4, a_A_3_avg);
-				MHD_Mapping::Nineto33(DrDetAA4, a_rrdotdetAA_3_avg);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
-				MHD_Riemann_Solvers::MHDSphericalFlux_2O
-				(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,A4,A4,a_rrdotdetA_3_avg,a_rrdotdetA_3_avg,a_rrdotncd2n_3_avg, a_rrdotncd2n_3_avg,a_gamma,a_d);
-			}
+			MHD_Mapping::Nineto33(DrDetAA4, a_Dr_detA_A_avg);
+			MHD_Riemann_Solvers::MHDSphericalFlux
+			(F_f_low_mapped,a_W_ave_low,a_W_ave_low,a_W_ave_low_actual,a_W_ave_low_actual,DrDetAA4,DrDetAA4,a_Dr_detA_avg,a_Dr_detA_avg,a_Dr_adjA_avg, a_Dr_adjA_avg,a_gamma,a_d);
+			MHD_Riemann_Solvers::MHDSphericalFlux
+			(F_f_high_mapped,a_W_ave_high,a_W_ave_high,a_W_ave_high_actual,a_W_ave_high_actual,DrDetAA4,DrDetAA4,a_Dr_detA_avg,a_Dr_detA_avg,a_Dr_adjA_avg, a_Dr_adjA_avg,a_gamma,a_d);	
 		}
 		
-		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_n_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
+		forallInPlace_p(Spherical_Riemann_SolverState, a_F_ave_f, F_f_low_mapped, F_f_high_mapped, a_W_ave_low, a_W_ave_high, a_W_ave_low_actual, a_W_ave_high_actual, a_Dr_detA_avg, a_Dr_detA_A_avg, fastMSspeed_f, a_d, a_gamma, a_dx, a_dy, a_dz);
 	}
-
-
-	
-
 }

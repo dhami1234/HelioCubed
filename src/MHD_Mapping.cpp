@@ -1333,16 +1333,21 @@ namespace MHD_Mapping {
 	{
 		//Filling data for Phil's operators
 		for (auto dit : a_state.m_A_1_avg){		
-			a_state.m_A_1_avg[dit].copyTo(a_state.m_A_face_avg[0][dit]);
-			a_state.m_A_2_avg[dit].copyTo(a_state.m_A_face_avg[1][dit]);
-			a_state.m_A_3_avg[dit].copyTo(a_state.m_A_face_avg[2][dit]);
+			a_state.m_r2detAA_1_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[0][dit]);
+			a_state.m_rrdotdetAA_2_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[1][dit]);
+			a_state.m_rrdotdetAA_3_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[2][dit]);
+
 			a_state.m_r2detA_1_avg[dit].copyTo(a_state.m_Dr_detA_avg[0][dit]);
 			a_state.m_rrdotdetA_2_avg[dit].copyTo(a_state.m_Dr_detA_avg[1][dit]);
 			a_state.m_rrdotdetA_3_avg[dit].copyTo(a_state.m_Dr_detA_avg[2][dit]);
-			a_state.m_r2detAn_1_avg[dit].copyTo(a_state.m_Dr_adjA_avg[0][dit]);
-			a_state.m_rrdotd3ncn_2_avg[dit].copyTo(a_state.m_Dr_adjA_avg[1][dit]);
-			a_state.m_rrdotncd2n_3_avg[dit].copyTo(a_state.m_Dr_adjA_avg[2][dit]);
 
+			a_state.m_r2detAn_1_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[0][dit]);
+			a_state.m_rrdotd3ncn_2_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[1][dit]);
+			a_state.m_rrdotncd2n_3_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[2][dit]);
+
+			a_state.m_A_row_mag_1_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[0][dit]);
+			a_state.m_A_row_mag_2_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[1][dit]);
+			a_state.m_A_row_mag_3_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[2][dit]);
 		}
 	}
 

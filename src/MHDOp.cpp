@@ -763,8 +763,8 @@ namespace MHDOp {
 				// F_ave_f.setVal(0.0);
 				auto bnorm4 = slice(W_ave_low,CBSTART+d)+slice(W_ave_high,CBSTART+d);
 				bnorm4 *= 0.5;
-				double dx_d = dxd[d];
-				MHD_Riemann_Solvers::Spherical_Riemann_Solver(F_ave_f, W_ave_low, W_ave_high, W_ave_low_actual, W_ave_high_actual, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_r2detAn_1_avg[dit], a_State.m_n_1_avg[dit], a_State.m_A_1_avg[dit], a_State.m_A_row_mag_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotd3ncn_2_avg[dit],a_State.m_A_2_avg[dit], a_State.m_A_row_mag_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], a_State.m_rrdotncd2n_3_avg[dit],a_State.m_A_3_avg[dit], a_State.m_A_row_mag_3_avg[dit], d, gamma, a_dx, a_dy, a_dz, 2);	
+				double dx_d = dxd[d];	
+				MHD_Riemann_Solvers::Spherical_Riemann_Solver(F_ave_f, W_ave_low, W_ave_high, W_ave_low_actual, W_ave_high_actual, a_State.m_Dr_detA_avg[d][dit], a_State.m_Dr_detA_A_avg[d][dit], a_State.m_Dr_AdjA_avg[d][dit], a_State.m_A_row_mag_face_avg[d][dit], d, gamma, a_dx, a_dy, a_dz, 4);	
 				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, F_ave_f, "F_ave_f_"+to_string(d));
 				Vector Rhs_d = m_divergence[d](F_ave_f);
 				Rhs_d *= -1./dx_d;

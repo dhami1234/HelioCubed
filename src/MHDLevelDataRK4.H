@@ -75,10 +75,13 @@ public:
 	LevelBoxData<double,DIM> m_rrdotncd2n_3_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_3_avg;
 
+
+
 // Extra things needed by Spherical mapping with radial flow correction when using Phil's operators
-	Array<LevelBoxData<double,DIM*DIM,MEM>,DIM> m_A_face_avg;
+	Array<LevelBoxData<double,DIM*DIM,MEM>,DIM> m_Dr_detA_A_avg;
 	Array<LevelBoxData<double,1,MEM>,DIM> m_Dr_detA_avg;
-	Array<LevelBoxData<double,DIM,MEM>,DIM> m_Dr_adjA_avg;
+	Array<LevelBoxData<double,DIM,MEM>,DIM> m_Dr_AdjA_avg;
+	Array<LevelBoxData<double,DIM,MEM>,DIM> m_A_row_mag_face_avg;
 
 
 // Things needed by Second order Spherical
