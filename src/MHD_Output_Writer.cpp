@@ -16,7 +16,8 @@ namespace MHD_Output_Writer {
 	void Write_data(MHDLevelDataState& state,
 					const int k,
 					const double time,
-					const double dt)
+					const double dt,
+					bool CME_data)
 	{
 		double dx = state.m_dx;
 		double dy = state.m_dy;
@@ -65,6 +66,9 @@ namespace MHD_Output_Writer {
 		}
 	
 		std::string filename_Data=inputs.Data_file_Prefix+std::to_string(k);
+		if (CME_data){
+			filename_Data=inputs.Data_file_Prefix+"at_CME_insertion_"+std::to_string(k);
+		}
 		HDF5Handler h5;
 		h5.setTime(time);
 		h5.setTimestep(dt);
@@ -85,13 +89,17 @@ namespace MHD_Output_Writer {
 	void Write_checkpoint(MHDLevelDataState& state,
 					const int k,
 					const double time,
-					const double dt)
+					const double dt,
+					bool CME_checkpoint)
 	{
 		double dx = state.m_dx;
 		double dy = state.m_dy;
 		double dz = state.m_dz;
 		LevelBoxData<double,NUMCOMPS> out_data2(state.m_dbl,Point::Zeros());
 		std::string filename_Checkpoint=inputs.Checkpoint_file_Prefix+std::to_string(k);
+		if (CME_checkpoint){
+			filename_Checkpoint=inputs.Checkpoint_file_Prefix+"before_CME_"+std::to_string(k);
+		}
 		(state.m_U).copyTo(out_data2);
 		HDF5Handler h5;
 		h5.setTime(time);

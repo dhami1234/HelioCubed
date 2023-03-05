@@ -135,6 +135,9 @@ int main(int argc, char* argv[])
 		// if (inputs.grid_type_global == 2) reader.readGeom(dtheta, inputs.BC_file);
 		// if (procID()) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, BC_data[0], "OFT_BCs");
 		
+		state.m_CME_inserted = false;
+		state.m_CME_checkpoint_written = false;
+
 		if (inputs.restartStep == 0){
 			if (inputs.grid_type_global == 2 && (inputs.initialize_in_spherical_coords == 1)){
 				if (inputs.Spherical_2nd_order == 0) MHD_Initialize::initializeState_Spherical(state);
@@ -151,6 +154,13 @@ int main(int argc, char* argv[])
 			}
 			time = h5.time();
 			dt = h5.dt();
+			time *=inputs.velocity_scale;
+			dt *=inputs.velocity_scale;
+			double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
+			if (physical_time > inputs.CME_Enter_Time){
+				state.m_CME_inserted = true;
+				state.m_CME_checkpoint_written = true;
+			}
 		}
 		
 		int start_iter = 0;
@@ -159,7 +169,8 @@ int main(int argc, char* argv[])
 		bool give_space_in_probe_file = true;
 		double probe_cadence = 0;
 		double dt_old = dt;
-		state.m_CME_inserted = false;
+		
+
 		for (int k = start_iter; (k <= inputs.maxStep) && (time/inputs.velocity_scale < inputs.tstop); k++)
 		{	
 			auto start = chrono::steady_clock::now();
@@ -189,8 +200,14 @@ int main(int argc, char* argv[])
 
 				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time/inputs.velocity_scale);
 
-				MHD_Pre_Time_Step::Insert_CME(state, time/inputs.velocity_scale);
-
+				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
+				double checkpoint_phys_time = inputs.CME_Enter_Time - (inputs.CME_get_checkpoint_before/365.25/24/3600);
+				if (!state.m_CME_checkpoint_written && (physical_time >= checkpoint_phys_time)) {
+					if (procID() == 0) cout << "Writing Checkpoint " << (inputs.CME_Enter_Time-physical_time)*365.25*24*3600 <<" (s) before CME insertion" << endl;
+					MHD_Output_Writer::Write_checkpoint(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, true);	
+					state.m_CME_checkpoint_written = true;
+				}
+				MHD_Pre_Time_Step::Insert_CME(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale);
 				if (inputs.convTestType == 1 || inputs.timeIntegratorType == 1) {
 					PR_TIME("eulerstep");
 					eulerstep.advance(time,dt,state);
@@ -231,15 +248,15 @@ int main(int argc, char* argv[])
 				if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
 				{	
 					if (inputs.sph_inner_BC_hdf5 == 1){
-						MHD_Output_Writer::Write_data(state, k, MHD_Probe::getPhysTime(time/inputs.velocity_scale), dt);
+						MHD_Output_Writer::Write_data(state, k, MHD_Probe::getPhysTime(time/inputs.velocity_scale), dt/inputs.velocity_scale, false);
 					} else {
-						MHD_Output_Writer::Write_data(state, k, time/inputs.velocity_scale, dt);
+						MHD_Output_Writer::Write_data(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, false);
 					}
 								
 				}
 				if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
 				{
-					MHD_Output_Writer::Write_checkpoint(state, k, time, dt);	
+					MHD_Output_Writer::Write_checkpoint(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, false);	
 					std::string filename_to_delete=inputs.Checkpoint_file_Prefix+std::to_string(k-(inputs.CheckpointInterval*inputs.MaxCheckpointFiles))+".hdf5";
 					const char* str = filename_to_delete.c_str();
 					if (procID() == 0) std::remove(str);

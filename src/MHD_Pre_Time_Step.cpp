@@ -1,6 +1,7 @@
 #include "Proto.H"
 #include "MHD_Mapping.H"
 #include "MHD_Input_Parsing.H"
+#include "MHD_Output_Writer.H"
 #include "MHD_Probe.H"
 #include "MHD_Constants.H"
 #include <iomanip>
@@ -362,7 +363,9 @@ namespace MHD_Pre_Time_Step {
 
 
     void Insert_CME(MHDLevelDataState& a_state,
-                const double a_time)
+                const int a_k,
+                const double a_time,
+                const double a_dt)
     {
         double physical_time = MHD_Probe::getPhysTime(a_time);
 
@@ -391,6 +394,7 @@ namespace MHD_Pre_Time_Step {
                 forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit]);
             }
             a_state.m_CME_inserted = true;
+            MHD_Output_Writer::Write_data(a_state, a_k, physical_time, a_dt, true);
         }
     }
 

@@ -56,7 +56,7 @@ class Parsefrominputs {
 	   19. Velocity pulse problem in polar grid
 	   21. Radially out flow in spherical grid
 	 */
-    int Riemann_solver_type;
+    int Riemann_solver_type;  //1: Rusanov Solver, 2: Roe Solver
     double entropy_fix_coeff;
     int initialize_in_spherical_coords;
     int output_in_spherical_coords;
@@ -75,7 +75,9 @@ class Parsefrominputs {
 	string Checkpoint_file_Prefix;
 	string Probe_trajectory_file;
 	string Probe_data_file;
-	double CME_Enter_Time, CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
+	double CME_Enter_Time;
+	double CME_get_checkpoint_before; // Get a checkpoint file this much time in seconds before CME insertion.
+	double CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
 	//MHD equations can be written in dimensionless variables. We use scaling for this.
 	double density_scale, velocity_scale;
   public:
@@ -134,6 +136,7 @@ class Parsefrominputs {
 		args.add("Probe_trajectory_file",  Probe_trajectory_file);
 		args.add("Probe_data_file",  Probe_data_file);
 		args.add("CME_Enter_Time",  CME_Enter_Time);
+		args.add("CME_get_checkpoint_before",  CME_get_checkpoint_before);
 		args.add("CME_r1",  CME_r1);
 		args.add("CME_r0",  CME_r0);
 		args.add("CME_halfangle",  CME_halfangle);
@@ -205,6 +208,7 @@ class Parsefrominputs {
 			cout << "Probe_trajectory_file: "    << Probe_trajectory_file << endl;
 			cout << "Probe_data_file: "    << Probe_data_file << endl;
 			cout << "CME_Enter_Time: "    << CME_Enter_Time << endl;
+			cout << "CME_get_checkpoint_before: "    << CME_get_checkpoint_before << endl;
 			cout << "CME_r1: "    << CME_r1 << endl;
 			cout << "CME_r0: "    << CME_r0 << endl;
 			cout << "CME_halfangle: "    << CME_halfangle << endl;
