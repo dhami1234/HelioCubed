@@ -1,5 +1,5 @@
--tstop                           360861.49
--CFL                             0.3
+-tstop                           3608610.49
+-CFL                             0.6
 -domsizex                        1.0
 -domsizey                        1.0
 -domsizez                        1.0
@@ -7,10 +7,10 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         300000
--restartStep                     100
--outputInterval                  100
--CheckpointInterval              100
+-maxStep                         250
+-restartStep                     0
+-outputInterval                  50
+-CheckpointInterval              50
 -MaxCheckpointFiles              3
 -BoxSize                         15
 -grid_type_global                2
@@ -43,7 +43,7 @@
 -Checkpoint_file_Prefix          Checkpoint_
 -Probe_trajectory_file           Probe/trajEarth2020.dat
 -Probe_data_file                 Probe/probed_data.dat 
--CME_Enter_Time                  2020.0903
+-CME_Enter_Time                  2020.0923
 -CME_get_checkpoint_before       3600
 -CME_r1                          46.67
 -CME_r0                          20.0

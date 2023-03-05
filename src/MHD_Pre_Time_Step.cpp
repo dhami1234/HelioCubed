@@ -394,7 +394,7 @@ namespace MHD_Pre_Time_Step {
                 forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit]);
             }
             a_state.m_CME_inserted = true;
-            MHD_Output_Writer::Write_data(a_state, a_k, physical_time, a_dt, true);
+            MHD_Output_Writer::Write_data(a_state, a_k-1, physical_time, a_dt, true);
         }
     }
 

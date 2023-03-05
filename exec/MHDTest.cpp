@@ -158,7 +158,10 @@ int main(int argc, char* argv[])
 			dt *=inputs.velocity_scale;
 			double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
 			if (physical_time > inputs.CME_Enter_Time){
-				state.m_CME_inserted = true;
+				state.m_CME_inserted = true;	
+			}
+			double checkpoint_phys_time = inputs.CME_Enter_Time - (inputs.CME_get_checkpoint_before/365.25/24/3600);
+			if (!state.m_CME_checkpoint_written && (physical_time >= checkpoint_phys_time)) {
 				state.m_CME_checkpoint_written = true;
 			}
 		}
@@ -200,13 +203,7 @@ int main(int argc, char* argv[])
 
 				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time/inputs.velocity_scale);
 
-				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
-				double checkpoint_phys_time = inputs.CME_Enter_Time - (inputs.CME_get_checkpoint_before/365.25/24/3600);
-				if (!state.m_CME_checkpoint_written && (physical_time >= checkpoint_phys_time)) {
-					if (procID() == 0) cout << "Writing Checkpoint " << (inputs.CME_Enter_Time-physical_time)*365.25*24*3600 <<" (s) before CME insertion" << endl;
-					MHD_Output_Writer::Write_checkpoint(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, true);	
-					state.m_CME_checkpoint_written = true;
-				}
+				
 				MHD_Pre_Time_Step::Insert_CME(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale);
 				if (inputs.convTestType == 1 || inputs.timeIntegratorType == 1) {
 					PR_TIME("eulerstep");
@@ -232,6 +229,14 @@ int main(int argc, char* argv[])
 				time += dt;
 				dt_old = dt;
 				time_seconds = time/inputs.velocity_scale;
+
+				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
+				double checkpoint_phys_time = inputs.CME_Enter_Time - (inputs.CME_get_checkpoint_before/365.25/24/3600);
+				if (!state.m_CME_checkpoint_written && (physical_time >= checkpoint_phys_time)) {
+					if (procID() == 0) cout << "Writing Checkpoint " << (inputs.CME_Enter_Time-physical_time)*365.25*24*3600 <<" (s) before CME insertion" << endl;
+					MHD_Output_Writer::Write_checkpoint(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, true);	
+					state.m_CME_checkpoint_written = true;
+				}
 			}
 			
 			if (inputs.convTestType == 0)
