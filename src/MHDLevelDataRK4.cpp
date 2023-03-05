@@ -38,6 +38,7 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
 	m_U.define(m_dbl,Point::Zero());
 	m_U_old.define(m_dbl,Point::Zero());
 	m_divB.define(m_dbl,Point::Ones(NGHOST));
+	m_divV.define(m_dbl,Point::Ones(NGHOST));
 	m_Viscosity.define(m_dbl,Point::Ones(NGHOST));
 	m_BC.define(m_dbl,Point::Ones(NGHOST));
 	m_CME.define(m_dbl,Point::Ones(NGHOST));
@@ -59,14 +60,17 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
     m_r2detAA_1_avg.define(m_dbl,Point::Ones(NGHOST));
     m_r2detAn_1_avg.define(m_dbl,Point::Ones(NGHOST));
 	m_A_row_mag_1_avg.define(m_dbl,Point::Ones(NGHOST));
+	m_A_1_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetA_2_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetAA_2_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotd3ncn_2_avg.define(m_dbl,Point::Ones(NGHOST));
 	m_A_row_mag_2_avg.define(m_dbl,Point::Ones(NGHOST));
+	m_A_2_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetA_3_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotdetAA_3_avg.define(m_dbl,Point::Ones(NGHOST));
     m_rrdotncd2n_3_avg.define(m_dbl,Point::Ones(NGHOST));
 	m_A_row_mag_3_avg.define(m_dbl,Point::Ones(NGHOST));
+	m_A_3_avg.define(m_dbl,Point::Ones(NGHOST));
 
 	for (int i=0; i<DIM; i++){
 		m_Dr_detA_A_avg[i].define(m_dbl,Point::Ones(NGHOST));
@@ -194,6 +198,7 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 		a_State.m_min_dt = mintime;
 	}
 	a_State.m_divB_calculated = true; // This makes sure that divB is calculated only once in RK4
+	a_State.m_divV_calculated = true; // This makes sure that divV is calculated only once in RK4
 	a_State.m_Viscosity_calculated = true; // This makes sure that Viscosity is calculated only once in RK4
 	a_State.m_min_dt_calculated = true; // This makes sure that min_dt is calculated only once in RK4
 	a_DX*=a_dt;

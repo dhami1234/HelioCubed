@@ -301,14 +301,17 @@ namespace MHD_Mapping {
 	                          Var<double,DIM*DIM>& a_r2detAA_1_avg,
 	                          Var<double,DIM>& a_r2detAn_1_avg,
 							  Var<double,DIM>& a_A_row_mag_1_avg,
+							  Var<double,DIM*DIM>& a_A_1_avg,
 	                          Var<double,1>& a_rrdotdetA_2_avg,
 	                          Var<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 	                          Var<double,DIM>& a_rrdotd3ncn_2_avg,
 							  Var<double,DIM>& a_A_row_mag_2_avg,
+							  Var<double,DIM*DIM>& a_A_2_avg,
 	                          Var<double,1>& a_rrdotdetA_3_avg,
 	                          Var<double,DIM*DIM>& a_rrdotdetAA_3_avg,
 	                          Var<double,DIM>& a_rrdotncd2n_3_avg,
 							  Var<double,DIM>& a_A_row_mag_3_avg,
+							  Var<double,DIM*DIM>& a_A_3_avg,
 	                          const double a_dx,
 	                          const double a_dy,
 	                          const double a_dz,
@@ -324,7 +327,7 @@ namespace MHD_Mapping {
 		double dE1 = a_dx;
 		double dE2 = a_dy;
 		double dE3 = a_dz;
-
+		double eps = 1e-14;
 		double E1, E2, E3;
 /////  CELL AVERAGED VALUES
 
@@ -434,7 +437,33 @@ namespace MHD_Mapping {
 			a_A_row_mag_1_avg(1) = c_PI;
 			a_A_row_mag_1_avg(2) = (4*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
 			// a_A_row_mag_1_avg(2) = (2*c_PI*dE2)/(log(abs(tan((E2+dE2/2)/2)))-log(abs(tan((E2-dE2/2)/2))));
+			
+			// a_A_1_avg(0) = (2*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(E2*c_PI))/(dE2*dE3*pow(c_PI,2));
+			// a_A_1_avg(1) = (2*cos(E2*c_PI)*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI))/(dE2*dE3*c_PI);
+			// a_A_1_avg(2) = (-4*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(E2*c_PI)*sin(2*E3*c_PI))/(dE2*dE3*c_PI);
+			// a_A_1_avg(3) = (2*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(E2*c_PI)*sin(2*E3*c_PI))/(dE2*dE3*pow(c_PI,2));
+			// a_A_1_avg(4) = (2*cos(E2*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(2*E3*c_PI))/(dE2*dE3*c_PI);
+			// a_A_1_avg(5) = (4*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(dE3*c_PI)*sin(E2*c_PI))/(dE2*dE3*c_PI);
+			// a_A_1_avg(6) = (2*cos(E2*c_PI)*sin((dE2*c_PI)/2.))/(dE2*c_PI);
+			// a_A_1_avg(7) = (-2*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
+			// a_A_1_avg(8) = 0.0;
 
+			a_A_1_avg(0) = a_r2detAA_1_avg(0)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(1) = a_r2detAA_1_avg(1)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(2) = a_r2detAA_1_avg(2)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(3) = a_r2detAA_1_avg(3)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(4) = a_r2detAA_1_avg(4)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(5) = a_r2detAA_1_avg(5)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(6) = a_r2detAA_1_avg(6)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(7) = a_r2detAA_1_avg(7)/(a_r2detA_1_avg(0)+eps);
+			a_A_1_avg(8) = 0.0;
+
+			// if (E2==0.0 || E2==1.0){
+			// 	for(int i=0;i<DIM*DIM;i++){
+			// 		a_A_1_avg(i) = 0;
+			// 	}
+			// }
+			
 		}
 		if (a_r_dir_turn){
 			a_r2detA_1_avg(0)	*=	pow(R0 + (-1 + exp(c*E1))*Rt,2);
@@ -497,6 +526,32 @@ namespace MHD_Mapping {
 			a_A_row_mag_2_avg(0) = 1.0;
 			a_A_row_mag_2_avg(1) = c_PI;
 			a_A_row_mag_2_avg(2) = 2*c_PI*sin(E2*c_PI);
+
+			// a_A_2_avg(0) = (cos(2*E3*c_PI)*sin(dE3*c_PI)*sin(E2*c_PI))/(dE3*c_PI);
+			// a_A_2_avg(1) = (cos(E2*c_PI)*(sin((dE3 - 2*E3)*c_PI) + sin((dE3 + 2*E3)*c_PI)))/(2.*dE3);
+			// a_A_2_avg(2) = (-2*sin(dE3*c_PI)*sin(E2*c_PI)*sin(2*E3*c_PI))/dE3;
+			// a_A_2_avg(3) = (sin(dE3*c_PI)*sin(E2*c_PI)*sin(2*E3*c_PI))/(dE3*c_PI);
+			// a_A_2_avg(4) = (cos(E2*c_PI)*sin(dE3*c_PI)*sin(2*E3*c_PI))/dE3;
+			// a_A_2_avg(5) = (sin(E2*c_PI)*(sin((dE3 - 2*E3)*c_PI) + sin((dE3 + 2*E3)*c_PI)))/dE3;
+			// a_A_2_avg(6) = cos(E2*c_PI);
+			// a_A_2_avg(7) = -(c_PI*sin(E2*c_PI));
+			// a_A_2_avg(8) = 0.0;
+
+			a_A_2_avg(0) = a_rrdotdetAA_2_avg(0)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(1) = a_rrdotdetAA_2_avg(1)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(2) = a_rrdotdetAA_2_avg(2)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(3) = a_rrdotdetAA_2_avg(3)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(4) = a_rrdotdetAA_2_avg(4)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(5) = a_rrdotdetAA_2_avg(5)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(6) = a_rrdotdetAA_2_avg(6)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(7) = a_rrdotdetAA_2_avg(7)/(a_rrdotdetA_2_avg(0)+eps);
+			a_A_2_avg(8) = 0.0;
+
+			// if (E2==0.0 || E2==1.0){
+			// 	for(int i=0;i<DIM*DIM;i++){
+			// 		a_A_2_avg(i) = 0;
+			// 	}
+			// }
 		}
 		if (a_r_dir_turn){
 			a_rrdotdetA_2_avg(0)	*=	(exp(c*E1)*Rt*(R0 - Rt + exp(c*E1)*Rt*cosh((c*dE1)/2.))*sinh((c*dE1)/2.))/dE1;
@@ -562,6 +617,32 @@ namespace MHD_Mapping {
 			a_A_row_mag_3_avg(2) = (4*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
 			// a_A_row_mag_3_avg(2) = (2*c_PI*dE2)/(log(abs(tan((E2+dE2/2)/2)))-log(abs(tan((E2-dE2/2)/2))));
 
+			// a_A_3_avg(0) = (2*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/(dE2*c_PI);
+			// a_A_3_avg(1) = (2*cos(E2*c_PI)*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.))/dE2;
+			// a_A_3_avg(2) = (-4*sin((dE2*c_PI)/2.)*sin(E2*c_PI)*sin(2*E3*c_PI))/dE2;
+			// a_A_3_avg(3) = (2*sin((dE2*c_PI)/2.)*sin(E2*c_PI)*sin(2*E3*c_PI))/(dE2*c_PI);
+			// a_A_3_avg(4) = (2*cos(E2*c_PI)*sin((dE2*c_PI)/2.)*sin(2*E3*c_PI))/dE2;
+			// a_A_3_avg(5) = (4*cos(2*E3*c_PI)*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
+			// a_A_3_avg(6) = (2*cos(E2*c_PI)*sin((dE2*c_PI)/2.))/(dE2*c_PI);
+			// a_A_3_avg(7) = (-2*sin((dE2*c_PI)/2.)*sin(E2*c_PI))/dE2;
+			// a_A_3_avg(8) = 0.0;
+
+			a_A_3_avg(0) = a_rrdotdetAA_3_avg(0)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(1) = a_rrdotdetAA_3_avg(1)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(2) = a_rrdotdetAA_3_avg(2)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(3) = a_rrdotdetAA_3_avg(3)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(4) = a_rrdotdetAA_3_avg(4)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(5) = a_rrdotdetAA_3_avg(5)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(6) = a_rrdotdetAA_3_avg(6)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(7) = a_rrdotdetAA_3_avg(7)/(a_rrdotdetA_3_avg(0)+eps);
+			a_A_3_avg(8) = 0.0;
+
+			// if (E2==0.0 || E2==1.0){
+			// 	for(int i=0;i<DIM*DIM;i++){
+			// 		a_A_3_avg(i) = 0;
+			// 	}
+			// }
+
 		}
 		if (a_r_dir_turn){
 			a_rrdotdetA_3_avg(0)	*=	(exp(c*E1)*Rt*(R0 - Rt + exp(c*E1)*Rt*cosh((c*dE1)/2.))*sinh((c*dE1)/2.))/dE1;
@@ -596,21 +677,24 @@ namespace MHD_Mapping {
 	                             BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
 	                             BoxData<double,DIM>& a_r2detAn_1_avg,
 								 BoxData<double,DIM>& a_A_row_mag_1_avg,
+								 BoxData<double,DIM*DIM>& a_A_1_avg,
 	                             BoxData<double,1>& a_rrdotdetA_2_avg,
 	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 	                             BoxData<double,DIM>& a_rrdotd3ncn_2_avg,
 								 BoxData<double,DIM>& a_A_row_mag_2_avg,
+								 BoxData<double,DIM*DIM>& a_A_2_avg,
 	                             BoxData<double,1>& a_rrdotdetA_3_avg,
 	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_3_avg,
 	                             BoxData<double,DIM>& a_rrdotncd2n_3_avg,
 								 BoxData<double,DIM>& a_A_row_mag_3_avg,
+								 BoxData<double,DIM*DIM>& a_A_3_avg,
 	                             const double a_dx,
 	                             const double a_dy,
 	                             const double a_dz,
 								 bool a_exchanged_yet,
 								 bool a_r_dir_turn)
 	{
-		forallInPlace_p(Spherical_map_calc, a_Jacobian_ave, a_detAA_avg, a_detAA_inv_avg, a_r2rdot_avg, a_detA_avg, a_A_row_mag_avg, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_A_row_mag_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_row_mag_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_row_mag_3_avg, a_dx, a_dy, a_dz,a_exchanged_yet,a_r_dir_turn);
+		forallInPlace_p(Spherical_map_calc, a_Jacobian_ave, a_detAA_avg, a_detAA_inv_avg, a_r2rdot_avg, a_detA_avg, a_A_row_mag_avg, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_A_row_mag_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_row_mag_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_row_mag_3_avg, a_A_3_avg, a_dx, a_dy, a_dz,a_exchanged_yet,a_r_dir_turn);
 	}
 
 	PROTO_KERNEL_START
@@ -930,7 +1014,33 @@ namespace MHD_Mapping {
 		forallInPlace_p(W_Sph_to_W_normalized_sph_calc, W_normalized_sph, W_Sph, a_A_row_mag_face_avg, a_d);
 	}
 
+	PROTO_KERNEL_START
+	void W_normalized_sph_to_W_Sph_calcF( const Point& a_pt,
+										Var<double,NUMCOMPS>& W_sph,
+										Var<double,NUMCOMPS>& W_normalized_Sph,
+										const Var<double,DIM>& a_A_row_mag_face_avg,
+										int a_d)
+	{
+		double eps = 1e-15;
+		W_sph(0) = W_normalized_Sph(0);
+		W_sph(1) = W_normalized_Sph(1)/(a_A_row_mag_face_avg(0)+eps);
+		W_sph(2) = W_normalized_Sph(2)/(a_A_row_mag_face_avg(1)+eps);
+		W_sph(3) = W_normalized_Sph(3)/(a_A_row_mag_face_avg(2)+eps);
+		W_sph(4) = W_normalized_Sph(4);
+		W_sph(5) = W_normalized_Sph(5)/(a_A_row_mag_face_avg(0)+eps);
+		W_sph(6) = W_normalized_Sph(6)/(a_A_row_mag_face_avg(1)+eps);
+		W_sph(7) = W_normalized_Sph(7)/(a_A_row_mag_face_avg(2)+eps);		
+	}
+	PROTO_KERNEL_END(W_normalized_sph_to_W_Sph_calcF, W_normalized_sph_to_W_Sph_calc)
 
+
+	void W_normalized_sph_to_W_Sph(BoxData<double,NUMCOMPS>& W_sph,
+	                    const BoxData<double,NUMCOMPS>& W_normalized_Sph,
+						BoxData<double,DIM>& a_A_row_mag_face_avg,
+	                    int a_d)
+	{
+		forallInPlace_p(W_normalized_sph_to_W_Sph_calc, W_sph, W_normalized_Sph, a_A_row_mag_face_avg, a_d);
+	}
 
 	void Regular_map_filling_func(MHDLevelDataState& a_state){
 
@@ -1011,7 +1121,7 @@ namespace MHD_Mapping {
 		bool r_dir_turn = false;
 		#if DIM == 3
 		for (auto dit : a_state.m_detAA_avg){	
-			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
+			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_A_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_A_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit], (a_state.m_A_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
 		}	
 
 		(a_state.m_Jacobian_ave).exchange();
@@ -1022,22 +1132,25 @@ namespace MHD_Mapping {
 		(a_state.m_r2detA_1_avg).exchange();
 		(a_state.m_r2detAA_1_avg).exchange();
 		(a_state.m_r2detAn_1_avg).exchange();
+		// (a_state.m_A_1_avg).exchange();
 		(a_state.m_rrdotdetA_2_avg).exchange();
 		(a_state.m_rrdotdetAA_2_avg).exchange();
 		(a_state.m_rrdotd3ncn_2_avg).exchange();
+		// (a_state.m_A_2_avg).exchange();
 		(a_state.m_rrdotdetA_3_avg).exchange();
 		(a_state.m_rrdotdetAA_3_avg).exchange();
 		(a_state.m_rrdotncd2n_3_avg).exchange();
+		// (a_state.m_A_3_avg).exchange();
 		exchanged_yet = true;
 		
 		for (auto dit : a_state.m_detAA_avg){		
-			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
+			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_A_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_A_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit], (a_state.m_A_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
 		}
 		exchanged_yet = false;
 		r_dir_turn = true;
 
 		for (auto dit : a_state.m_detAA_avg){		
-			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
+			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_A_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_A_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit], (a_state.m_A_3_avg)[dit],a_state.m_dx,a_state.m_dy,a_state.m_dz, exchanged_yet, r_dir_turn);
 		}
 
 		

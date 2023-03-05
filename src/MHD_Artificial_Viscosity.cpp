@@ -97,6 +97,21 @@ namespace MHD_Artificial_Viscosity {
 	PROTO_KERNEL_END(Visc_coef_calcF, Visc_coef_calc)
 
 	PROTO_KERNEL_START
+	void Visc_coef_sph_calcF(Var<double,1>& a_Visc_coef,
+	                     const Var<double,1>& a_h_lambda,
+	                     const Var<double,1>& a_Fast_MS_speed_min,
+						 const double a_dx_d)
+	{
+		if (a_h_lambda(0) < 0) {
+			double temp = a_dx_d*a_h_lambda(0)*a_dx_d*a_h_lambda(0)/0.3/a_Fast_MS_speed_min(0)/a_Fast_MS_speed_min(0);
+			a_Visc_coef(0) = a_dx_d*a_h_lambda(0)*std::min({temp,1.0});
+		} else {
+			a_Visc_coef(0) = 0.0;
+		}
+	}
+	PROTO_KERNEL_END(Visc_coef_sph_calcF, Visc_coef_sph_calc)
+
+	PROTO_KERNEL_START
 	void mu_f_calcF(State& a_mu_f,
 	                const Var<double,1>& a_Visc_coef,
 	                const State& a_U,
@@ -386,11 +401,16 @@ namespace MHD_Artificial_Viscosity {
 			// double lambda = (a_W_low_avg(1) + a_af(0));
 			double lambda = a_af(0);
 			// lambda = 0.0;
-			a_F_ave_f(0) = a_r2detA_1_avg(0)*lambda*a_F_ave_f_low_unmapped(0);
-			a_F_ave_f(4) = a_r2detA_1_avg(0)*lambda*a_F_ave_f_low_unmapped(4);
+			a_F_ave_f(0) = lambda*a_F_ave_f_low_unmapped(0);
+			a_F_ave_f(4) = lambda*a_F_ave_f_low_unmapped(4);
 			a_F_ave_f(1) = a_r2detAA_1_avg(0)*lambda*a_F_ave_f_low_unmapped(1) + a_r2detAA_1_avg(1)*lambda*a_F_ave_f_low_unmapped(2) + a_r2detAA_1_avg(2)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(2) = a_r2detAA_1_avg(3)*lambda*a_F_ave_f_low_unmapped(1) + a_r2detAA_1_avg(4)*lambda*a_F_ave_f_low_unmapped(2) + a_r2detAA_1_avg(5)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(3) = a_r2detAA_1_avg(6)*lambda*a_F_ave_f_low_unmapped(1) + a_r2detAA_1_avg(7)*lambda*a_F_ave_f_low_unmapped(2) + a_r2detAA_1_avg(8)*lambda*a_F_ave_f_low_unmapped(3);
+			
+			a_F_ave_f(5) = a_r2detAA_1_avg(0)*lambda*a_F_ave_f_low_unmapped(5) + a_r2detAA_1_avg(1)*lambda*a_F_ave_f_low_unmapped(6) + a_r2detAA_1_avg(2)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(6) = a_r2detAA_1_avg(3)*lambda*a_F_ave_f_low_unmapped(5) + a_r2detAA_1_avg(4)*lambda*a_F_ave_f_low_unmapped(6) + a_r2detAA_1_avg(5)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(7) = a_r2detAA_1_avg(6)*lambda*a_F_ave_f_low_unmapped(5) + a_r2detAA_1_avg(7)*lambda*a_F_ave_f_low_unmapped(6) + a_r2detAA_1_avg(8)*lambda*a_F_ave_f_low_unmapped(7);
+			
 		}
 
 		if (a_d == 1) {  
@@ -398,11 +418,16 @@ namespace MHD_Artificial_Viscosity {
 			// double lambda = (a_W_low_avg(2) + a_af(0));
 			double lambda = a_af(0);
 			// lambda = 0.0;
-			a_F_ave_f(0) = a_rrdotdetA_2_avg(0)*lambda*a_F_ave_f_low_unmapped(0);
-			a_F_ave_f(4) = a_rrdotdetA_2_avg(0)*lambda*a_F_ave_f_low_unmapped(4);
+			a_F_ave_f(0) = lambda*a_F_ave_f_low_unmapped(0);
+			a_F_ave_f(4) = lambda*a_F_ave_f_low_unmapped(4);
 			a_F_ave_f(1) = a_rrdotdetAA_2_avg(0)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_2_avg(1)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_2_avg(2)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(2) = a_rrdotdetAA_2_avg(3)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_2_avg(4)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_2_avg(5)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(3) = a_rrdotdetAA_2_avg(6)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_2_avg(7)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_2_avg(8)*lambda*a_F_ave_f_low_unmapped(3);
+
+			a_F_ave_f(5) = a_rrdotdetAA_2_avg(0)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_2_avg(1)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_2_avg(2)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(6) = a_rrdotdetAA_2_avg(3)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_2_avg(4)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_2_avg(5)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(7) = a_rrdotdetAA_2_avg(6)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_2_avg(7)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_2_avg(8)*lambda*a_F_ave_f_low_unmapped(7);
+		
 		}
 
 		if (a_d == 2) {  
@@ -410,11 +435,16 @@ namespace MHD_Artificial_Viscosity {
 			// double lambda = (a_W_low_avg(3) + a_af(0));	
 			double lambda = a_af(0);	
 			// lambda = 0.0;
-			a_F_ave_f(0) = a_rrdotdetA_3_avg(0)*lambda*a_F_ave_f_low_unmapped(0);
-			a_F_ave_f(4) = a_rrdotdetA_3_avg(0)*lambda*a_F_ave_f_low_unmapped(4);
+			a_F_ave_f(0) = lambda*a_F_ave_f_low_unmapped(0);
+			a_F_ave_f(4) = lambda*a_F_ave_f_low_unmapped(4);
 			a_F_ave_f(1) = a_rrdotdetAA_3_avg(0)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_3_avg(1)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_3_avg(2)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(2) = a_rrdotdetAA_3_avg(3)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_3_avg(4)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_3_avg(5)*lambda*a_F_ave_f_low_unmapped(3);
 			a_F_ave_f(3) = a_rrdotdetAA_3_avg(6)*lambda*a_F_ave_f_low_unmapped(1) + a_rrdotdetAA_3_avg(7)*lambda*a_F_ave_f_low_unmapped(2) + a_rrdotdetAA_3_avg(8)*lambda*a_F_ave_f_low_unmapped(3);
+		
+			a_F_ave_f(5) = a_rrdotdetAA_3_avg(0)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_3_avg(1)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_3_avg(2)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(6) = a_rrdotdetAA_3_avg(3)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_3_avg(4)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_3_avg(5)*lambda*a_F_ave_f_low_unmapped(7);
+			a_F_ave_f(7) = a_rrdotdetAA_3_avg(6)*lambda*a_F_ave_f_low_unmapped(5) + a_rrdotdetAA_3_avg(7)*lambda*a_F_ave_f_low_unmapped(6) + a_rrdotdetAA_3_avg(8)*lambda*a_F_ave_f_low_unmapped(7);
+		
 		}
 
 
@@ -454,6 +484,139 @@ namespace MHD_Artificial_Viscosity {
 
 
 
+	// // Used to implement artificial viscosity
+	// void step_spherical(LevelBoxData<double,NUMCOMPS>& a_Rhs,
+	// 		  			LevelBoxData<double,NUMCOMPS>& a_JU,
+	// 		  			MHDLevelDataState& a_State)
+	// {
+	// 	static Stencil<double> m_divergence[DIM];
+	// 	static Stencil<double> m_interp_edge[DIM];
+	// 	static Stencil<double> m_interp_f_2nd[DIM];
+	// 	static bool initialized = false;
+	// 	if(!initialized)
+	// 	{
+	// 		for (int dir = 0; dir < DIM; dir++)
+	// 		{
+	// 			m_interp_edge[dir] = Stencil<double>::CellToFace(dir);
+	// 			m_interp_f_2nd[dir] = 0.5*Shift(Point::Zeros()) + 0.5*Shift(-Point::Basis(dir)); 
+	// 			m_divergence[dir] = Stencil<double>::FluxDivergence(dir);
+	// 		}
+	// 		initialized =  true;
+	// 	}
+	// 	using namespace std;
+		
+	// 	double a_dx = a_State.m_dx;
+	// 	double a_dy = a_State.m_dy;
+	// 	double a_dz = a_State.m_dz;
+	// 	double a_gamma = a_State.m_gamma;
+	// 	double dxd[3] = {a_dx, a_dy, a_dz};
+
+	// 	for (auto dit : a_State.m_U){
+	// 		Box dbx0 = a_JU[dit].box();
+	// 		Box dbx1 = dbx0.grow(8-NGHOST); // Are 2 ghost cells enough here? No, atleast 5 are required or strange V_theta appears in polar pulse problem.
+	// 		a_Rhs[dit].setVal(0.0);
+	// 		Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), a_U_ave(dbx0);
+	// 		MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 4);
+	// 		MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_actual_ave, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 4);
+	// 		MHD_Mapping::JU_to_U_ave_calc_func(a_U_ave, a_JU[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit]);
+
+	// 		MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_ave, a_dx, a_dy, a_dz);
+	// 		MHD_Mapping::Correct_V_theta_phi_at_poles(a_U_Sph_actual_ave, a_dx, a_dy, a_dz);
+
+	// 		Vector W_bar(dbx1),W_bar_actual(dbx1);
+	// 		MHDOp::consToPrimSphcalc(W_bar,a_U_Sph_ave, a_U_Sph_actual_ave,a_gamma);
+	// 		MHDOp::consToPrimSphcalc(W_bar_actual,a_U_Sph_actual_ave, a_U_Sph_actual_ave, a_gamma);
+
+	// 		if (inputs.linear_visc_apply == 1) {
+	// 			//Confirm with Phil that W_bar is fine in place of W_ave. Will help in reducing stencil.
+	// 			for (int d = 0; d < DIM; d++)
+	// 			{
+	// 				Vector W_ave_edge = m_interp_edge[d](W_bar);
+	// 				Vector U_ave_edge = m_interp_edge[d](a_U_ave);
+	// 				Vector W_ave_edge_actual = m_interp_edge[d](W_bar_actual);
+
+	// 				// Vector W_ave_edge = m_interp_f_2nd[d](W_bar);
+	// 				// Vector W_ave_edge_actual = m_interp_f_2nd[d](W_bar_actual);
+
+	// 				Scalar Lambda_f = forall<double,1>(lambda_sph_calc, W_ave_edge_actual, d, a_gamma);  
+	// 				double dx_d = dxd[d];
+	// 				Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
+	// 				Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));
+	// 				Stencil<double> IdOp = 1.0*Shift(Point::Zeros());
+	// 				Stencil<double> D1 = SPlus - IdOp;
+	// 				Stencil<double> D2 = SPlus - 2.0*IdOp + SMinus;
+	// 				Stencil<double> D5 = (-1.0) * D1 * D2  * D2;
+	// 				Vector F_f = D5(a_U_Sph_ave, 1.0/64);
+	// 				Vector F_f_behind = SMinus(F_f);
+
+	// 				/* Commenting this makes the viscosity work. It might not preserve constant flow though. Need to check this effect.
+	// 				// Vector F_f_behind2 = SMinus(F_f);
+	// 				// BoxData<double,DIM*DIM> a_D5_A_inv_avg(dbx0);
+	// 				// if (d==0) a_D5_A_inv_avg = D5(a_State.m_A_inv_1_avg[dit], 1.0/64);
+	// 				// if (d==1) a_D5_A_inv_avg = D5(a_State.m_A_inv_2_avg[dit], 1.0/64);
+	// 				// if (d==2) a_D5_A_inv_avg = D5(a_State.m_A_inv_3_avg[dit], 1.0/64);
+	// 				// BoxData<double,DIM*DIM> a_D5_A_inv_avg_behind = SMinus(a_D5_A_inv_avg);
+	// 				// forallInPlace_p(D5_mult_U, F_f_behind, F_f_behind2, a_D5_A_inv_avg_behind, U_ave_edge);
+	// 				*/
+
+	// 				Vector F_f_behind_mapped(dbx0);
+	// 				F_f_behind_mapped.setVal(0.0);
+	// 				forallInPlace_p(Spherical_lin_visc_State, F_f_behind_mapped, F_f_behind, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Lambda_f, d, a_gamma, a_dx, a_dy, a_dz);
+	// 				// F_f_behind_mapped.setVal(0.0);
+	// 				Vector Rhs_d = m_divergence[d](F_f_behind_mapped);
+	// 				Rhs_d *= -1./dx_d;
+	// 				a_Rhs[dit] += Rhs_d;
+	// 			}
+
+	// 			// MHD_Output_Writer::WriteBoxData_array_nocoord(a_Rhs[dit], a_dx, a_dy, a_dz, "a_Rhs");
+
+	// 		}
+
+
+	// 		if (inputs.non_linear_visc_apply == 1) {
+	// 			for (int d = 0; d < DIM; d++)
+	// 			{
+	// 				double dx_d = dxd[d];
+	// 				Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
+	// 				Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));
+	// 				Stencil<double> IdOp = 1.0*Shift(Point::Zeros());
+	// 				Stencil<double> D1 = IdOp - SMinus;
+	// 				Vector F_f(dbx1), F_ave_f(dbx1);
+	// 				Scalar Lambda_f(dbx1);
+	// 				Vector F_f_mapped(dbx1);
+	// 				F_f_mapped.setVal(0.0);
+	// 				Scalar v_d =  slice(W_bar_actual,1+d);
+	// 				// Scalar v_d_behind = alias(v_d,Point::Basis(d)*(1));
+	// 				// Scalar h_lambda = forall<double>(viscosity1_calc,v_d,v_d_behind);
+	// 				Scalar h_lambda = D1(v_d);
+
+	// 				for (int d2 = 0; d2 < DIM; d2++) {
+	// 					if (d2!=d) {
+	// 						Scalar v_d2 = slice(W_bar_actual,1+d2);
+	// 						Scalar v_d2_ahead = alias(v_d2,Point::Basis(d2)*(-1));
+	// 						Scalar v_d2_behind = alias(v_d2,Point::Basis(d2)*(1));
+	// 						Scalar v_d2_behind_dp = alias(v_d2_ahead,Point::Basis(d)*(1));
+	// 						Scalar v_d2_behind_dm = alias(v_d2_behind,Point::Basis(d)*(1));
+	// 						Scalar v_d2_div = forall<double>(v_d2_div_calc,v_d2_ahead,v_d2_behind,v_d2_behind_dp,v_d2_behind_dm);
+	// 						h_lambda += v_d2_div;
+	// 					}
+	// 				}
+	// 				Scalar Fast_MS_speed = forall<double>(Fast_MS_speed_calc, W_bar_actual, d, a_gamma);
+	// 				Scalar Fast_MS_speed_behind = alias(Fast_MS_speed,Point::Basis(d)*(1));
+	// 				Scalar Fast_MS_speed_min = forall<double>(Fast_MS_speed_min_calc,Fast_MS_speed,Fast_MS_speed_behind);
+	// 				Scalar Visc_coef = forall<double>(Visc_coef_calc,h_lambda,Fast_MS_speed_min);
+					
+	// 				F_f = D1(a_U_Sph_ave);
+	// 				forallInPlace_p(Spherical_lin_visc_State, F_f_mapped, F_f, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Visc_coef, d, a_gamma, a_dx, a_dy, a_dz);
+	// 				Vector Rhs_d = m_divergence[d](F_f_mapped);
+	// 				Rhs_d *= -1./dx_d;
+	// 				a_Rhs[dit] += Rhs_d;
+	// 			}
+	// 		}
+
+	// 	}
+	// }
+
 	// Used to implement artificial viscosity
 	void step_spherical(LevelBoxData<double,NUMCOMPS>& a_Rhs,
 			  			LevelBoxData<double,NUMCOMPS>& a_JU,
@@ -483,8 +646,7 @@ namespace MHD_Artificial_Viscosity {
 
 		for (auto dit : a_State.m_U){
 			Box dbx0 = a_JU[dit].box();
-			Box dbx1 = dbx0.grow(8-NGHOST); // Are 2 ghost cells enough here? No, atleast 5 are required or strange V_theta appears in polar pulse problem.
-			//Box dbx1 = a_JU[dit].box();
+			Box dbx1 = dbx0.grow(0); // Are 2 ghost cells enough here? No, atleast 5 are required or strange V_theta appears in polar pulse problem.
 			a_Rhs[dit].setVal(0.0);
 			Vector a_U_Sph_ave(dbx0), a_U_Sph_actual_ave(dbx0), a_U_ave(dbx0);
 			MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U_Sph_ave, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 4);
@@ -498,96 +660,91 @@ namespace MHD_Artificial_Viscosity {
 			MHDOp::consToPrimSphcalc(W_bar,a_U_Sph_ave, a_U_Sph_actual_ave,a_gamma);
 			MHDOp::consToPrimSphcalc(W_bar_actual,a_U_Sph_actual_ave, a_U_Sph_actual_ave, a_gamma);
 
-			if (inputs.linear_visc_apply == 1) {
-				//Confirm with Phil that W_bar is fine in place of W_ave. Will help in reducing stencil.
-				for (int d = 0; d < DIM; d++)
-				{
-					Vector W_ave_edge = m_interp_edge[d](W_bar);
-					Vector U_ave_edge = m_interp_edge[d](a_U_ave);
-					Vector W_ave_edge_actual = m_interp_edge[d](W_bar_actual);
+			// if (inputs.linear_visc_apply == 1) {
+			// 	//Confirm with Phil that W_bar is fine in place of W_ave. Will help in reducing stencil.
+			// 	for (int d = 0; d < DIM; d++)
+			// 	{
+			// 		Vector W_ave_edge = m_interp_edge[d](W_bar);
+			// 		Vector U_ave_edge = m_interp_edge[d](a_U_ave);
+			// 		Vector W_ave_edge_actual = m_interp_edge[d](W_bar_actual);
 
-					// Vector W_ave_edge = m_interp_f_2nd[d](W_bar);
-					// Vector W_ave_edge_actual = m_interp_f_2nd[d](W_bar_actual);
+			// 		// Vector W_ave_edge = m_interp_f_2nd[d](W_bar);
+			// 		// Vector W_ave_edge_actual = m_interp_f_2nd[d](W_bar_actual);
 
-					Scalar Lambda_f = forall<double,1>(lambda_sph_calc, W_ave_edge_actual, d, a_gamma);  
-					double dx_d = dxd[d];
-					Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
-					Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));
-					Stencil<double> IdOp = 1.0*Shift(Point::Zeros());
-					Stencil<double> D1 = SPlus - IdOp;
-					Stencil<double> D2 = SPlus - 2.0*IdOp + SMinus;
-					Stencil<double> D5 = (-1.0) * D1 * D2  * D2;
-					Vector F_f = D5(a_U_Sph_ave, 1.0/64);
-					Vector F_f_behind = SMinus(F_f);
+			// 		Scalar Lambda_f = forall<double,1>(lambda_sph_calc, W_ave_edge_actual, d, a_gamma);  
+			// 		double dx_d = dxd[d];
+			// 		Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
+			// 		Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));
+			// 		Stencil<double> IdOp = 1.0*Shift(Point::Zeros());
+			// 		Stencil<double> D1 = SPlus - IdOp;
+			// 		Stencil<double> D2 = SPlus - 2.0*IdOp + SMinus;
+			// 		Stencil<double> D5 = (-1.0) * D1 * D2  * D2;
+			// 		Vector F_f = D5(a_U_Sph_ave, 1.0/64);
+			// 		Vector F_f_behind = SMinus(F_f);
 
-					/* Commenting this makes the viscosity work. It might not preserve constant flow though. Need to check this effect.
-					// Vector F_f_behind2 = SMinus(F_f);
-					// BoxData<double,DIM*DIM> a_D5_A_inv_avg(dbx0);
-					// if (d==0) a_D5_A_inv_avg = D5(a_State.m_A_inv_1_avg[dit], 1.0/64);
-					// if (d==1) a_D5_A_inv_avg = D5(a_State.m_A_inv_2_avg[dit], 1.0/64);
-					// if (d==2) a_D5_A_inv_avg = D5(a_State.m_A_inv_3_avg[dit], 1.0/64);
-					// BoxData<double,DIM*DIM> a_D5_A_inv_avg_behind = SMinus(a_D5_A_inv_avg);
-					// forallInPlace_p(D5_mult_U, F_f_behind, F_f_behind2, a_D5_A_inv_avg_behind, U_ave_edge);
-					*/
+			// 		/* Commenting this makes the viscosity work. It might not preserve constant flow though. Need to check this effect.
+			// 		// Vector F_f_behind2 = SMinus(F_f);
+			// 		// BoxData<double,DIM*DIM> a_D5_A_inv_avg(dbx0);
+			// 		// if (d==0) a_D5_A_inv_avg = D5(a_State.m_A_inv_1_avg[dit], 1.0/64);
+			// 		// if (d==1) a_D5_A_inv_avg = D5(a_State.m_A_inv_2_avg[dit], 1.0/64);
+			// 		// if (d==2) a_D5_A_inv_avg = D5(a_State.m_A_inv_3_avg[dit], 1.0/64);
+			// 		// BoxData<double,DIM*DIM> a_D5_A_inv_avg_behind = SMinus(a_D5_A_inv_avg);
+			// 		// forallInPlace_p(D5_mult_U, F_f_behind, F_f_behind2, a_D5_A_inv_avg_behind, U_ave_edge);
+			// 		*/
 
-					Vector F_f_behind_mapped(dbx0);
-					F_f_behind_mapped.setVal(0.0);
-					forallInPlace_p(Spherical_lin_visc_State, F_f_behind_mapped, F_f_behind, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Lambda_f, d, a_gamma, a_dx, a_dy, a_dz);
-					// F_f_behind_mapped.setVal(0.0);
-					Vector Rhs_d = m_divergence[d](F_f_behind_mapped);
-					Rhs_d *= -1./dx_d;
-					a_Rhs[dit] += Rhs_d;
-				}
+			// 		Vector F_f_behind_mapped(dbx0);
+			// 		F_f_behind_mapped.setVal(0.0);
+			// 		forallInPlace_p(Spherical_lin_visc_State, F_f_behind_mapped, F_f_behind, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Lambda_f, d, a_gamma, a_dx, a_dy, a_dz);
+			// 		// F_f_behind_mapped.setVal(0.0);
+			// 		Vector Rhs_d = m_divergence[d](F_f_behind_mapped);
+			// 		Rhs_d *= -1./dx_d;
+			// 		a_Rhs[dit] += Rhs_d;
+			// 	}
 
-				// MHD_Output_Writer::WriteBoxData_array_nocoord(a_Rhs[dit], a_dx, a_dy, a_dz, "a_Rhs");
+			// 	// MHD_Output_Writer::WriteBoxData_array_nocoord(a_Rhs[dit], a_dx, a_dy, a_dz, "a_Rhs");
 
-			}
+			// }
 
 
 			if (inputs.non_linear_visc_apply == 1) {
+				Scalar Lambda_f(dbx1);
+				Lambda_f.setVal(0.0);
 				for (int d = 0; d < DIM; d++)
 				{
 					double dx_d = dxd[d];
-					Stencil<double> SPlus = 1.0*Shift(Point::Basis(d)) ;
-					Stencil<double> SMinus = 1.0*Shift(-Point::Basis(d));
-					Stencil<double> IdOp = 1.0*Shift(Point::Zeros());
-					Stencil<double> D1 = IdOp - SMinus;
-					Vector F_f(dbx1), F_ave_f(dbx1);
-					Scalar Lambda_f(dbx1);
-					Vector F_f_mapped(dbx1);
-					F_f_mapped.setVal(0.0);
-					Scalar v_d =  slice(W_bar_actual,1+d);
-					// Scalar v_d_behind = alias(v_d,Point::Basis(d)*(1));
-					// Scalar h_lambda = forall<double>(viscosity1_calc,v_d,v_d_behind);
-					Scalar h_lambda = D1(v_d);
-
-					for (int d2 = 0; d2 < DIM; d2++) {
-						if (d2!=d) {
-							Scalar v_d2 = slice(W_bar_actual,1+d2);
-							Scalar v_d2_ahead = alias(v_d2,Point::Basis(d2)*(-1));
-							Scalar v_d2_behind = alias(v_d2,Point::Basis(d2)*(1));
-							Scalar v_d2_behind_dp = alias(v_d2_ahead,Point::Basis(d)*(1));
-							Scalar v_d2_behind_dm = alias(v_d2_behind,Point::Basis(d)*(1));
-							Scalar v_d2_div = forall<double>(v_d2_div_calc,v_d2_ahead,v_d2_behind,v_d2_behind_dp,v_d2_behind_dm);
-							h_lambda += v_d2_div;
-						}
-					}
+					Stencil<double> Avg = 0.5*Shift(-Point::Basis(d)) + 0.5*Shift(Point::Zeros());
+					Stencil<double> D1 = 1.0*Shift(Point::Zeros()) - 1.0*Shift(-Point::Basis(d));
+					Lambda_f = Avg(a_State.m_divV[dit]);
 					Scalar Fast_MS_speed = forall<double>(Fast_MS_speed_calc, W_bar_actual, d, a_gamma);
 					Scalar Fast_MS_speed_behind = alias(Fast_MS_speed,Point::Basis(d)*(1));
 					Scalar Fast_MS_speed_min = forall<double>(Fast_MS_speed_min_calc,Fast_MS_speed,Fast_MS_speed_behind);
-					Scalar Visc_coef = forall<double>(Visc_coef_calc,h_lambda,Fast_MS_speed_min);
+					Scalar Visc_coef = forall<double>(Visc_coef_sph_calc,Lambda_f,Fast_MS_speed_min,dx_d);
 					
-					F_f = D1(a_U_Sph_ave);
-					forallInPlace_p(Spherical_lin_visc_State, F_f_mapped, F_f, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Visc_coef, d, a_gamma, a_dx, a_dy, a_dz);
+					// Vector a_U_behind = alias(a_U_ave,Point::Basis(d)*(1));
+					// Vector mu_f = forall<double,NUMCOMPS>(mu_f_calc, Visc_coef, a_U_ave, a_U_behind);
+					// Vector Rhs_d = m_divergence[d](mu_f);
+					// Rhs_d *= -1./dx_d;
+					// a_Rhs[dit] += Rhs_d;
+
+
+					// Vector F_f2(dbx1);
+					Vector F_f = D1(a_U_Sph_actual_ave);
+					// MHD_Mapping::W_normalized_sph_to_W_Sph(F_f2, F_f, a_State.m_A_row_mag_face_avg[d][dit], d);
+					F_f *= 0.3;
+					Vector F_f_mapped(dbx1);
+					F_f_mapped.setVal(0.0);
+					// forallInPlace_p(Spherical_lin_visc_State, F_f_mapped, F_f, a_State.m_r2detA_1_avg[dit], a_State.m_r2detAA_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_rrdotdetAA_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_rrdotdetAA_3_avg[dit], Visc_coef, d, a_gamma, a_dx, a_dy, a_dz);
+					forallInPlace_p(Spherical_lin_visc_State, F_f_mapped, F_f, a_State.m_r2detA_1_avg[dit], a_State.m_A_1_avg[dit], a_State.m_rrdotdetA_2_avg[dit], a_State.m_A_2_avg[dit], a_State.m_rrdotdetA_3_avg[dit], a_State.m_A_3_avg[dit], Visc_coef, d, a_gamma, a_dx, a_dy, a_dz);
 					Vector Rhs_d = m_divergence[d](F_f_mapped);
 					Rhs_d *= -1./dx_d;
 					a_Rhs[dit] += Rhs_d;
+
+					
 				}
+				
 			}
 
 		}
 	}
-
-
 
 }

@@ -71,14 +71,17 @@ namespace MHD_Mapping {
 	                             BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
 	                             BoxData<double,DIM>& a_r2detAn_1_avg,
 								 BoxData<double,DIM>& a_A_row_mag_1_avg,
+								 BoxData<double,DIM*DIM>& a_A_1_avg,
 	                             BoxData<double,1>& a_rrdotdetA_2_avg,
 	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
 	                             BoxData<double,DIM>& a_rrdotd3ncn_2_avg,
 								 BoxData<double,DIM>& a_A_row_mag_2_avg,
+								 BoxData<double,DIM*DIM>& a_A_2_avg,
 	                             BoxData<double,1>& a_rrdotdetA_3_avg,
 	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_3_avg,
 	                             BoxData<double,DIM>& a_rrdotncd2n_3_avg,
 								 BoxData<double,DIM>& a_A_row_mag_3_avg,
+								 BoxData<double,DIM*DIM>& a_A_3_avg,
 	                             const double a_dx,
 	                             const double a_dy,
 	                             const double a_dz,
@@ -143,6 +146,11 @@ namespace MHD_Mapping {
 
 	void W_Sph_to_W_normalized_sph(BoxData<double,NUMCOMPS>& W_normalized_sph,
 	                    const BoxData<double,NUMCOMPS>& W_Sph,
+						BoxData<double,DIM>& a_A_row_mag_face_avg,
+	                    int a_d);
+
+	void W_normalized_sph_to_W_Sph(BoxData<double,NUMCOMPS>& W_sph,
+	                    const BoxData<double,NUMCOMPS>& W_normalized_Sph,
 						BoxData<double,DIM>& a_A_row_mag_face_avg,
 	                    int a_d);
 

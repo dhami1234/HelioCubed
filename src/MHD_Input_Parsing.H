@@ -59,6 +59,7 @@ class Parsefrominputs {
     int Riemann_solver_type;
     double entropy_fix_coeff;
     int initialize_in_spherical_coords;
+    int output_in_spherical_coords;
     double C1_fix; // A constant in wavy grid definition.
     double r_in;
     double r_out;
@@ -116,6 +117,7 @@ class Parsefrominputs {
 		args.add("Riemann_solver_type",  Riemann_solver_type);
 		args.add("entropy_fix_coeff",  entropy_fix_coeff);
 		args.add("initialize_in_spherical_coords",  initialize_in_spherical_coords);
+		args.add("output_in_spherical_coords",  output_in_spherical_coords);
 		args.add("C1_fix",  C1_fix);
 		args.add("r_in",  r_in);
 		args.add("r_out",  r_out);
@@ -186,6 +188,7 @@ class Parsefrominputs {
 			cout << "Riemann_solver_type: "    << Riemann_solver_type << endl;
 			cout << "entropy_fix_coeff: "    << entropy_fix_coeff << endl;
 			cout << "initialize_in_spherical_coords: "    << initialize_in_spherical_coords << endl;
+			cout << "output_in_spherical_coords: "    << output_in_spherical_coords << endl;
 			cout << "C1_fix: "    << C1_fix << endl;
 			cout << "r_in: "    << r_in << endl;
 			cout << "r_out: "    << r_out << endl;

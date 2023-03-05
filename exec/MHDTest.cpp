@@ -129,9 +129,11 @@ int main(int argc, char* argv[])
 		// Read data from h5 BC
 		std::vector<BoxData<double, NUMCOMPS, HOST>> BC_data;
 
-		std::vector<double> dtheta;
+		// std::vector<double> dtheta;
 		if (inputs.grid_type_global == 2) reader.readData(BC_data, inputs.BC_file);
-		if (inputs.grid_type_global == 2) reader.readGeom(dtheta, inputs.BC_file);
+
+		// if (inputs.grid_type_global == 2) reader.readGeom(dtheta, inputs.BC_file);
+		// if (procID()) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, BC_data[0], "OFT_BCs");
 		
 		if (inputs.restartStep == 0){
 			if (inputs.grid_type_global == 2 && (inputs.initialize_in_spherical_coords == 1)){
@@ -162,6 +164,7 @@ int main(int argc, char* argv[])
 		{	
 			auto start = chrono::steady_clock::now();
 			state.m_divB_calculated = false;
+			state.m_divV_calculated = false;
 			state.m_Viscosity_calculated = false;
 			state.m_min_dt_calculated = false;
 			
@@ -227,8 +230,12 @@ int main(int argc, char* argv[])
 
 				if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
 				{	
-					MHD_Output_Writer::Write_data(state, k, time/inputs.velocity_scale, dt);			
-					
+					if (inputs.sph_inner_BC_hdf5 == 1){
+						MHD_Output_Writer::Write_data(state, k, MHD_Probe::getPhysTime(time/inputs.velocity_scale), dt);
+					} else {
+						MHD_Output_Writer::Write_data(state, k, time/inputs.velocity_scale, dt);
+					}
+								
 				}
 				if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
 				{
@@ -242,9 +249,9 @@ int main(int argc, char* argv[])
 			
 			if (inputs.sph_inner_BC_hdf5 == 1){
 				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
-				if(pid==0) cout <<"nstep = " << k << " Phys Time = " << setprecision(8) << physical_time << " time in seconds = " << time/inputs.velocity_scale << " time step in seconds = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
+				if(pid==0) cout <<"nstep = " << k << " Phys Time = " << setprecision(8) << physical_time << " t(s) = " << time/inputs.velocity_scale << " dt(s) = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
 			} else {
-				if(pid==0) cout <<"nstep = " << k << " time (s) = " << time/inputs.velocity_scale << " time step (s) = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
+				if(pid==0) cout <<"nstep = " << k << " t(s) = " << time/inputs.velocity_scale << " dt(s) = " << dt/inputs.velocity_scale << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms"  << endl;
 			}
 		}	
 	

@@ -30,6 +30,7 @@ public:
 	double m_dz;
 	double m_gamma;
 	bool m_divB_calculated;
+	bool m_divV_calculated;
 	bool m_Viscosity_calculated;
 	bool m_min_dt_calculated;
 	bool m_CME_inserted;
@@ -38,6 +39,7 @@ public:
 	LevelBoxData<double,NUMCOMPS> m_U;
 	LevelBoxData<double,NUMCOMPS> m_U_old;
 	LevelBoxData<double,NUMCOMPS> m_divB;
+	LevelBoxData<double,1> m_divV;
 	LevelBoxData<double,NUMCOMPS> m_Viscosity;
 	LevelBoxData<double,NUMCOMPS> m_BC;
 	LevelBoxData<double,NUMCOMPS> m_CME;
@@ -57,14 +59,17 @@ public:
 	LevelBoxData<double,DIM*DIM> m_r2detAA_1_avg;
 	LevelBoxData<double,DIM> m_r2detAn_1_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_1_avg;
+	LevelBoxData<double,DIM*DIM> m_A_1_avg;
 	LevelBoxData<double,1> m_rrdotdetA_2_avg;
 	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_2_avg;
 	LevelBoxData<double,DIM> m_rrdotd3ncn_2_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_2_avg;
+	LevelBoxData<double,DIM*DIM> m_A_2_avg;
 	LevelBoxData<double,1> m_rrdotdetA_3_avg;
 	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_3_avg;
 	LevelBoxData<double,DIM> m_rrdotncd2n_3_avg;
 	LevelBoxData<double,DIM> m_A_row_mag_3_avg;
+	LevelBoxData<double,DIM*DIM> m_A_3_avg;
 
 
 
