@@ -1,5 +1,5 @@
 -tstop                           3608610.49
--CFL                             0.6
+-CFL                             0.3
 -domsizex                        1.0
 -domsizey                        1.0
 -domsizez                        1.0
@@ -7,10 +7,10 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         250
+-maxStep                         2500
 -restartStep                     0
 -outputInterval                  50
--CheckpointInterval              50
+-CheckpointInterval              100
 -MaxCheckpointFiles              3
 -BoxSize                         15
 -grid_type_global                2
@@ -18,8 +18,8 @@
 -HighBoundType                   2
 -sph_inner_BC_hdf5               1
 -limiter_apply                   1
--slope_flattening_apply          0
--non_linear_visc_apply           0
+-slope_flattening_apply          1
+-non_linear_visc_apply           1
 -linear_visc_apply               0
 -takedivBstep                    1
 -timeIntegratorType              1
@@ -27,14 +27,14 @@
 -Riemann_solver_type             2
 -entropy_fix_coeff               0.3
 -initialize_in_spherical_coords  1
--output_in_spherical_coords      0
+-output_in_spherical_coords      1
 -C1_fix                          0.1                   
 -r_in                            0.1   
 -r_out                           1.2
 -C_rad                           1.0
 -convTestType                    0
 -saveConvTestData                1
--Spherical_2nd_order             1
+-Spherical_2nd_order             0
 -BC_start_time                   2020.08993624772313296903460837887067
 -BC_cadence                      24.0
 -probe_cadence                   3600
@@ -43,7 +43,7 @@
 -Checkpoint_file_Prefix          Checkpoint_
 -Probe_trajectory_file           Probe/trajEarth2020.dat
 -Probe_data_file                 Probe/probed_data.dat 
--CME_Enter_Time                  2020.0923
+-CME_Enter_Time                  202000.0923
 -CME_get_checkpoint_before       3600
 -CME_r1                          46.67
 -CME_r0                          20.0

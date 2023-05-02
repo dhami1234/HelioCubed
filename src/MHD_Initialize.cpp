@@ -491,9 +491,9 @@ namespace MHD_Initialize {
 			forallInPlace_p(InitializeState,UBig,x,eta,a_gamma);
 			Stencil<double> Lap2nd = Stencil<double>::Laplacian();
 			Vector Lap = Lap2nd(UBig,dbx,1.0/24.0);
-			// UBig +=  Lap;
+			UBig +=  Lap;
 			HDF5Handler h5;
-			MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_State.m_U[dit], UBig, a_State.m_detAA_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 2);
+			MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_State.m_U[dit], UBig, a_State.m_detAA_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], true, 4);
 			MHDOp::DimToNonDimcalc(a_State.m_U[dit]);
 		}
 	}

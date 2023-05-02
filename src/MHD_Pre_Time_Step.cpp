@@ -264,7 +264,11 @@ namespace MHD_Pre_Time_Step {
             B_x_dash = B0_local/(1.0+T0*T0*r_dash*r_dash);
             B_y_dash = -inputs.CME_helicity_sign*B0_local*R0_Vandas*T0*r_dash*sin(phi)/(1.0+T0*T0*r_dash*r_dash)/(R0_Vandas+r_dash*cos(phi));
             B_z_dash =  inputs.CME_helicity_sign*B0_local*R0_Vandas*T0*r_dash*cos(phi)/(1.0+T0*T0*r_dash*r_dash)/(R0_Vandas+r_dash*cos(phi));
-            
+            if ((R0_Vandas+r_dash*cos(phi)) <= 0.0) {
+                B_x_dash = 0.0;
+                B_y_dash = 0.0;
+                B_z_dash = 0.0;
+            }
             //Zeroth - order solution of Vandas et al 2017
             //B_x_dash = B0_local*R0_Vandas/(1.0+T0*T0*r_dash*r_dash)/(R0_Vandas+r_dash*cos(phi));
             //B_y_dash = -inputs.CME_helicity_sign*B0_local*R0_Vandas*T0*r_dash*sin(phi)/(1.0+T0*T0*r_dash*r_dash)/(R0_Vandas+r_dash*cos(phi));
