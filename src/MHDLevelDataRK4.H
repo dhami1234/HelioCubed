@@ -31,11 +31,8 @@ public:
 	double m_gamma;
 	bool m_divB_calculated;
 	bool m_divV_calculated;
-	bool m_Viscosity_calculated;
-	bool m_min_dt_calculated;
-	bool m_CME_inserted;
-	bool m_CME_checkpoint_written;
-	double m_min_dt;
+
+
 //TODO: Put in MEMTYPE so we can run on the GPU?
 	LevelBoxData<double,NUMCOMPS> m_U;
 	LevelBoxData<double,NUMCOMPS> m_U_old;

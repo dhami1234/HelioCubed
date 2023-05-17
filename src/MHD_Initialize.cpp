@@ -471,6 +471,68 @@ namespace MHD_Initialize {
 		}
 	}
 
+
+
+
+
+
+
+
+
+
+	void initializeState(AMRData<double, NUMCOMPS>& a_U,
+						 const double a_dx,
+						 const double a_dy,
+						 const double a_dz)
+	{
+		// Operator::initConvolve(a_U, a_dx, f_eulerInitialize);
+		for (int lvl = 0; lvl < a_U.numLevels(); lvl++){
+			initializeState(a_U[lvl], a_dx, a_dy, a_dz);
+		}
+	}
+
+	void initializeState(LevelBoxData<double, NUMCOMPS>& a_U,
+						 const double a_dx,
+						 const double a_dy,
+						 const double a_dz)
+	{
+
+		for (auto dit : a_U){
+				Box dbx0=a_U[dit].box();
+				Box dbx = dbx0.grow(NGHOST);
+				Box dbx1 = dbx.grow(1);
+				BoxData<double,NUMCOMPS> UBig(dbx1);
+				BoxData<double,DIM> eta(dbx1);
+				MHD_Mapping::eta_calc(eta,dbx1,a_dx, a_dy, a_dz);
+				BoxData<double,DIM> x(dbx1);				
+				MHD_Mapping::eta_to_x_calc(x,eta, dbx1);
+				forallInPlace_p(InitializeState,UBig,x,eta,inputs.gamma);			
+				Stencil<double> Lap2nd = Stencil<double>::Laplacian();
+				Vector Lap = Lap2nd(UBig,dbx,1.0/24.0);
+				UBig +=  Lap;
+				UBig.copyTo(a_U[dit]);
+				MHDOp::DimToNonDimcalc(a_U[dit]);
+			}
+		
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	void initializeState_Spherical(MHDLevelDataState& a_State)
 	{
 

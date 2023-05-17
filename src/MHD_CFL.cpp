@@ -3,12 +3,14 @@
 #include "MHDOp.H"
 #include "MHD_Initialize.H"
 #include "MHD_Output_Writer.H"
+#include "MHD_Input_Parsing.H"
 // #include "Proto_WriteBoxData.H"
 #include "MHD_Constants.H"
 #include <algorithm>    // std::min
 
 typedef BoxData<double,1> Scalar;
 typedef BoxData<double,NUMCOMPS> Vector;
+extern Parsefrominputs inputs;
 /// @brief MHD_CFL namespace
 namespace MHD_CFL {
 
@@ -88,7 +90,7 @@ namespace MHD_CFL {
 
 
 	void Min_dt_calc_func(double& a_dt,
-	                    const BoxData<double,NUMCOMPS>& a_W_ave,
+	                    const BoxData<double,NUMCOMPS>& a_U_ave,
 						const Box a_dbx1,
                         const double a_dx,
                         const double a_dy,
@@ -98,6 +100,8 @@ namespace MHD_CFL {
         double dt[DIM];
         for (int dir = 0; dir < DIM; dir++)
 		{
+			Vector a_W_ave(a_dbx1);
+			MHDOp::consToPrimcalc(a_W_ave,a_U_ave,a_gamma);
 		    Scalar Lambda_f = forall<double>(lambdacalc, a_W_ave, dir, a_gamma);
             Box dbx0 = a_dbx1;
             BoxData<double,DIM> eta(dbx0);
@@ -115,6 +119,53 @@ namespace MHD_CFL {
             double a_dt_temp = min(dt[0], dt[1]);
             a_dt = min(a_dt_temp, dt[2]);
         #endif
+	}
+
+	void dt_calc_func(double& a_dt, 
+						const double a_time,
+						const AMRData<double,NUMCOMPS>& a_U, 
+						const double a_dx,
+                        const double a_dy,
+                        const double a_dz,
+						const int a_lev)
+	{	
+		if (inputs.convTestType == 0){
+			double dt_temp = 1.0e10*inputs.velocity_scale;
+			double dt_new;
+			for (auto iter : a_U[0].layout())
+			{
+				Box dbx2 = a_U[0][iter].box().grow(0-NGHOST);
+				MHD_CFL::Min_dt_calc_func(dt_new, a_U[0][iter], dbx2, a_dx, a_dy, a_dz, inputs.gamma);
+				if (dt_new < dt_temp) dt_temp = dt_new;
+			}
+			double mintime;
+			#ifdef PR_MPI
+				MPI_Reduce(&dt_temp, &mintime, 1, MPI_DOUBLE, MPI_MIN, 0,MPI_COMM_WORLD);
+				MPI_Bcast(&mintime, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+			#endif
+			a_dt = inputs.CFL*mintime;
+			if ((inputs.tstop*inputs.velocity_scale - a_time) < a_dt) a_dt = inputs.tstop*inputs.velocity_scale - a_time;	
+		} else {
+			// Following is done for required dt control in convergence tests
+			if (inputs.convTestType == 1)
+			{	
+				a_dt = inputs.CFL*inputs.velocity_scale;
+			} else {
+				#if DIM == 1
+					a_dt = inputs.CFL*a_dx*inputs.velocity_scale;
+				#endif
+				#if DIM == 2
+					a_dt = inputs.CFL*std::min({a_dx,a_dy})*inputs.velocity_scale;
+				#endif
+				#if DIM == 3
+					a_dt = inputs.CFL*std::min({a_dx,a_dy,a_dz})*inputs.velocity_scale;
+				#endif
+			}
+			if (inputs.convTestType == 2)
+			{
+				a_dt /= pow(2,a_lev);
+			}
+		}
 	}
 
 }

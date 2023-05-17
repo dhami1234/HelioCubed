@@ -13,5 +13,14 @@ namespace MHD_CFL
                         const double a_dx,
                         const double a_dy,
                         const double a_dz,
-	                    const double a_gamma);						 					 		 
+	                    const double a_gamma);	
+	
+	
+	void dt_calc_func(double& a_dt, 
+						const double a_time,
+						const AMRData<double,NUMCOMPS>& a_U, 
+						const double a_dx,
+                        const double a_dy,
+                        const double a_dz,
+						const int a_lev);					 					 		 
 }

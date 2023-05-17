@@ -12,7 +12,7 @@
 #include <vector>
 #include <time.h>
 extern Parsefrominputs inputs;
-
+extern bool CME_inserted;
 using namespace std;
 /// @brief MHD_Pre_Time_Step
 namespace MHD_Pre_Time_Step {
@@ -366,23 +366,26 @@ namespace MHD_Pre_Time_Step {
 	PROTO_KERNEL_END(superimpose_CMEF, superimpose_CME)
 
 
-    void Insert_CME(MHDLevelDataState& a_state,
-                const int a_k,
-                const double a_time,
-                const double a_dt)
+    void Insert_CME(AMRData<double,NUMCOMPS>& a_U,
+					AMRGrid& a_grid,
+					const double a_dx,
+					const double a_dy,
+					const double a_dz,
+                    const int a_k,
+                    const double a_time,
+                    const double a_dt)
     {
         double physical_time = MHD_Probe::getPhysTime(a_time);
+		double a_gamma = inputs.gamma;
 
-        double a_dx = a_state.m_dx;
-		double a_dy = a_state.m_dy;
-		double a_dz = a_state.m_dz;
-		double a_gamma = a_state.m_gamma;
-
-        if (!a_state.m_CME_inserted && (physical_time >= inputs.CME_Enter_Time)) {
+        if (!CME_inserted && (physical_time >= inputs.CME_Enter_Time)) {
             if (procID() == 0) cout << "Inserting CME" << endl;
-            for (auto dit : a_state.m_CME){	
-                a_state.m_CME[dit].setVal(0.0);	  
-                Box dbx1 = a_state.m_CME[dit].box();
+
+            for (int lvl = 0; lvl < a_U.numLevels(); lvl++)
+            for (auto dit : a_U[lvl]){	
+                Box dbx1 = a_U[lvl][dit].box();
+                BoxData<double,NUMCOMPS> m_CME;
+                m_CME.setVal(0.0);	  
                 BoxData<double,DIM> eta(dbx1);
                 MHD_Mapping::eta_calc(eta,dbx1,a_dx, a_dy, a_dz);
                 BoxData<double,DIM> x(dbx1);		
@@ -393,12 +396,12 @@ namespace MHD_Pre_Time_Step {
                     MHD_Mapping::get_sph_coords_cc(x, dbx1, a_dx, a_dy, a_dz);
                 }
 
-                forallInPlace_p(define_CME,a_state.m_CME[dit],x);
+                forallInPlace_p(define_CME,m_CME,x);
 
-                forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit]);
+                forallInPlace_p(superimpose_CME,a_U[lvl][dit],m_CME);
             }
-            a_state.m_CME_inserted = true;
-            MHD_Output_Writer::Write_data(a_state, a_k-1, physical_time, a_dt, true);
+            CME_inserted = true;
+            MHD_Output_Writer::Write_data(a_U, a_grid, a_dx, a_dy, a_dz, a_k-1, physical_time, a_dt, true);
         }
     }
 

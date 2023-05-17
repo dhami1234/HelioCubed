@@ -3,7 +3,7 @@ VARS_OLD := $(.VARIABLES)
 #CXX=clang++
 DEPXX=mpicxx
 CXX=mpicxx
-DIM=3
+DIM=2
 USE_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/lib
 HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/include
@@ -24,6 +24,7 @@ CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 CXXOPTFLAGS+= -DPR_OPS=TRUE
+CXXOPTFLAGS+= -DPR_AMR=TRUE
 TARGET:=HelioCubed.exe
 
 SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/_common/*.cpp) 
@@ -39,7 +40,7 @@ VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/_common 
-CXXFLAGS:= $(CXXOPTFLAGS) -std=c++14 -w
+CXXFLAGS:= $(CXXOPTFLAGS) -std=c++14 -w -ftemplate-backtrace-limit=0
 
 LIBS += $(LAPACK_LIB)
 

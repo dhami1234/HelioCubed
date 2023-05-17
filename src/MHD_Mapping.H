@@ -45,13 +45,11 @@ namespace MHD_Mapping {
 			   
 
 	void phys_coords_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
 	                      const double a_dx,
 	                      const double a_dy,
 	                      const double a_dz);	
 
 	void phys_coords_face_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
 	                      const double a_dx,
 	                      const double a_dy,
 	                      const double a_dz,				  		  

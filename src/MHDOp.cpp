@@ -127,7 +127,7 @@ namespace MHDOp {
 	 */ 
 	void DimToNonDimcalc(BoxData<double,NUMCOMPS>& a_U)
 	{
-		forallInPlace_p(DimToNonDim, a_U);
+		if (inputs.make_dimless == 1) forallInPlace_p(DimToNonDim, a_U);
 	}
 
 	/**
@@ -174,8 +174,8 @@ namespace MHDOp {
 	 * @param a_U will get converted from non-dimensional to dimensional.
 	 */ 
 	void NonDimToDimcalc(BoxData<double,NUMCOMPS>& a_U)
-	{
-		forallInPlace_p(NonDimToDim, a_U);
+	{	
+		if (inputs.make_dimless == 1) forallInPlace_p(NonDimToDim, a_U);
 	}
 
 
@@ -578,10 +578,10 @@ namespace MHDOp {
 			Vector W  = forall<double,NUMCOMPS>(consToPrim,U, gamma);
 			Vector W_ave = m_laplacian(W_bar,1.0/24.0);
 			W_ave += W;
-			if (!a_State.m_min_dt_calculated){ 
-				MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx2, a_dx, a_dy, a_dz, gamma);	
-				if (dt_new < a_min_dt) a_min_dt = dt_new;
-			}
+			// if (!a_State.m_min_dt_calculated){ 
+			// 	MHD_CFL::Min_dt_calc_func(dt_new, W_ave, dbx2, a_dx, a_dy, a_dz, gamma);	
+			// 	if (dt_new < a_min_dt) a_min_dt = dt_new;
+			// }
 
 			for (int d = 0; d < DIM; d++)
 			{
@@ -738,11 +738,11 @@ namespace MHDOp {
 			Vector W_actual = forall<double,NUMCOMPS>(consToPrimSph, a_U_Sph_actual_ave, a_U_Sph_actual_ave, gamma);
 
 			
-			if (!a_State.m_min_dt_calculated){ 
-				// MHD_CFL::Min_dt_calc_func(dt_new, W_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
-				MHD_CFL::Min_dt_calc_func(dt_new, W_bar_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
-				if (dt_new < a_min_dt) a_min_dt = dt_new;
-			}
+			// if (!a_State.m_min_dt_calculated){ 
+			// 	// MHD_CFL::Min_dt_calc_func(dt_new, W_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
+			// 	MHD_CFL::Min_dt_calc_func(dt_new, W_bar_actual, dbx1, a_dx, a_dy, a_dz, gamma);	
+			// 	if (dt_new < a_min_dt) a_min_dt = dt_new;
+			// }
 
 			for (int d = 0; d < DIM; d++)
 			{
@@ -853,10 +853,10 @@ namespace MHDOp {
 			// W_sph.copyTo(W_boxed);
 			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_boxed, "W_2");
 
-			if (!a_State.m_min_dt_calculated){ 
-				MHD_CFL::Min_dt_calc_func(dt_new, W_sph, dbx1, a_dx, a_dy, a_dz, gamma);	
-				if (dt_new < a_min_dt) a_min_dt = dt_new;
-			}
+			// if (!a_State.m_min_dt_calculated){ 
+			// 	MHD_CFL::Min_dt_calc_func(dt_new, W_sph, dbx1, a_dx, a_dy, a_dz, gamma);	
+			// 	if (dt_new < a_min_dt) a_min_dt = dt_new;
+			// }
 			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_sph, "W_ave2O");
 			for (int d = 0; d < DIM; d++)
 			{

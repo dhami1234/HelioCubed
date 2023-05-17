@@ -32,8 +32,8 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
     m_dz(a_dz),
 	m_gamma(a_gamma),
 	m_dbl(a_probDom, a_boxSize),
-	m_probDom(a_probDom),
-	m_min_dt(0.0)
+	m_probDom(a_probDom)
+
 {
 	m_U.define(m_dbl,Point::Zero());
 	m_U_old.define(m_dbl,Point::Zero());
@@ -189,18 +189,9 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 		MHDOp::step(a_DX.m_DU,new_state,a_State, dt_temp);
 	}
 
-	if (!a_State.m_min_dt_calculated){
-		double mintime;
-		#ifdef PR_MPI
-			MPI_Reduce(&dt_temp, &mintime, 1, MPI_DOUBLE, MPI_MIN, 0,MPI_COMM_WORLD);
-			MPI_Bcast(&mintime, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-		#endif
-		a_State.m_min_dt = mintime;
-	}
+	
 	a_State.m_divB_calculated = true; // This makes sure that divB is calculated only once in RK4
 	a_State.m_divV_calculated = true; // This makes sure that divV is calculated only once in RK4
-	a_State.m_Viscosity_calculated = true; // This makes sure that Viscosity is calculated only once in RK4
-	a_State.m_min_dt_calculated = true; // This makes sure that min_dt is calculated only once in RK4
 	a_DX*=a_dt;
 }
 

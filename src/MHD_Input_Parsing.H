@@ -79,7 +79,9 @@ class Parsefrominputs {
 	double CME_get_checkpoint_before; // Get a checkpoint file this much time in seconds before CME insertion.
 	double CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
 	//MHD equations can be written in dimensionless variables. We use scaling for this.
+	int make_dimless;
 	double density_scale, velocity_scale;
+	int numLevels, refRatio, regridBufferSize, regridInterval;
   public:
 
 	string removeSpaces(string str)
@@ -152,8 +154,13 @@ class Parsefrominputs {
 		args.add("CME_helicity_sign",  CME_helicity_sign);
 		args.add("CME_a1",  CME_a1);
 		args.add("CME_shift",  CME_shift);
+		args.add("make_dimless",  make_dimless);
 		args.add("density_scale",  density_scale);
 		args.add("velocity_scale",  velocity_scale);
+		args.add("numLevels",  numLevels);
+		args.add("refRatio",  refRatio);
+		args.add("regridBufferSize",  regridBufferSize);
+		args.add("regridInterval",  regridInterval);
 		args.parse(argc,argv);
 		// args.print(); //It prints, but not in the order I want.
 
@@ -224,8 +231,13 @@ class Parsefrominputs {
 			cout << "CME_helicity_sign: "    << CME_helicity_sign << endl;
 			cout << "CME_a1: "    << CME_a1 << endl;
 			cout << "CME_shift: "    << CME_shift << endl;
+			cout << "make_dimless: "    << make_dimless << endl;
 			cout << "density_scale: "    << density_scale << endl;
 			cout << "velocity_scale: "    << velocity_scale << endl;
+			cout << "numLevels: "    << numLevels << endl;
+			cout << "refRatio: "    << refRatio << endl;
+			cout << "regridBufferSize: "    << regridBufferSize << endl;
+			cout << "regridInterval: "    << regridInterval << endl;
 			cout << setw(75) << setfill('-') << "-" << endl;
 		}
 

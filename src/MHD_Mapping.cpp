@@ -184,7 +184,6 @@ namespace MHD_Mapping {
 	}
 
 	void phys_coords_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
 	                      const double a_dx,
 	                      const double a_dy,
 	                      const double a_dz)
@@ -196,7 +195,6 @@ namespace MHD_Mapping {
 	}
 
 	void phys_coords_face_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
 	                      const double a_dx,
 	                      const double a_dy,
 	                      const double a_dz,
@@ -256,7 +254,26 @@ namespace MHD_Mapping {
 				a_out_data(i) = a_phys_coords(i); // cm
 			}
 		}
-		
+
+		#if DIM == 2
+		if (inputs.grid_type_global == 2){
+			a_out_data(DIM+0) = a_W(0)/c_MP; // /cm^3
+			a_out_data(DIM+1) = a_W(1)/1e5; // km/s
+			a_out_data(DIM+2) = a_W(2)/1e5; // km/s
+			a_out_data(DIM+3) = a_W(3); // dyne/cm*2
+			a_out_data(DIM+4) = a_W(4); // Gauss
+			a_out_data(DIM+5) = a_W(5); // Gauss
+		} else {
+			a_out_data(DIM+0) = a_W(0); // g/cm^3
+			a_out_data(DIM+1) = a_W(1); // cm/s
+			a_out_data(DIM+2) = a_W(2); // cm/s
+			a_out_data(DIM+3) = a_W(3); // dyne/cm*2
+			a_out_data(DIM+4) = a_W(4); // Gauss
+			a_out_data(DIM+5) = a_W(5); // Gauss
+		}
+		#endif
+
+		#if DIM == 3
 		if (inputs.grid_type_global == 2){
 			a_out_data(DIM+0) = a_W(0)/c_MP; // /cm^3
 			a_out_data(DIM+1) = a_W(1)/1e5; // km/s
@@ -276,6 +293,7 @@ namespace MHD_Mapping {
 			a_out_data(DIM+6) = a_W(6); // Gauss
 			a_out_data(DIM+7) = a_W(7); // Gauss
 		}
+		#endif
 
 	}
 	PROTO_KERNEL_END(out_data_joinF, out_data_join)

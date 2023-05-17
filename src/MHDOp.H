@@ -5,12 +5,22 @@
 //TODO: These variables need to go into a common file or be defined in a more accessible way
 constexpr unsigned int NUMCOMPS=2*DIM+2;
 
-#define NGHOST 6
+
+#define NGHOST 7
+#if DIM==2
+#define CRHO 0
+#define CVELSTART 1
+#define CBSTART 4
+#define CPRES 3
+#define CENG 3
+#endif
+#if DIM==3
 #define CRHO 0
 #define CVELSTART 1
 #define CBSTART 5
 #define CPRES 4
 #define CENG 4
+#endif
 
 using namespace Proto;
 

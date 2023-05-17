@@ -7,6 +7,16 @@ using namespace Proto;
 
 namespace MHD_Initialize
 {
+	void initializeState(LevelBoxData<double, NUMCOMPS>& a_U,
+						 const double dx,
+						 const double dy,
+						 const double dz);
+
+	void initializeState(AMRData<double, NUMCOMPS>& a_U,
+						 const double dx,
+						 const double dy,
+						 const double dz);
+
 	void initializeState(MHDLevelDataState& a_State);
 
 	void initializeState_Spherical(MHDLevelDataState& a_State);
