@@ -7,20 +7,19 @@ using namespace Proto;
 
 namespace MHD_CFL
 {
-	void Min_dt_calc_func(double& a_dt,
-	                    const BoxData<double,NUMCOMPS>& a_W_ave,
-						const Box a_dbx1,
-                        const double a_dx,
-                        const double a_dy,
-                        const double a_dz,
-	                    const double a_gamma);	
-	
-	
-	void dt_calc_func(double& a_dt, 
-						const double a_time,
-						const AMRData<double,NUMCOMPS>& a_U, 
-						const double a_dx,
-                        const double a_dy,
-                        const double a_dz,
-						const int a_lev);					 					 		 
+	void Min_dt_calc_func(double &a_dt,
+						  const BoxData<double, NUMCOMPS> &a_W_ave,
+						  const Box a_dbx1,
+						  const double a_dx,
+						  const double a_dy,
+						  const double a_dz,
+						  const double a_gamma);
+
+	void dt_calc_func(double &a_dt,
+					  const double a_time,
+					  const AMRData<double, NUMCOMPS> &a_U,
+					  const double a_dx,
+					  const double a_dy,
+					  const double a_dz,
+					  const int a_lev);
 }

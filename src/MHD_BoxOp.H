@@ -128,7 +128,6 @@ public:
 
 	class mapping_variables
 	{
-
 	};
 
 	// Initialization
