@@ -186,9 +186,13 @@ int main(int argc, char* argv[])
 		}
         U.averageDown();
 		// cout << "State initialized" << endl;
-        AMRRK4<OP, double, NUMCOMPS> amrrk4(U, dx_arr);
-        AMREuler<OP, double, NUMCOMPS> amreuler(U, dx_arr);
-        AMREuler<OP_divB, double, NUMCOMPS> amrdivB(U, dx_arr);
+        // AMRRK4<OP, double, NUMCOMPS> amrrk4(U, dx_arr);
+        // AMREuler<OP, double, NUMCOMPS> amreuler(U, dx_arr);
+        // AMREuler<OP_divB, double, NUMCOMPS> amrdivB(U, dx_arr);
+
+		AMRRK4<BoxOp_MHD, double> amrrk4(U, dx_arr);
+		AMREuler<BoxOp_MHD, double> amreuler(U, dx_arr);
+		AMREuler<BoxOp_divB, double> amrdivB(U, dx_arr);
 		
 		// cout << "Starting time loop" << endl;
 
@@ -253,7 +257,6 @@ int main(int argc, char* argv[])
 			if (inputs.takedivBstep == 1) {
 				// Take step for divB term
 				PR_TIME("divBstep");
-				// divBstep.advance(time,dt,state);
 				amrdivB.advance(dt);
 			}
 

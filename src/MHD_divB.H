@@ -77,7 +77,7 @@ template<typename T, MemType MEM = MEMTYPE_DEFAULT>
 class BoxOp_divB : public BoxOp<T, NUMCOMPS, 1, MEM>
 {
     public:
-
+    using BoxOp<T,NUMCOMPS,1,MEM>::BoxOp;
     T gamma = inputs.gamma;
     mutable T umax;
 
@@ -90,10 +90,6 @@ class BoxOp_divB : public BoxOp<T, NUMCOMPS, 1, MEM>
     // What is the intended order of accuracy of the operator
     inline static constexpr int order() { return 4; }
     
-    inline BoxOp_divB() : BoxOp<T, NUMCOMPS, 1, MEM>() {}
-    inline BoxOp_divB(Array<double, DIM> a_dx) : BoxOp<T, NUMCOMPS, 1, MEM>(a_dx) {}
-    inline BoxOp_divB(double a_dx) : BoxOp<T, NUMCOMPS, 1, MEM>(a_dx) {}
-    
     // Initialization
     inline void init()
     {
@@ -105,16 +101,6 @@ class BoxOp_divB : public BoxOp<T, NUMCOMPS, 1, MEM>
             m_divergence[dir] = Stencil<double>::FluxDivergence(dir);
             m_laplacian_f[dir] = Stencil<double>::LaplacianFace(dir);
         }
-    }
-
-    // Helper Function
-    inline void computeFlux(
-            BoxData<T, NUMCOMPS>& a_flux,
-            BoxData<T, NUMCOMPS>& a_W_ave,
-            int a_dir) const
-    { 
-        Vector W_ave_edge = m_interp_edge[a_dir](a_W_ave);
-        a_flux = forall<double,NUMCOMPS>(Bavgcalc, W_ave_edge, a_dir);
     }
    
 
@@ -149,7 +135,8 @@ class BoxOp_divB : public BoxOp<T, NUMCOMPS, 1, MEM>
         // COMPUTE DIV FLUXES
         for (int dir = 0; dir < DIM; dir++)
         {
-            computeFlux(a_fluxes[dir], W_ave, dir);
+            Vector W_ave_edge = m_interp_edge[dir](W_ave);
+            a_fluxes[dir] = forall<double,NUMCOMPS>(Bavgcalc, W_ave_edge, dir);
             a_Rhs += m_divergence[dir](a_fluxes[dir]);
         }
         a_Rhs *= -(a_scale / dx); //Assuming isotropic grid spacing
