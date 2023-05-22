@@ -61,30 +61,6 @@ namespace MHD_Mapping {
 	                   const BoxData<double,DIM>& a_phys_coords,
 	                   const BoxData<double,NUMCOMPS>& a_W);
 
-	void Spherical_map_calc_func(BoxData<double,1>& a_Jacobian_ave,
-	                             BoxData<double,DIM*DIM>& a_detAA_avg,
-	                             BoxData<double,DIM*DIM>& a_detAA_inv_avg,
-	                             BoxData<double,1>& a_r2rdot_avg,
-	                             BoxData<double,1>& a_detA_avg,
-	                             BoxData<double,DIM>& a_A_row_mag_avg,
-	                             BoxData<double,1>& a_r2detA_1_avg,
-	                             BoxData<double,DIM*DIM>& a_r2detAA_1_avg,
-	                             BoxData<double,DIM>& a_r2detAn_1_avg,
-								 BoxData<double,DIM>& a_A_row_mag_1_avg,
-								 BoxData<double,DIM*DIM>& a_A_1_avg,
-	                             BoxData<double,1>& a_rrdotdetA_2_avg,
-	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_2_avg,
-	                             BoxData<double,DIM>& a_rrdotd3ncn_2_avg,
-								 BoxData<double,DIM>& a_A_row_mag_2_avg,
-								 BoxData<double,DIM*DIM>& a_A_2_avg,
-	                             BoxData<double,1>& a_rrdotdetA_3_avg,
-	                             BoxData<double,DIM*DIM>& a_rrdotdetAA_3_avg,
-	                             BoxData<double,DIM>& a_rrdotncd2n_3_avg,
-								 BoxData<double,DIM>& a_A_row_mag_3_avg,
-								 BoxData<double,DIM*DIM>& a_A_3_avg,
-	                             const double a_dx,
-	                             const double a_dy,
-	                             const double a_dz);
 
 	void Regular_map_filling_func(MHDLevelDataState& a_state);
 

@@ -19,7 +19,7 @@
 -sph_inner_BC_hdf5               1
 -limiter_apply                   1
 -slope_flattening_apply          1
--non_linear_visc_apply           1
+-non_linear_visc_apply           0
 -linear_visc_apply               0
 -takedivBstep                    1
 -timeIntegratorType              1

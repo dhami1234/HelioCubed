@@ -691,32 +691,54 @@ namespace MHD_Mapping
 	}
 	PROTO_KERNEL_END(Spherical_map_calcF, Spherical_map_calc)
 
-	void Spherical_map_calc_func(BoxData<double, 1> &a_Jacobian_ave,
-								 BoxData<double, DIM * DIM> &a_detAA_avg,
-								 BoxData<double, DIM * DIM> &a_detAA_inv_avg,
-								 BoxData<double, 1> &a_r2rdot_avg,
-								 BoxData<double, 1> &a_detA_avg,
-								 BoxData<double, DIM> &a_A_row_mag_avg,
-								 BoxData<double, 1> &a_r2detA_1_avg,
-								 BoxData<double, DIM * DIM> &a_r2detAA_1_avg,
-								 BoxData<double, DIM> &a_r2detAn_1_avg,
-								 BoxData<double, DIM> &a_A_row_mag_1_avg,
-								 BoxData<double, DIM * DIM> &a_A_1_avg,
-								 BoxData<double, 1> &a_rrdotdetA_2_avg,
-								 BoxData<double, DIM * DIM> &a_rrdotdetAA_2_avg,
-								 BoxData<double, DIM> &a_rrdotd3ncn_2_avg,
-								 BoxData<double, DIM> &a_A_row_mag_2_avg,
-								 BoxData<double, DIM * DIM> &a_A_2_avg,
-								 BoxData<double, 1> &a_rrdotdetA_3_avg,
-								 BoxData<double, DIM * DIM> &a_rrdotdetAA_3_avg,
-								 BoxData<double, DIM> &a_rrdotncd2n_3_avg,
-								 BoxData<double, DIM> &a_A_row_mag_3_avg,
-								 BoxData<double, DIM * DIM> &a_A_3_avg,
-								 const double a_dx,
-								 const double a_dy,
-								 const double a_dz)
+	void Spherical_map_filling_func(MHDLevelDataState &a_state)
 	{
-		forallInPlace_p(Spherical_map_calc, a_Jacobian_ave, a_detAA_avg, a_detAA_inv_avg, a_r2rdot_avg, a_detA_avg, a_A_row_mag_avg, a_r2detA_1_avg, a_r2detAA_1_avg, a_r2detAn_1_avg, a_A_row_mag_1_avg, a_A_1_avg, a_rrdotdetA_2_avg, a_rrdotdetAA_2_avg, a_rrdotd3ncn_2_avg, a_A_row_mag_2_avg, a_A_2_avg, a_rrdotdetA_3_avg, a_rrdotdetAA_3_avg, a_rrdotncd2n_3_avg, a_A_row_mag_3_avg, a_A_3_avg, a_dx, a_dy, a_dz);
+#if DIM == 3
+		for (auto dit : a_state.m_detAA_avg)
+		{
+			forallInPlace_p(Spherical_map_calc, 
+			(a_state.m_Jacobian_ave)[dit], 
+			(a_state.m_detAA_avg)[dit], 
+			(a_state.m_detAA_inv_avg)[dit], 
+			(a_state.m_r2rdot_avg)[dit], 
+			(a_state.m_detA_avg)[dit], 
+			(a_state.m_A_row_mag_avg)[dit], 
+			(a_state.m_Dr_detA_avg[0])[dit], 
+			(a_state.m_Dr_detA_A_avg[0])[dit], 
+			(a_state.m_Dr_AdjA_avg[0])[dit], 
+			(a_state.m_A_row_mag_face_avg[0])[dit], 
+			(a_state.m_A_1_avg)[dit], 
+			(a_state.m_Dr_detA_avg[1])[dit], 
+			(a_state.m_Dr_detA_A_avg[1])[dit], 
+			(a_state.m_Dr_AdjA_avg[1])[dit], 
+			(a_state.m_A_row_mag_face_avg[1])[dit], 
+			(a_state.m_A_2_avg)[dit], 
+			(a_state.m_Dr_detA_avg[2])[dit], 
+			(a_state.m_Dr_detA_A_avg[2])[dit], 
+			(a_state.m_Dr_AdjA_avg[2])[dit], 
+			(a_state.m_A_row_mag_face_avg[2])[dit], 
+			(a_state.m_A_3_avg)[dit], 
+			a_state.m_dx, 
+			a_state.m_dy, 
+			a_state.m_dz);
+
+			// m_r2detAA_1_avg    is m_Dr_detA_A_avg[0]
+			// m_rrdotdetAA_2_avg is m_Dr_detA_A_avg[1]
+			// m_rrdotdetAA_3_avg is m_Dr_detA_A_avg[2]
+
+			// m_r2detA_1_avg    is m_Dr_detA_avg[0]
+			// m_rrdotdetA_2_avg is m_Dr_detA_avg[1]
+			// m_rrdotdetA_3_avg is m_Dr_detA_avg[2]
+
+			// m_r2detAn_1_avg    is m_Dr_AdjA_avg[0]
+			// m_rrdotd3ncn_2_avg is m_Dr_AdjA_avg[1]
+			// m_rrdotncd2n_3_avg is m_Dr_AdjA_avg[2]
+
+			// m_A_row_mag_1_avg is m_A_row_mag_face_avg[0]
+			// m_A_row_mag_2_avg is m_A_row_mag_face_avg[1]
+			// m_A_row_mag_3_avg is m_A_row_mag_face_avg[2]
+		}
+#endif
 	}
 
 	PROTO_KERNEL_START
@@ -1135,32 +1157,6 @@ namespace MHD_Mapping
 				  const BoxData<double, DIM * DIM> &a_A_avg)
 	{
 		forallInPlace_p(Nineto33_calc, a_A_face_avg, a_A_avg);
-	}
-
-	void Spherical_map_filling_func(MHDLevelDataState &a_state)
-	{
-#if DIM == 3
-		for (auto dit : a_state.m_detAA_avg)
-		{
-			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_A_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_A_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit], (a_state.m_A_3_avg)[dit], a_state.m_dx, a_state.m_dy, a_state.m_dz);
-			
-			a_state.m_r2detAA_1_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[0][dit]);
-			a_state.m_rrdotdetAA_2_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[1][dit]);
-			a_state.m_rrdotdetAA_3_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[2][dit]);
-
-			a_state.m_r2detA_1_avg[dit].copyTo(a_state.m_Dr_detA_avg[0][dit]);
-			a_state.m_rrdotdetA_2_avg[dit].copyTo(a_state.m_Dr_detA_avg[1][dit]);
-			a_state.m_rrdotdetA_3_avg[dit].copyTo(a_state.m_Dr_detA_avg[2][dit]);
-
-			a_state.m_r2detAn_1_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[0][dit]);
-			a_state.m_rrdotd3ncn_2_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[1][dit]);
-			a_state.m_rrdotncd2n_3_avg[dit].copyTo(a_state.m_Dr_AdjA_avg[2][dit]);
-
-			a_state.m_A_row_mag_1_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[0][dit]);
-			a_state.m_A_row_mag_2_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[1][dit]);
-			a_state.m_A_row_mag_3_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[2][dit]);
-		}
-#endif
 	}
 
 	PROTO_KERNEL_START
