@@ -9,7 +9,51 @@ typedef Var<double, NUMCOMPS> State;
 
 namespace MHD_Mapping
 {
+	class mapping_variables
+	{
+		public:
+			BoxData<double, 1> m_J;
+			Array<BoxData<double, DIM>, DIM> m_NT;
 
+			// Things needed by Spherical mapping with radial flow correction
+			BoxData<double, DIM * DIM> m_detAA_avg;
+			BoxData<double, DIM * DIM> m_detAA_inv_avg;
+			BoxData<double, 1> m_r2rdot_avg;
+			BoxData<double, 1> m_detA_avg;
+			BoxData<double, DIM> m_A_row_mag_avg;
+			BoxData<double, 1> m_r2detA_1_avg;
+			BoxData<double, DIM * DIM> m_r2detAA_1_avg;
+			BoxData<double, DIM> m_r2detAn_1_avg;
+			BoxData<double, DIM> m_A_row_mag_1_avg;
+			BoxData<double, DIM * DIM> m_A_1_avg;
+			BoxData<double, 1> m_rrdotdetA_2_avg;
+			BoxData<double, DIM * DIM> m_rrdotdetAA_2_avg;
+			BoxData<double, DIM> m_rrdotd3ncn_2_avg;
+			BoxData<double, DIM> m_A_row_mag_2_avg;
+			BoxData<double, DIM * DIM> m_A_2_avg;
+			BoxData<double, 1> m_rrdotdetA_3_avg;
+			BoxData<double, DIM * DIM> m_rrdotdetAA_3_avg;
+			BoxData<double, DIM> m_rrdotncd2n_3_avg;
+			BoxData<double, DIM> m_A_row_mag_3_avg;
+			BoxData<double, DIM * DIM> m_A_3_avg;
+
+			// Extra things needed by Spherical mapping with radial flow correction when using Phil's operators
+			Array<BoxData<double, DIM * DIM, MEM>, DIM> m_Dr_detA_A_avg;
+			Array<BoxData<double, 1, MEM>, DIM> m_Dr_detA_avg;
+			Array<BoxData<double, DIM, MEM>, DIM> m_Dr_AdjA_avg;
+			Array<BoxData<double, DIM, MEM>, DIM> m_A_row_mag_face_avg;
+
+			// Things needed by Second order Spherical
+			BoxData<double, DIM> m_x_sph_cc;
+			BoxData<double, DIM> m_x_sph_fc_1;
+			BoxData<double, DIM> m_x_sph_fc_2;
+			BoxData<double, DIM> m_x_sph_fc_3;
+			BoxData<double, DIM> m_dx_sph;
+			BoxData<double, DIM> m_face_area;
+			BoxData<double, 1> m_cell_volume;
+	};
+
+	
 	void JU_to_U_2ndOrdercalc(BoxData<double, NUMCOMPS> &a_U_demapped,
 							  const BoxData<double, NUMCOMPS> &a_a_U,
 							  const BoxData<double, 1> &a_Jacobian_ave,
@@ -85,7 +129,12 @@ namespace MHD_Mapping
 								 bool a_exchanged_yet,
 								 bool a_r_dir_turn);
 
-	void Regular_map_filling_func(MHDLevelDataState &a_state);
+	// void Regular_map_filling_func(MHDLevelDataState &a_state);
+	void Regular_map_filling_func(mapping_variables &a_state, 
+								  const Box &a_bx,
+								  const double a_dx,
+								  const double a_dy,
+								  const double a_dz);
 
 	void Nineto33(BoxData<double, DIM, MEM, DIM> &a_A_face_avg,
 				  const BoxData<double, DIM * DIM> &a_A_avg);
@@ -196,4 +245,7 @@ namespace MHD_Mapping
 									  const double a_dz);
 
 	void Spherical_2O_map_filling_func(MHDLevelDataState &a_state);
+
+	
 }
+

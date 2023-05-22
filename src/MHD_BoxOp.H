@@ -114,8 +114,7 @@ public:
 	using BoxOp<T, NUMCOMPS, 1, MEM>::BoxOp;
 	T gamma = inputs.gamma;
 	mutable T umax;
-	BoxData<double, 1> m_J;
-	Array<BoxData<double, DIM>, DIM> m_NT;
+	
 	// inline static T min_dt() { return 1e-10; }
 	// How many ghost cells does the operator need from the state variables
 	inline static Point ghost() { return Point::Ones(NGHOST); }
@@ -126,9 +125,7 @@ public:
 	// What is the intended order of accuracy of the operator
 	inline static constexpr int order() { return 4; }
 
-	class mapping_variables
-	{
-	};
+	MHD_Mapping::mapping_variables m_map_vars;
 
 	// Initialization
 	inline void
@@ -162,31 +159,15 @@ public:
 #endif
 		if (DIM == 2)
 			a_dz = 1.0;
-		double volume = a_dx * a_dy * a_dz;
-		double dxd[3] = {a_dx, a_dy, a_dz};
 
 		Box bxmap = this->box().grow(NGHOST);
 		for (int dir = 0; dir < DIM; dir++)
 		{
 			bxmap = bxmap.extrude(dir);
 		}
-		BoxData<double, DIM> eta(bxmap);
-		MHD_Mapping::etaCorner_calc(eta, bxmap, a_dx, a_dy, a_dz);
-		BoxData<double, DIM> X(bxmap);
-		MHD_Mapping::eta_to_x_calc(X, eta, bxmap);
-		for (int dir = 0; dir < DIM; dir++)
-		{
-			m_NT[dir] = Operator::cofactor(X, dir);
-			// h5.writePatch(1,m_NT[dir],"m_NT"+to_string(dir));
-		}
-		m_J = Operator::jacobian(X, m_NT);
-#if DIM == 2
-		m_J *= 1.0 / (a_dx * a_dy);
-#endif
-#if DIM == 3
-		m_J *= 1.0 / (a_dx * a_dy * a_dz);
-#endif
-		// h5.writePatch(1,m_J,"m_J");
+
+		MHD_Mapping::Regular_map_filling_func(m_map_vars, bxmap, a_dx, a_dy, a_dz);
+
 	}
 
 	// Apply BCs by filling ghost cells in stage values. For Euler, this is done by calling
@@ -229,7 +210,7 @@ public:
 		Box dbx1 = dbx0;
 		Box dbx2 = dbx0.grow(0 - NGHOST);
 		a_Rhs.setVal(0.0);
-		auto a_U_ave = Operator::_cellTensorQuotient(a_JU_ave, m_J, a_JU_ave, m_J);
+		auto a_U_ave = Operator::_cellTensorQuotient(a_JU_ave, m_map_vars.m_J, a_JU_ave, m_map_vars.m_J);
 		Vector W_bar = forall<double, NUMCOMPS>(consToPrim, a_U_ave, gamma);
 		Vector U = m_deconvolve(a_U_ave);
 		Vector W = forall<double, NUMCOMPS>(consToPrim, U, gamma);
@@ -267,7 +248,7 @@ public:
 				forallInPlace_p(Fill_flux_calc, F_f, F_f_temp, s);
 			}
 			F_ave_f = m_convolve_f[d](F_f);
-			BoxData<double, 1, MEM, NUMCOMPS> fluxdir = Operator::_faceMatrixProductATB(m_NT[d], F_ave_f, m_NT[d], F_ave_f, d);
+			BoxData<double, 1, MEM, NUMCOMPS> fluxdir = Operator::_faceMatrixProductATB(m_map_vars.m_NT[d], F_ave_f, m_map_vars.m_NT[d], F_ave_f, d);
 			forallInPlace_p(Transpose_calc, F_f_mapped, fluxdir);
 			// h5.writePatch(1,F_f_mapped,"F_f_mapped"+to_string(d));
 			Vector Rhs_d = m_divergence[d](F_f_mapped);
