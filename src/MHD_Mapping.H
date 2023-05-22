@@ -93,8 +93,6 @@ namespace MHD_Mapping {
 
 	void Spherical_map_filling_func(MHDLevelDataState& a_state);
 
-	void Spherical_map_filling_func2(MHDLevelDataState& a_state);
-
 	void Jacobian_ave_sph_calc_func(BoxData<double,1>& a_Jacobian_ave,
 	                                const double a_dx,
 	                                const double a_dy,
