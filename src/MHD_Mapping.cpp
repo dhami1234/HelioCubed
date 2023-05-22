@@ -746,15 +746,7 @@ namespace MHD_Mapping
 		for (auto dit : a_state.m_detAA_avg)
 		{
 			MHD_Mapping::Spherical_map_calc_func((a_state.m_Jacobian_ave)[dit], (a_state.m_detAA_avg)[dit], (a_state.m_detAA_inv_avg)[dit], (a_state.m_r2rdot_avg)[dit], (a_state.m_detA_avg)[dit], (a_state.m_A_row_mag_avg)[dit], (a_state.m_r2detA_1_avg)[dit], (a_state.m_r2detAA_1_avg)[dit], (a_state.m_r2detAn_1_avg)[dit], (a_state.m_A_row_mag_1_avg)[dit], (a_state.m_A_1_avg)[dit], (a_state.m_rrdotdetA_2_avg)[dit], (a_state.m_rrdotdetAA_2_avg)[dit], (a_state.m_rrdotd3ncn_2_avg)[dit], (a_state.m_A_row_mag_2_avg)[dit], (a_state.m_A_2_avg)[dit], (a_state.m_rrdotdetA_3_avg)[dit], (a_state.m_rrdotdetAA_3_avg)[dit], (a_state.m_rrdotncd2n_3_avg)[dit], (a_state.m_A_row_mag_3_avg)[dit], (a_state.m_A_3_avg)[dit], a_state.m_dx, a_state.m_dy, a_state.m_dz);
-		}
-#endif
-	}
-
-	void Spherical_map_filling_func2(MHDLevelDataState &a_state)
-	{
-		// Filling data for Phil's operators
-		for (auto dit : a_state.m_r2detAA_1_avg)
-		{
+			
 			a_state.m_r2detAA_1_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[0][dit]);
 			a_state.m_rrdotdetAA_2_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[1][dit]);
 			a_state.m_rrdotdetAA_3_avg[dit].copyTo(a_state.m_Dr_detA_A_avg[2][dit]);
@@ -771,6 +763,7 @@ namespace MHD_Mapping
 			a_state.m_A_row_mag_2_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[1][dit]);
 			a_state.m_A_row_mag_3_avg[dit].copyTo(a_state.m_A_row_mag_face_avg[2][dit]);
 		}
+#endif
 	}
 
 	PROTO_KERNEL_START
