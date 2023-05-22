@@ -125,9 +125,7 @@ namespace MHD_Mapping
 								 BoxData<double, DIM * DIM> &a_A_3_avg,
 								 const double a_dx,
 								 const double a_dy,
-								 const double a_dz,
-								 bool a_exchanged_yet,
-								 bool a_r_dir_turn);
+								 const double a_dz);
 
 	// void Regular_map_filling_func(MHDLevelDataState &a_state);
 	void Regular_map_filling_func(mapping_variables &a_state, 
