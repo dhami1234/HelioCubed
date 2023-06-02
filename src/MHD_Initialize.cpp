@@ -553,7 +553,16 @@ namespace MHD_Initialize
 						 const double a_dy,
 						 const double a_dz)
 	{
-
+		static Stencil<double> m_derivative[DIM];
+		static bool initialized = false;
+		if (!initialized)
+		{
+			for (int dir = 0; dir < DIM; dir++)
+			{
+				m_derivative[dir] = Stencil<double>::Derivative(1, dir, 2);
+			}
+			initialized = true;
+		}
 		for (auto dit : a_U)
 		{
 			Box dbx0 = a_U[dit].box();
@@ -568,7 +577,21 @@ namespace MHD_Initialize
 			Stencil<double> Lap2nd = Stencil<double>::Laplacian();
 			Vector Lap = Lap2nd(UBig, dbx, 1.0 / 24.0);
 			UBig += Lap;
-			UBig.copyTo(a_U[dit]);
+			MHD_Mapping::mapping_variables m_map_vars;
+			MHD_Mapping::Regular_map_filling_func(m_map_vars, dbx1, a_dx, a_dy, a_dz);
+
+			a_U[dit] = forall<double, NUMCOMPS>(dot_pro_calcF, m_map_vars.m_J, UBig);
+			for (int d = 0; d < DIM; d++)
+			{
+				Vector d_UBig = m_derivative[d](UBig);
+				Scalar d_Jacobian_ave = m_derivative[d](m_map_vars.m_J);
+				Vector dot_pro = forall<double, NUMCOMPS>(dot_pro_calcF, d_Jacobian_ave, d_UBig);
+				dot_pro *= 1. / 12.;
+				a_U[dit] += dot_pro;
+			}
+
+
+			// UBig.copyTo(a_U[dit]);
 			MHDOp::DimToNonDimcalc(a_U[dit]);
 		}
 	}

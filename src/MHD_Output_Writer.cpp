@@ -67,10 +67,13 @@ namespace MHD_Output_Writer
 					// W_bar itself is not 4th order W. But it is calculated from 4th order accurate JU for output.
 					U[lvl][dit].copyTo(new_state2[dit]);
 					MHDOp::NonDimToDimcalc(new_state2[dit]);
-					// MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],new_state2[ dit],(state.m_J)[ dit],inputs.gamma);
+					MHD_Mapping::mapping_variables m_map_vars;
+					Box dbx1 = new_state2[dit].box().grow(1);
+					MHD_Mapping::Regular_map_filling_func(m_map_vars, dbx1, dx, dy, dz);
+					MHD_Mapping::JU_to_W_bar_calc(new_state[ dit],new_state2[ dit],(m_map_vars.m_J),inputs.gamma);
 				}
 				MHD_Mapping::phys_coords_calc(phys_coords[dit], dx, dy, dz);
-				MHD_Mapping::out_data_calc(out_data[dit], phys_coords[dit], new_state2[dit]);
+				MHD_Mapping::out_data_calc(out_data[dit], phys_coords[dit], new_state[dit]);
 				out_data[dit].copyTo(W[lvl][dit]);
 			}
 		}

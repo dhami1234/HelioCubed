@@ -1,5 +1,5 @@
 -tstop                           0.5
--CFL                             0.2
+-CFL                             0.1
 -domsizex                        1.0
 -domsizey                        1.0
 -domsizez                        1.0
@@ -12,8 +12,8 @@
 -outputInterval                  10
 -CheckpointInterval              100
 -MaxCheckpointFiles              3
--BoxSize                         30
--grid_type_global                0
+-BoxSize                         60
+-grid_type_global                1
 -LowBoundType                    1
 -HighBoundType                   2
 -sph_inner_BC_hdf5               0
@@ -21,7 +21,7 @@
 -slope_flattening_apply          1
 -non_linear_visc_apply           0
 -linear_visc_apply               0
--takedivBstep                    1
+-takedivBstep                    0
 -timeIntegratorType              4
 -init_condition_type             3
 -Riemann_solver_type             2

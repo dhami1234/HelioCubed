@@ -222,14 +222,6 @@ int main(int argc, char *argv[])
 			}
 		std::cout << "proc_id: " << pid << ";      num boxes: " << count << std::endl;
 
-		// if (inputs.grid_type_global == 2){
-		// 		MHD_Mapping::Spherical_2O_map_filling_func(state);
-		// 		MHD_Mapping::Spherical_map_filling_func(state);
-		// 		MHD_Mapping::Spherical_map_filling_func2(state);
-		// } else {
-		// 	MHD_Mapping::Regular_map_filling_func(state);
-		// }
-
 		int start_iter = 0;
 		if (inputs.restartStep != 0)
 		{

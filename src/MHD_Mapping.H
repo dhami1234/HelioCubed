@@ -102,31 +102,6 @@ namespace MHD_Mapping
 					   const BoxData<double, DIM> &a_phys_coords,
 					   const BoxData<double, NUMCOMPS> &a_W);
 
-	void Spherical_map_calc_func(BoxData<double, 1> &a_Jacobian_ave,
-								 BoxData<double, DIM * DIM> &a_detAA_avg,
-								 BoxData<double, DIM * DIM> &a_detAA_inv_avg,
-								 BoxData<double, 1> &a_r2rdot_avg,
-								 BoxData<double, 1> &a_detA_avg,
-								 BoxData<double, DIM> &a_A_row_mag_avg,
-								 BoxData<double, 1> &a_r2detA_1_avg,
-								 BoxData<double, DIM * DIM> &a_r2detAA_1_avg,
-								 BoxData<double, DIM> &a_r2detAn_1_avg,
-								 BoxData<double, DIM> &a_A_row_mag_1_avg,
-								 BoxData<double, DIM * DIM> &a_A_1_avg,
-								 BoxData<double, 1> &a_rrdotdetA_2_avg,
-								 BoxData<double, DIM * DIM> &a_rrdotdetAA_2_avg,
-								 BoxData<double, DIM> &a_rrdotd3ncn_2_avg,
-								 BoxData<double, DIM> &a_A_row_mag_2_avg,
-								 BoxData<double, DIM * DIM> &a_A_2_avg,
-								 BoxData<double, 1> &a_rrdotdetA_3_avg,
-								 BoxData<double, DIM * DIM> &a_rrdotdetAA_3_avg,
-								 BoxData<double, DIM> &a_rrdotncd2n_3_avg,
-								 BoxData<double, DIM> &a_A_row_mag_3_avg,
-								 BoxData<double, DIM * DIM> &a_A_3_avg,
-								 const double a_dx,
-								 const double a_dy,
-								 const double a_dz);
-
 	// void Regular_map_filling_func(MHDLevelDataState &a_state);
 	void Regular_map_filling_func(mapping_variables &a_state, 
 								  const Box &a_bx,
@@ -137,7 +112,11 @@ namespace MHD_Mapping
 	void Nineto33(BoxData<double, DIM, MEM, DIM> &a_A_face_avg,
 				  const BoxData<double, DIM * DIM> &a_A_avg);
 
-	void Spherical_map_filling_func(MHDLevelDataState &a_state);
+	void Spherical_map_filling_func(mapping_variables &a_state, 
+								  const Box &a_bx,
+								  const double a_dx,
+								  const double a_dy,
+								  const double a_dz);
 
 	void Jacobian_ave_sph_calc_func(BoxData<double, 1> &a_Jacobian_ave,
 									const double a_dx,
@@ -146,10 +125,10 @@ namespace MHD_Mapping
 
 	void JU_to_U_Sph_ave_calc_func(BoxData<double, NUMCOMPS> &a_U_Sph_ave,
 								   const BoxData<double, NUMCOMPS> &a_JU_ave,
-								   BoxData<double, DIM * DIM> &a_detAA_inv_avg,
-								   BoxData<double, 1> &a_r2rdot_avg,
-								   BoxData<double, 1> &a_detA_avg,
-								   BoxData<double, DIM> &a_A_row_mag_avg,
+								   const BoxData<double, DIM * DIM> &a_detAA_inv_avg,
+								   const BoxData<double, 1> &a_r2rdot_avg,
+								   const BoxData<double, 1> &a_detA_avg,
+								   const BoxData<double, DIM> &a_A_row_mag_avg,
 								   bool a_normalized,
 								   int a_order);
 
@@ -183,8 +162,8 @@ namespace MHD_Mapping
 
 	void JU_to_U_ave_calc_func(BoxData<double, NUMCOMPS> &a_U_ave,
 							   const BoxData<double, NUMCOMPS> &a_JU_ave,
-							   BoxData<double, 1> &a_r2rdot_avg,
-							   BoxData<double, 1> &a_detA_avg);
+							   const BoxData<double, 1> &a_r2rdot_avg,
+							   const BoxData<double, 1> &a_detA_avg);
 
 	void W_Sph_to_W_normalized_sph(BoxData<double, NUMCOMPS> &W_normalized_sph,
 								   const BoxData<double, NUMCOMPS> &W_Sph,
@@ -240,7 +219,11 @@ namespace MHD_Mapping
 									  const double a_dy,
 									  const double a_dz);
 
-	void Spherical_2O_map_filling_func(MHDLevelDataState &a_state);
+	void Spherical_2O_map_filling_func(mapping_variables &a_state, 
+								  const Box &a_bx,
+								  const double a_dx,
+								  const double a_dy,
+								  const double a_dz);
 
 	
 }

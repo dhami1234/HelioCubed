@@ -4,7 +4,6 @@
 
 #include "Proto.H"
 extern Parsefrominputs inputs;
-// constexpr MemType MEM = MEMTYPE_DEFAULT;
 
 #include "MHD_Limiters.H"
 #include "MHD_Mapping.H"
