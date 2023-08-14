@@ -18,7 +18,7 @@
 -HighBoundType                   2
 -sph_inner_BC_hdf5               0
 -limiter_apply                   1
--slope_flattening_apply          1
+-slope_flattening_apply          0
 -non_linear_visc_apply           0
 -linear_visc_apply               0
 -takedivBstep                    0
