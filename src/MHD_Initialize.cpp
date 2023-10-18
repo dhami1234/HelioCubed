@@ -571,6 +571,10 @@ namespace MHD_Initialize {
 
 		double e = p/(gamma-1.0) + rho*(u*u+v*v+w*w)/2.0 + (Bx*Bx+By*By+Bz*Bz)/8.0/c_PI;
 
+		#if TURB == 1
+			e += 0.5*rho*inputs.Sun_Z2;
+		#endif
+
 #if DIM == 2
 		a_U(0) = rho; //rho
 		a_U(1) = rho*u; //Momentum-x
@@ -588,6 +592,13 @@ namespace MHD_Initialize {
 		a_U(5) = Bx; //Bx
 		a_U(6) = By; //By
 		a_U(7) = Bz; //Bz
+
+	#if TURB == 1
+		a_U(iRHOZ2) = rho*inputs.Sun_Z2; //rho*Z^2
+		a_U(iRHOZ2SIGMA) = rho*inputs.Sun_Z2*inputs.Sun_SigmaC; //rho*Z^2*sigma
+		a_U(iRHOLAMBDA) = rho*inputs.Sun_Lambda; //rho*lambda
+	#endif
+
 #endif
 	}
 	PROTO_KERNEL_END(InitializeStateSph2OF, InitializeStateSph2O)

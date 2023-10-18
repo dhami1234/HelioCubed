@@ -34,6 +34,25 @@ using namespace Proto;
 using namespace MHD_EulerStep;
 
 Parsefrominputs inputs;
+
+
+
+PROTO_KERNEL_START
+void fixBCnumsF(Var<double, NUMCOMPS> &a_out_data,
+				Var<double, NUMCOMPS-3> &a_BC)
+{
+	for (int i = 0; i < NUMCOMPS-3; i++)
+	{
+			a_out_data(i) = a_BC(i); 
+	}
+	for (int i = NUMCOMPS-3; i < NUMCOMPS; i++)
+	{
+			a_out_data(i) = 0.; 
+	}
+}
+PROTO_KERNEL_END(fixBCnumsF, fixBCnums)
+
+
 int main(int argc, char* argv[])
 {
 #ifdef PR_MPI
@@ -124,13 +143,22 @@ int main(int argc, char* argv[])
 		double time_seconds;
 		MHDReader reader;
 		HDF5Handler h5;
-
-		// Read data from h5 BC
 		std::vector<BoxData<double, NUMCOMPS, HOST>> BC_data;
-
+		// Read data from h5 BC
+		#if TURB == 1
+			std::vector<BoxData<double, NUMCOMPS-3, HOST>> BC_data_temp;
+			if (inputs.grid_type_global == 2 && inputs.sph_inner_BC_hdf5 == 1) reader.readData(BC_data_temp, inputs.BC_file);
+			int siz_h5 = BC_data_temp.size();
+			BC_data.resize(siz_h5);
+			for (int i =0; i<siz_h5; i++){
+				BC_data[i] = forall<double, NUMCOMPS>(fixBCnums, BC_data_temp[i]);
+			}
+		#else
+			if (inputs.grid_type_global == 2 && inputs.sph_inner_BC_hdf5 == 1) reader.readData(BC_data, inputs.BC_file);
+		#endif
+	
+		
 		// std::vector<double> dtheta;
-		if (inputs.grid_type_global == 2) reader.readData(BC_data, inputs.BC_file);
-
 		// if (inputs.grid_type_global == 2) reader.readGeom(dtheta, inputs.BC_file);
 		// if (procID()) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, BC_data[0], "OFT_BCs");
 		
@@ -200,7 +228,7 @@ int main(int argc, char* argv[])
 				EulerStep<MHDLevelDataState, MHDLevelDatadivBOp, MHDLevelDataDX> divBstep;
 				EulerStep<MHDLevelDataState, MHDLevelDataViscosityOp, MHDLevelDataDX> viscositystep;
 
-				if (inputs.grid_type_global == 2) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time/inputs.velocity_scale);
+				if (inputs.grid_type_global == 2 && inputs.sph_inner_BC_hdf5 == 1) MHD_Set_Boundary_Values::interpolate_h5_BC(state, BC_data, time/inputs.velocity_scale);
 
 				
 				MHD_Pre_Time_Step::Insert_CME(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale);

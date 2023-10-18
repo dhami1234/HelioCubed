@@ -18,6 +18,7 @@
 #include "MHD_CFL.H"
 #include "MHDLevelDataRK4.H"
 #include "MHD_Operator.H"
+#include "MHD_Turbulence.H"
 
 extern Parsefrominputs inputs;
 
@@ -54,7 +55,16 @@ namespace MHDOp {
 			B2 += B*B;
 		}
 
-		a_W(NUMCOMPS-1-DIM) = (a_U(NUMCOMPS-1-DIM) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0);
+		a_W(DIM+1) = (a_U(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0);
+
+		#if TURB == 1
+
+			a_W(DIM+1) = (a_U(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI - 0.5*a_U(iRHOZ2)) * (gamma - 1.0);
+
+			a_W(iZ2) = a_U(iRHOZ2)/rho;
+			a_W(iSIGMA) = a_U(iRHOZ2SIGMA)/a_U(iRHOZ2);
+			a_W(iLAMBDA) = a_U(iRHOLAMBDA)/rho;
+		#endif
 
 	}
 	PROTO_KERNEL_END(consToPrimF, consToPrim)
@@ -116,6 +126,11 @@ namespace MHDOp {
 		a_U(5) = a_U(5)/sqrt(pref);
 		a_U(6) = a_U(6)/sqrt(pref);
 		a_U(7) = a_U(7)/sqrt(pref);
+		#if TURB == 1
+		a_U(8) = a_U(8)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		a_U(9) = a_U(9)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		a_U(10) = a_U(10)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale*c_AU);
+		#endif
 		#endif
 	}
 	PROTO_KERNEL_END(DimToNonDimF, DimToNonDim)
@@ -164,6 +179,11 @@ namespace MHDOp {
 		a_U(5) = a_U(5)*sqrt(pref);
 		a_U(6) = a_U(6)*sqrt(pref);
 		a_U(7) = a_U(7)*sqrt(pref);
+		#if TURB == 1
+		a_U(8) = a_U(8)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		a_U(9) = a_U(9)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
+		a_U(10) = a_U(10)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale*c_AU);
+		#endif
 		#endif
 	}
 	PROTO_KERNEL_END(NonDimToDimF, NonDimToDim)
@@ -212,8 +232,8 @@ namespace MHDOp {
 			B2 += B_actual*B_actual;
 		}
 
-		a_W_sph(NUMCOMPS-1-DIM) = (a_U_sph(NUMCOMPS-1-DIM) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0);
-		// a_W_sph(NUMCOMPS-1-DIM) = a_U_sph(NUMCOMPS-1-DIM);
+		a_W_sph(DIM+1) = (a_U_sph(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0);
+		// a_W_sph(DIM+1) = a_U_sph(DIM+1);
 
 	}
 	PROTO_KERNEL_END(consToPrimSphF, consToPrimSph)
@@ -344,8 +364,8 @@ namespace MHDOp {
 				B2 += B*B;
 			}
 
-			double p = std::max((a_U(NUMCOMPS-1-DIM) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0),1.0e-14);
-			a_U(NUMCOMPS-1-DIM) = p/(gamma-1.0) + .5 * rho * v2  + B2/8.0/c_PI;
+			double p = std::max((a_U(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0),1.0e-14);
+			a_U(DIM+1) = p/(gamma-1.0) + .5 * rho * v2  + B2/8.0/c_PI;
 		}
 	}
 	PROTO_KERNEL_END(Fix_negative_P_calcF, Fix_negative_P_calc)
@@ -408,6 +428,28 @@ namespace MHDOp {
 	PROTO_KERNEL_END(Scale_with_A_Bf_calcF, Scale_with_A_Bf_calc)
 
 	/**
+	 * @brief Function to scale V at face with face area. 
+	 * @param a_V_scaled the output scaled V_face.
+	 * @param a_W_sph1 the input primitive variables on low side.
+	 * @param a_W_sph2 the input primitive variables on high side.
+	 * @param a_face_area the input face area.
+	 * @param a_d direction index.
+	 */ 
+	PROTO_KERNEL_START
+	void Scale_with_A_Vf_calcF(const Point& a_pt,
+						Var<double,1>& a_V_scaled,
+						const State& a_W_sph1,
+	               		const State& a_W_sph2,
+	                   	Var<double,DIM>& a_face_area,
+	                   	int a_d)
+	{
+		double area = a_face_area(a_d);
+		double V_face = 0.5*(a_W_sph1(iVX+a_d)+a_W_sph2(iVX+a_d));
+		a_V_scaled(0) = V_face*area;
+	}
+	PROTO_KERNEL_END(Scale_with_A_Vf_calcF, Scale_with_A_Vf_calc)
+
+	/**
 	 * @brief Function to scale flux at a face with cell volume. 
 	 * @param a_F_scaled the output scaled flux.
 	 * @param a_F the input flux.
@@ -446,6 +488,42 @@ namespace MHDOp {
 		}
 	}
 	PROTO_KERNEL_END(Scale_with_V2_calcF, Scale_with_V2_calc)
+
+	/**
+	 * @brief Function to scale a scalar flux at a face with cell volume. 
+	 * @param a_F_scaled the output scaled flux.
+	 * @param a_F the input flux.
+	 * @param a_cell_volume the input cell volume.
+	 */ 
+	PROTO_KERNEL_START
+	void Scale_with_V3_calcF(const Point& a_pt,
+						Var<double,1>& a_F_scaled,
+						Var<double,1>& a_F,
+	                   	Var<double,1>& a_cell_volume)
+	{
+		double volume = a_cell_volume(0);
+
+		a_F_scaled(0) = a_F(0)/volume;
+		
+	}
+	PROTO_KERNEL_END(Scale_with_V3_calcF, Scale_with_V3_calc)
+
+	/**
+	 * @brief Function to scale a scalar flux at a face with cell volume. 
+	 * @param a_F_scaled the output scaled flux.
+	 * @param a_F the input flux.
+	 * @param a_cell_volume the input cell volume.
+	 */ 
+	PROTO_KERNEL_START
+	void Add_Sources_calcF(const Point& a_pt,
+						Var<double,NUMCOMPS>& a_Rhs,
+						Var<double,NUMCOMPS>& a_S)
+	{
+		for (int i = 0; i < NUMCOMPS; i++){
+			a_Rhs(i) += a_S(i);
+		}
+	}
+	PROTO_KERNEL_END(Add_Sources_calcF, Add_Sources_calc)
 
 
 	/**
@@ -838,6 +916,11 @@ namespace MHDOp {
 			Box dbx1 = dbx0.grow(0-NGHOST);
 			Vector F_f_sph(dbx0), F_f(dbx0), F_f_scaled(dbx0), Rhs_d(dbx0), RhsV(dbx0);
 			Scalar B_f_sph(dbx0), B_f_scaled(dbx0), Rhs_d_divB(dbx0), RhsV_divB(dbx0);
+			#if TURB == 1
+				Scalar V_f_scaled(dbx0), Rhs_d_divV(dbx0), RhsV_divV(dbx0), divV(dbx0);
+				RhsV_divV.setVal(0.0);
+				Vector STM(dbx0);
+			#endif
 			RhsV.setVal(0.0);
 			RhsV_divB.setVal(0.0);
 
@@ -866,6 +949,9 @@ namespace MHDOp {
 				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, W_low_boxed, "W_low_2O_"+to_string(d));
 				if (inputs.Riemann_solver_type == 1) MHD_Riemann_Solvers::Rusanov_Solver(F_f_sph,W_low,W_high,d,gamma);
 				if (inputs.Riemann_solver_type == 2) MHD_Riemann_Solvers::Roe8Wave_Solver(F_f_sph,W_low,W_high,d,gamma);
+				#if TURB == 1
+					MHD_Turbulence::Turb_Flux(F_f_sph, W_low, W_high, d);
+				#endif
 				if (d==0) MHD_Mapping::Spherical_to_Cartesian(F_f, F_f_sph, a_State.m_x_sph_fc_1[dit]);
 				if (d==1) MHD_Mapping::Spherical_to_Cartesian(F_f, F_f_sph, a_State.m_x_sph_fc_2[dit]);
 				if (d==2) MHD_Mapping::Spherical_to_Cartesian(F_f, F_f_sph, a_State.m_x_sph_fc_3[dit]);
@@ -877,12 +963,24 @@ namespace MHDOp {
 				RhsV += Rhs_d;
 
 				if (!a_State.m_divB_calculated && inputs.takedivBstep == 1){
-					forallInPlace_p(Scale_with_A_Bf_calc, B_f_scaled, W_low,W_high, a_State.m_face_area[dit], d);
+					forallInPlace_p(Scale_with_A_Bf_calc, B_f_scaled, W_low, W_high, a_State.m_face_area[dit], d);
 					Rhs_d_divB = m_divergence[d](B_f_scaled);
 					RhsV_divB += Rhs_d_divB;
 				}
+
+				#if TURB == 1
+					forallInPlace_p(Scale_with_A_Vf_calc, V_f_scaled, W_low, W_high, a_State.m_face_area[dit], d);
+					Rhs_d_divV = m_divergence[d](V_f_scaled);
+					RhsV_divV += Rhs_d_divV;
+				#endif
 			}
 			forallInPlace_p(Scale_with_V_calc, a_Rhs[dit], RhsV, a_State.m_cell_volume[dit]);
+			#if TURB == 1
+				forallInPlace_p(Scale_with_V3_calc, divV, RhsV_divV, a_State.m_cell_volume[dit]);
+				MHD_Turbulence::Turb_Source(STM,W_sph,divV);
+				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz","Z2","Sigma","Lambda"}, 1, STM, "STM");
+				forallInPlace_p(Add_Sources_calc, a_Rhs[dit], STM);
+			#endif
 			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) forallInPlace_p(Powell_Sph_2O,a_State.m_divB[dit],W_cart,RhsV_divB,a_State.m_cell_volume[dit]);		
 			// Vector RHS(dbx1);
 			// a_State.m_divB[dit].copyTo(RHS);

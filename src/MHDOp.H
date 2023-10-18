@@ -1,9 +1,12 @@
 #pragma once
 
 #include "Proto.H"
+#include "MHD_Input_Parsing.H"
+
+extern Parsefrominputs inputs;
 
 //TODO: These variables need to go into a common file or be defined in a more accessible way
-constexpr unsigned int NUMCOMPS=2*DIM+2;
+constexpr unsigned int NUMCOMPS=2*DIM+2 + TURB*3;
 
 #define NGHOST 6
 #define CRHO 0
@@ -11,6 +14,29 @@ constexpr unsigned int NUMCOMPS=2*DIM+2;
 #define CBSTART 5
 #define CPRES 4
 #define CENG 4
+
+#if DIM == 3
+#define iRHO 0
+#define iVX 1
+#define iMOMX 1
+#define iVY 2
+#define iMOMY 2
+#define iVZ 3
+#define iMOMZ 3
+#define iE 4
+#define iP 4
+#define iBX 5
+#define iBY 6
+#define iBZ 7
+#if TURB == 1
+	#define iRHOZ2 8
+	#define iZ2 8
+	#define iRHOZ2SIGMA 9
+	#define iSIGMA 9
+	#define iRHOLAMBDA 10
+	#define iLAMBDA 10
+#endif
+#endif
 
 using namespace Proto;
 

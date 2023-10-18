@@ -292,7 +292,7 @@ namespace MHD_Probe {
                     B2 += B*B;
                 }
 
-                probed_values_primitive[NUMCOMPS-1-DIM] = (probed_values[NUMCOMPS-1-DIM] - .5 * probed_values[0] * v2  - B2/8.0/c_PI) * (gamma - 1.0);
+                probed_values_primitive[DIM+1] = (probed_values[DIM+1] - .5 * probed_values[0] * v2  - B2/8.0/c_PI) * (gamma - 1.0);
 
                 double rho = probed_values_primitive[0]/c_MP; // /cm^3;
                 double Vx = probed_values_primitive[1]/1e5; // km/s;
