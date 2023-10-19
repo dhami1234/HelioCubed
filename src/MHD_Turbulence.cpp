@@ -108,7 +108,7 @@ namespace MHD_Turbulence {
         double betaTM  = 0.4;
         double sigmaDTM    = inputs.SigmaD;
         double C3       = 0.5*(1.0 + sigmaDTM);
-    
+        // double C3	 = 0.5*(a_divV(0) + sigmaDTM); //In Tae's corrected version
         double Rho    =               a_W(iRHO);
         double Z2     = max( smallTM, a_W(iZ2) );
         double SC     =               a_W(iSIGMA);
@@ -122,7 +122,7 @@ namespace MHD_Turbulence {
         
         double RhoZ   = Rho*sqrt( Z2 );
         H1     = alphaTM*RhoZ*Z2/Lm;
-
+        
         a_S(iRHO) = 0.0;
         a_S(iMOMX) = 0.0;
         a_S(iMOMY) = 0.0;
@@ -131,9 +131,10 @@ namespace MHD_Turbulence {
         a_S(iBX) = 0.0;
         a_S(iBY) = 0.0;
         a_S(iBZ) = 0.0;
-        a_S(iRHOZ2)  = (-FP*H1 - C3  *Rho*Z2*a_divV(0));
-        a_S(iRHOZ2SIGMA)  =-( FM*H1 + 0.5*Rho*Z2*a_divV(0)*SC);
-        a_S(iRHOLAMBDA)  = betaTM*FP*RhoZ;        
+        a_S(iRHOZ2)  = -FP*H1 -C3*Rho*Z2*a_divV(0);
+        // a_S(iRHOZ2)  = -FP*H1 -C3*Rho*Z2; //In Tae's corrected version
+        a_S(iRHOZ2SIGMA)  = -FM*H1 -0.5*Rho*Z2*a_divV(0)*SC;
+        a_S(iRHOLAMBDA)  = betaTM*FP*RhoZ;
     }
     PROTO_KERNEL_END(Turb_Source_calcF, Turb_Source_calc)
 

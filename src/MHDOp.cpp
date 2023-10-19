@@ -127,9 +127,9 @@ namespace MHDOp {
 		a_U(6) = a_U(6)/sqrt(pref);
 		a_U(7) = a_U(7)/sqrt(pref);
 		#if TURB == 1
-		a_U(8) = a_U(8)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
-		a_U(9) = a_U(9)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
-		a_U(10) = a_U(10)/(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale*c_AU);
+		a_U(8) = a_U(8)/pref;
+		a_U(9) = a_U(9)/pref;
+		a_U(10) = a_U(10)/(inputs.density_scale*c_MP);
 		#endif
 		#endif
 	}
@@ -180,9 +180,9 @@ namespace MHDOp {
 		a_U(6) = a_U(6)*sqrt(pref);
 		a_U(7) = a_U(7)*sqrt(pref);
 		#if TURB == 1
-		a_U(8) = a_U(8)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
-		a_U(9) = a_U(9)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale);
-		a_U(10) = a_U(10)*(inputs.density_scale*c_MP*inputs.velocity_scale*inputs.velocity_scale*c_AU);
+		a_U(8) = a_U(8)*pref;
+		a_U(9) = a_U(9)*pref;
+		a_U(10) = a_U(10)*(inputs.density_scale*c_MP);
 		#endif
 		#endif
 	}
