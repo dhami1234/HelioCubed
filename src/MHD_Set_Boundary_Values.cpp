@@ -78,6 +78,11 @@ namespace MHD_Set_Boundary_Values {
 		a_U_scaled(5) = Bx; //Bx
 		a_U_scaled(6) = By; //By
 		a_U_scaled(7) = Bz; //Bz
+		#if TURB == 1
+			a_U_scaled(iRHOZ2) = rho*inputs.Sun_Z2; //rho*Z^2
+			a_U_scaled(iRHOZ2SIGMA) = rho*inputs.Sun_Z2*inputs.Sun_SigmaC; //rho*Z^2*sigma
+			a_U_scaled(iRHOLAMBDA) = rho*inputs.Sun_Lambda; //rho*lambda
+		#endif
 
 
 	}

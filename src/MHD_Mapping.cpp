@@ -292,6 +292,11 @@ namespace MHD_Mapping
 			a_out_data(DIM + 5) = a_W(5);		 // Gauss
 			a_out_data(DIM + 6) = a_W(6);		 // Gauss
 			a_out_data(DIM + 7) = a_W(7);		 // Gauss
+			#if TURB == 1
+			a_out_data(DIM + iZ2) = a_W(iZ2);
+			a_out_data(DIM + iSIGMA) = a_W(iSIGMA);
+			a_out_data(DIM + iLAMBDA) = a_W(iLAMBDA);
+			#endif
 		}
 		else
 		{
@@ -1114,16 +1119,19 @@ namespace MHD_Mapping
 			MHD_Mapping::eta_to_x_calc(X, eta, bxmap);
 
 			Array<BoxData<double, DIM>, DIM> NT;
-
+			FluxBoxData<double,DIM,MEM> NT_temp(bxmap);
 			for (int dir = 0; dir < DIM; dir++)
 			{
 
 				NT[dir] = Operator::cofactor(X, dir);
+				// NT = Operator::cofactor(X, dir);
 				NT[dir].copyTo(a_state.m_NT[dir][dit]);
+				NT[dir].copyTo(NT_temp[dir]);
 			}
 			BoxData<double> J;
 			{
-				J = Operator::jacobian(X, NT);
+				// J = Operator::jacobian(X, NT);
+				J = Operator::jacobian(X, NT_temp);
 				J.copyTo(a_state.m_J[dit]);
 #if DIM == 2
 				a_state.m_J[dit] *= 1.0 / (a_dx * a_dy);
@@ -1188,6 +1196,12 @@ namespace MHD_Mapping
 		W_sph(5) = A0 * W_cart(5) + A1 * W_cart(6) + A2 * W_cart(7);
 		W_sph(6) = A3 * W_cart(5) + A4 * W_cart(6) + A5 * W_cart(7);
 		W_sph(7) = A6 * W_cart(5) + A7 * W_cart(6) + A8 * W_cart(7);
+
+		#if TURB == 1
+		W_sph(iZ2) = W_cart(iZ2);
+		W_sph(iSIGMA) = W_cart(iSIGMA);
+		W_sph(iLAMBDA) = W_cart(iLAMBDA);
+		#endif
 	}
 	PROTO_KERNEL_END(Cartesian_to_Spherical_calcF, Cartesian_to_Spherical_calc)
 
@@ -1227,6 +1241,12 @@ namespace MHD_Mapping
 		W_cart(5) = A0 * W_sph(5) + A1 * W_sph(6) + A2 * W_sph(7);
 		W_cart(6) = A3 * W_sph(5) + A4 * W_sph(6) + A5 * W_sph(7);
 		W_cart(7) = A6 * W_sph(5) + A7 * W_sph(6) + A8 * W_sph(7);
+
+		#if TURB == 1
+		W_cart(iZ2) = W_sph(iZ2);
+		W_cart(iSIGMA) = W_sph(iSIGMA);
+		W_cart(iLAMBDA) = W_sph(iLAMBDA);
+		#endif
 	}
 	PROTO_KERNEL_END(Spherical_to_Cartesian_calcF, Spherical_to_Cartesian_calc)
 

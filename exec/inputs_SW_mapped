@@ -34,7 +34,7 @@
 -C_rad                           1.0
 -convTestType                    0
 -saveConvTestData                1
--Spherical_2nd_order             1
+-Spherical_2nd_order             0
 -BC_start_time                   2020.08993624772313296903460837887067
 -BC_cadence                      24.0
 -probe_cadence                   3600

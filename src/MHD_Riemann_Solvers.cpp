@@ -698,6 +698,11 @@ namespace MHD_Riemann_Solvers {
 			a_out(5)  = half*(fl6 + fr6 + ra6);
 			a_out(6)  = half*(fl7 + fr7 + ra7);
 			a_out(7)  = half*(fl8 + fr8 + ra8);
+			#if TURB == 1
+			a_out(iZ2) = 0.;
+			a_out(iSIGMA) = 0.;
+			a_out(iLAMBDA) = 0.;
+			#endif
 		}
 		if (a_dir == 1) {
 			a_out(0)  = half*(fl1 + fr1 + ra1);
@@ -708,6 +713,11 @@ namespace MHD_Riemann_Solvers {
 			a_out(6)  = half*(fl6 + fr6 + ra6);
 			a_out(7)  = half*(fl7 + fr7 + ra7);
 			a_out(5)  = half*(fl8 + fr8 + ra8);
+			#if TURB == 1
+			a_out(iZ2) = 0.;
+			a_out(iSIGMA) = 0.;
+			a_out(iLAMBDA) = 0.;
+			#endif
 		}
 		if (a_dir == 2) {
 			a_out(0)  = half*(fl1 + fr1 + ra1);
@@ -718,6 +728,11 @@ namespace MHD_Riemann_Solvers {
 			a_out(7)  = half*(fl6 + fr6 + ra6);
 			a_out(5)  = half*(fl7 + fr7 + ra7);
 			a_out(6)  = half*(fl8 + fr8 + ra8);
+			#if TURB == 1
+			a_out(iZ2) = 0.;
+			a_out(iSIGMA) = 0.;
+			a_out(iLAMBDA) = 0.;
+			#endif
 		}
 
 #endif
@@ -948,6 +963,11 @@ namespace MHD_Riemann_Solvers {
 		a_out(5) = 0.5*(a_F_hi(5) + a_F_lo(5) - abs(a_lambda(0))*(Bx_hi-Bx_lo));
 		a_out(6) = 0.5*(a_F_hi(6) + a_F_lo(6) - abs(a_lambda(0))*(By_hi-By_lo));
 		a_out(7) = 0.5*(a_F_hi(7) + a_F_lo(7) - abs(a_lambda(0))*(Bz_hi-Bz_lo));
+		#if TURB == 1
+		a_out(iZ2) = 0.;
+		a_out(iSIGMA) = 0.;
+		a_out(iLAMBDA) = 0.;
+		#endif
 #endif
 	}
 	PROTO_KERNEL_END(rusanovStateF, rusanovState)

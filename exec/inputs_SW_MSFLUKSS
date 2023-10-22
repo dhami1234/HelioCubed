@@ -7,7 +7,7 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         2500
+-maxStep                         2000
 -restartStep                     0
 -outputInterval                  50
 -CheckpointInterval              100
@@ -62,3 +62,7 @@
 -CME_shift                       0.0
 -density_scale                   700.0
 -velocity_scale                  30000000.0
+-Sun_Z2                          3.0e11
+-Sun_SigmaC                      0.6
+-Sun_Lambda                      1.2e9
+-SigmaD                          -0.3333333333333333333    

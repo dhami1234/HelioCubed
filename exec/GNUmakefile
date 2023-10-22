@@ -4,9 +4,10 @@ VARS_OLD := $(.VARIABLES)
 DEPXX=mpicxx
 CXX=mpicxx
 DIM=3
+TURB=1
 USE_HDF5=TRUE
-HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/lib
-HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.1/include
+HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.14.2/lib
+HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.14.2/include
 # HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/lib
 # HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.12.2_1/include
 # HDF5_LIB=/cm/shared/apps/spack/cpu/opt/spack/linux-centos8-zen2/intel-19.1.1.217/hdf5-1.10.6-ow5p5eh25vi4yxdpeenmtinbjed3xt7e/lib
@@ -38,7 +39,7 @@ VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/_common 
+CPPFLAGS:=-DDIM=$(DIM) -DTURB=$(TURB) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/_common 
 CXXFLAGS:= $(CXXOPTFLAGS) -std=c++14 -w
 
 LIBS += $(LAPACK_LIB)

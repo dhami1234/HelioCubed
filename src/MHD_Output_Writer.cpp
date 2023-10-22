@@ -77,9 +77,17 @@ namespace MHD_Output_Writer {
 		#endif
 		#if DIM == 3
 		if (inputs.output_in_spherical_coords == 1 && inputs.grid_type_global == 2){
+			#if TURB == 1
+			h5.writeLevel({"X","Y","Z","density","Vr","Vt","Vp", "p","Br","Bt","Bp","Z2","Sigma_c","Lambda"}, 1, out_data, filename_Data);
+			#else
 			h5.writeLevel({"X","Y","Z","density","Vr","Vt","Vp", "p","Br","Bt","Bp"}, 1, out_data, filename_Data);
+			#endif
 		} else {
+			#if TURB == 1
+			h5.writeLevel({"X","Y","Z","density","Vx","Vy","Vz", "p","Bx","By","Bz","Z2","Sigma_c","Lambda"}, 1, out_data, filename_Data);
+			#else
 			h5.writeLevel({"X","Y","Z","density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, out_data, filename_Data);
+			#endif
 		}
 		#endif
 		if(procID()==0) cout << "Written data file after step "<< k << endl;	
@@ -108,7 +116,11 @@ namespace MHD_Output_Writer {
 		h5.writeLevel({"density","Vx","Vy", "p","Bx","By"}, 1, out_data2, filename_Checkpoint);
 		#endif
 		#if DIM == 3
+		#if TURB == 1
+		h5.writeLevel({"density","Vx","Vy","Vz", "p","Bx","By","Bz", "Z2","Sigma_c","Lambda"}, 1, out_data2, filename_Checkpoint);
+		#else
 		h5.writeLevel({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, out_data2, filename_Checkpoint);
+		#endif
 		#endif
 		if(procID()==0) cout << "Written checkpoint file after step "<< k << endl;	
 	}
