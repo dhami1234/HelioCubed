@@ -569,6 +569,46 @@ namespace MHD_Initialize {
 			}
 		}
 
+
+		if (inputs.init_condition_type == 23) {
+			//////Modifying parameters for dipole solar corona///////
+
+			rho = 1.67e-16*pow(inputs.r_in*c_AU/rad,2.0); 
+			double T = 1.9e6; // K
+			p = 2.*(rho*c_Kb*T)*pow(inputs.r_in*c_AU/rad,2.0*a_gamma); // p near 21.5 c_SR is about 1e-7 dyne/cm2
+
+			double m_MX = 0.;
+			double m_MY = 0.;
+			double m_MZ = 3.5e29; // N.m/T
+			double m_Dipole_Strength = 0.001;
+			// this formula is valid for a dipole at the origin
+			// m, dipole moment
+			double coeff = 1.5e11; /// 6.955e8;
+			double rCubeInv = 1.0 / (rad * rad * rad * coeff * coeff * coeff);
+			double rSqInv = 1.0 / (rad * rad * coeff * coeff);
+
+			double xCoord = rad * coeff * sin(theta) * cos(phi);
+			double yCoord = rad * coeff * sin(theta) * sin(phi);
+			double zCoord = rad * coeff * cos(theta);
+
+			double mDotr = m_MX * xCoord + m_MY * yCoord + m_MZ * zCoord;
+
+			double BxDipole = m_Dipole_Strength * rCubeInv * (3.0 * xCoord * rSqInv * mDotr - m_MX); // B in G
+			double ByDipole = m_Dipole_Strength * rCubeInv * (3.0 * yCoord * rSqInv * mDotr - m_MY); // B in G
+			double BzDipole = m_Dipole_Strength * rCubeInv * (3.0 * zCoord * rSqInv * mDotr - m_MZ); // B in G
+
+			// No solar tilt here
+			double Br = BxDipole * sin(theta) * cos(phi) + ByDipole * sin(theta) * sin(phi) + BzDipole * cos(theta);
+			double Btheta = BxDipole * cos(theta) * cos(phi) + ByDipole * cos(theta) * sin(phi) - BzDipole * sin(theta);
+			double Bphi = -BxDipole * sin(phi) + ByDipole * cos(phi);
+
+			Bx = Br;
+			By = Btheta;
+			Bz = Bphi;
+
+			u = 100000.0;
+		}
+
 		double e = p/(gamma-1.0) + rho*(u*u+v*v+w*w)/2.0 + (Bx*Bx+By*By+Bz*Bz)/8.0/c_PI;
 
 		#if TURB == 1

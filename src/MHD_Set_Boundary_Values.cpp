@@ -88,6 +88,65 @@ namespace MHD_Set_Boundary_Values {
 	}
 	PROTO_KERNEL_END(scale_with_r_calcF, scale_with_r_calc)
 
+
+	PROTO_KERNEL_START
+	void set_corona_BC_calcF(const Point& a_pt,
+							Var<double,NUMCOMPS>& a_U_scaled,
+							Var<double,NUMCOMPS>& a_W,
+							Var<double,DIM>& a_x_sph,
+							const double a_gamma)
+	{	
+
+		double r = a_x_sph(0);
+		double theta = a_x_sph(1);
+		double phi = a_x_sph(2);
+		double m_MX = 0.;
+        double m_MY = 0.;
+        double m_MZ = 3.5e29; // N.m/T
+		double m_Dipole_Strength = 0.001;
+		// this formula is valid for a dipole at the origin
+		// m, dipole moment
+		double coeff = 1.5e11; /// 6.955e8;
+		double rCubeInv = 1.0 / (r * r * r * coeff * coeff * coeff);
+		double rSqInv = 1.0 / (r * r * coeff * coeff);
+
+		double xCoord = r * coeff * sin(theta) * cos(phi);
+		double yCoord = r * coeff * sin(theta) * sin(phi);
+		double zCoord = r * coeff * cos(theta);
+
+		double mDotr = m_MX * xCoord + m_MY * yCoord + m_MZ * zCoord;
+
+		double BxDipole = m_Dipole_Strength * rCubeInv * (3.0 * xCoord * rSqInv * mDotr - m_MX); // B in G
+		double ByDipole = m_Dipole_Strength * rCubeInv * (3.0 * yCoord * rSqInv * mDotr - m_MY); // B in G
+		double BzDipole = m_Dipole_Strength * rCubeInv * (3.0 * zCoord * rSqInv * mDotr - m_MZ); // B in G
+
+		// No solar tilt here
+		double Br = BxDipole * sin(theta) * cos(phi) + ByDipole * sin(theta) * sin(phi) + BzDipole * cos(theta);
+		// Btheta = BxDipole * cos(theta) * cos(phi) + ByDipole * cos(theta) * sin(phi) - BzDipole * sin(theta);
+		// Bphi = -BxDipole * sin(phi) + ByDipole * cos(phi);
+
+		double rho = 1.67e-16; // g/cm^3
+		double T = 1.9e6; // K
+		double p = 2.*(rho*c_Kb*T); // TRY ALSO nkT
+		double u = 100000.;
+		double v = 0.;
+		double w = 0.;
+		double Btheta = 0.;
+		double Bphi = 0.;
+		double e = p/(a_gamma-1.0) + rho*(u*u+v*v+w*w)/2.0 + (Br*Br+Btheta*Btheta+Bphi*Bphi)/8.0/c_PI;
+
+		a_U_scaled(0) = rho; //rho
+		a_U_scaled(1) = rho*u; //Momentum-x
+		a_U_scaled(2) = rho*v; //Momentum-y
+		a_U_scaled(3) = rho*w; //Momentum-z
+		a_U_scaled(4) = e; //Energy
+		a_U_scaled(5) = Br; //Bx
+		a_U_scaled(6) = Btheta; //By
+		a_U_scaled(7) = Bphi; //Bz
+
+	}
+	PROTO_KERNEL_END(set_corona_BC_calcF, set_corona_BC_calc)
+
 	void Set_Boundary_Values(LevelBoxData<double,NUMCOMPS>& a_JU,
 	                         MHDLevelDataState& a_State)
 	{
@@ -265,7 +324,8 @@ namespace MHD_Set_Boundary_Values {
 					}
 					BoxData<double,DIM> x_sph(BoundBox);
 					MHD_Mapping::get_sph_coords_cc(x_sph,BoundBox,a_dx, a_dy, a_dz);
-					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
+					// forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
+					forallInPlace_p(set_corona_BC_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
 					MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
 					MHDOp::DimToNonDimcalc(a_U_ghost);
 					a_U_ghost.copyTo(a_U[dit],BoundBox);
