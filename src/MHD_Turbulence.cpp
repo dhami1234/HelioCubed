@@ -30,8 +30,13 @@ namespace MHD_Turbulence {
         int itanB2 = iBX   + (( a_dir + 2) % DIM);
 
         double sigmaDTM = inputs.SigmaD;  // Check dimensions
-        double C1       = (3.0 + sigmaDTM)/12.0;
-        double C2       = sigmaDTM/3.0;
+
+        double C1       = (3.0 + sigmaDTM)/12.0;// In Tae's version
+        double C2       = sigmaDTM/3.0;// In Tae's version
+
+        // double C0 = (1.0 + sigmaDTM)/4.0;
+        // double C1 = (3.0 + sigmaDTM)/4.0;
+        // double C2 = sigmaDTM/2.0;
 
         double RAV    = 0.5*(a_W_lo(iRHO ) + a_W_hi(iRHO ));
         double UAV    = 0.5*(a_W_lo(inorm) + a_W_hi(inorm));
@@ -62,7 +67,7 @@ namespace MHD_Turbulence {
             a_F(iP) = a_F(iP) - (C2*UB/BB + SCAV/(4.0*sqrt(M_PI*RAV)))*RZ2B;
         }
 
-        double RhoU   = a_F(iRHO);
+        double RhoU   = a_F(iRHO); //It's flux
 
         double Rho, Z2, SC, LM;
         if( RhoU > 0.0 ){
@@ -77,7 +82,8 @@ namespace MHD_Turbulence {
             LM     = a_W_hi(iLAMBDA);
         }
 
-        a_F(inorm) = a_F(inorm) + C1*Rho *Z2;
+        a_F(inorm) = a_F(inorm) + C1*Rho*Z2;// In Tae's version
+        // a_F(inorm) = a_F(inorm) + C0*Rho*Z2;
         a_F(iP) = a_F(iP) + C1*RhoU*Z2;
 
         a_F(iRHOZ2)  = RhoU*Z2;
@@ -107,8 +113,12 @@ namespace MHD_Turbulence {
         double alphaTM = 0.8;
         double betaTM  = 0.4;
         double sigmaDTM    = inputs.SigmaD;
-        double C3       = 0.5*(1.0 + sigmaDTM);
-        // double C3	 = 0.5*(a_divV(0) + sigmaDTM); //In Tae's corrected version
+
+        double M = 0.5*a_divV(0);// In Tae's old version
+        // double M = 0.5;// In Tae's new version (This blows up)
+
+        double C3       = (0.5*a_divV(0) + M*sigmaDTM);
+
         double Rho    =               a_W(iRHO);
         double Z2     = max( smallTM, a_W(iZ2) );
         double SC     =               a_W(iSIGMA);
@@ -119,9 +129,13 @@ namespace MHD_Turbulence {
         double H2     = sqrt( (1.0 - S2)*(1.0 - SC) );
         double FP     = 0.5*(H1 + H2);
         double FM     = 0.5*(H1 - H2);
+
+        // If the simulation is blowing with turbulence, its is likely 
+        // that SC becomes > 1. This is a problem because the sqrt of
+        // negative numbers is not defined. 
         
         double RhoZ   = Rho*sqrt( Z2 );
-        H1     = alphaTM*RhoZ*Z2/Lm;
+        H1 = alphaTM*RhoZ*Z2/Lm;
         
         a_S(iRHO) = 0.0;
         a_S(iMOMX) = 0.0;
@@ -131,8 +145,7 @@ namespace MHD_Turbulence {
         a_S(iBX) = 0.0;
         a_S(iBY) = 0.0;
         a_S(iBZ) = 0.0;
-        a_S(iRHOZ2)  = -FP*H1 -C3*Rho*Z2*a_divV(0);
-        // a_S(iRHOZ2)  = -FP*H1 -C3*Rho*Z2; //In Tae's corrected version
+        a_S(iRHOZ2)  = -FP*H1 -C3*Rho*Z2;
         a_S(iRHOZ2SIGMA)  = -FM*H1 -0.5*Rho*Z2*a_divV(0)*SC;
         a_S(iRHOLAMBDA)  = betaTM*FP*RhoZ;
     }
