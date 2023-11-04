@@ -80,7 +80,7 @@ class Parsefrominputs {
 	double CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
 	//MHD equations can be written in dimensionless variables. We use scaling for this.
 	double density_scale, velocity_scale;
-	double Sun_Z2, Sun_SigmaC, Sun_Lambda, SigmaD; // Turbulence parameters for the Sun
+	double Sun_Z2, Sun_SigmaC, Sun_Lambda, SigmaD, Scaling_time; // Turbulence parameters for the Sun. Scaling time is the time it takes for Z2 to reach the given value in the inner boundary.
   public:
 
 	string removeSpaces(string str)
@@ -159,6 +159,7 @@ class Parsefrominputs {
 		args.add("Sun_SigmaC",  Sun_SigmaC);
 		args.add("Sun_Lambda",  Sun_Lambda);
 		args.add("SigmaD",  SigmaD);
+		args.add("Scaling_time",  Scaling_time);
 		args.parse(argc,argv);
 		// args.print(); //It prints, but not in the order I want.
 
@@ -235,6 +236,7 @@ class Parsefrominputs {
 			cout << "Sun_SigmaC: "    << Sun_SigmaC << endl;
 			cout << "Sun_Lambda: "    << Sun_Lambda << endl;
 			cout << "SigmaD: "    << SigmaD << endl;
+			cout << "Scaling_time: "    << Scaling_time << endl;
 			cout << setw(75) << setfill('-') << "-" << endl;
 		}
 

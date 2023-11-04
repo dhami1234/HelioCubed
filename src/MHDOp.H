@@ -8,7 +8,7 @@ extern Parsefrominputs inputs;
 //TODO: These variables need to go into a common file or be defined in a more accessible way
 constexpr unsigned int NUMCOMPS=2*DIM+2 + TURB*3;
 
-#define NGHOST 6
+#define NGHOST 2
 #define CRHO 0
 #define CVELSTART 1
 #define CBSTART 5

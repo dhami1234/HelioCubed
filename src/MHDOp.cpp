@@ -978,6 +978,7 @@ namespace MHDOp {
 			#if TURB == 1
 				forallInPlace_p(Scale_with_V3_calc, divV, RhsV_divV, a_State.m_cell_volume[dit]);
 				MHD_Turbulence::Turb_Source(STM,W_sph,divV);
+				// if (procID() == 0) h5.writePatch({"divV"}, 1, divV, "divV");
 				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz","Z2","Sigma","Lambda"}, 1, STM, "STM");
 				forallInPlace_p(Add_Sources_calc, a_Rhs[dit], STM);
 			#endif

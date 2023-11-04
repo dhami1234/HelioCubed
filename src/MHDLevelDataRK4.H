@@ -36,6 +36,7 @@ public:
 	bool m_CME_inserted;
 	bool m_CME_checkpoint_written;
 	double m_min_dt;
+	double m_time;
 //TODO: Put in MEMTYPE so we can run on the GPU?
 	LevelBoxData<double,NUMCOMPS> m_U;
 	LevelBoxData<double,NUMCOMPS> m_U_old;

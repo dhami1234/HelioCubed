@@ -54,8 +54,12 @@ namespace MHD_Set_Boundary_Values {
 							Var<double,NUMCOMPS>& a_U_scaled,
 							Var<double,NUMCOMPS>& a_W,
 							Var<double,DIM>& a_x_sph,
-							const double a_gamma)
-	{
+							const double a_gamma,
+							const double a_scaling_factor)
+	{	
+
+		
+
 		double r_BC = inputs.r_in*c_AU; //in cm
 		double rad = a_x_sph(0);
 		double rho = a_W(0)*1.67262192e-24*pow(inputs.r_in*c_AU/rad,2.0);
@@ -79,8 +83,8 @@ namespace MHD_Set_Boundary_Values {
 		a_U_scaled(6) = By; //By
 		a_U_scaled(7) = Bz; //Bz
 		#if TURB == 1
-			a_U_scaled(iRHOZ2) = rho*inputs.Sun_Z2; //rho*Z^2
-			a_U_scaled(iRHOZ2SIGMA) = rho*inputs.Sun_Z2*inputs.Sun_SigmaC; //rho*Z^2*sigma
+			a_U_scaled(iRHOZ2) = rho*(inputs.Sun_Z2)*exp(8.*a_scaling_factor)/exp(8.0); //rho*Z^2
+			a_U_scaled(iRHOZ2SIGMA) = a_U_scaled(iRHOZ2)*inputs.Sun_SigmaC; //rho*Z^2*sigma
 			a_U_scaled(iRHOLAMBDA) = rho*inputs.Sun_Lambda; //rho*lambda
 		#endif
 
@@ -95,6 +99,7 @@ namespace MHD_Set_Boundary_Values {
 		double a_dy = a_State.m_dy;
 		double a_dz = a_State.m_dz;
 		double a_gamma = a_State.m_gamma;
+		double a_time = a_State.m_time;
 		for (auto dit : a_State.m_U){	
 
 			Box dbx0 = a_JU[dit].box();
@@ -126,7 +131,14 @@ namespace MHD_Set_Boundary_Values {
 					}
 					BoxData<double,DIM> x_sph(BoundBox);
 					MHD_Mapping::get_sph_coords_cc(x_sph,BoundBox,a_dx, a_dy, a_dz);
-					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
+					double scaling_factor;
+					#if TURB == 1
+					double time_days = a_time/inputs.velocity_scale/24./60./60.;
+					scaling_factor = min(time_days,inputs.Scaling_time)/inputs.Scaling_time;
+					// round of scaling_factor to 1 decimal places
+					scaling_factor = round(scaling_factor*10.0)/10.0;
+					#endif
+					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma, scaling_factor);
 					
 					if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
 						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_sph_scaled_r, a_State.m_detAA_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true, 2);
@@ -234,6 +246,7 @@ namespace MHD_Set_Boundary_Values {
 		double a_dy = a_State.m_dy;
 		double a_dz = a_State.m_dz;
 		double a_gamma = a_State.m_gamma;
+		double a_time = a_State.m_time;
 		for (auto dit : a_U){	
 			Box dbx0 = a_U[dit].box();
 			//Filling ghost cells for low side of dir == 0 here. This will be the inner boundary in r direction once we map to polar, spherical, or cubed sphere grids.
@@ -265,7 +278,14 @@ namespace MHD_Set_Boundary_Values {
 					}
 					BoxData<double,DIM> x_sph(BoundBox);
 					MHD_Mapping::get_sph_coords_cc(x_sph,BoundBox,a_dx, a_dy, a_dz);
-					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma);
+					double scaling_factor;
+					#if TURB == 1
+					double time_days = a_time/inputs.velocity_scale/24./60./60.;
+					scaling_factor = min(time_days,inputs.Scaling_time)/inputs.Scaling_time;
+					// round of scaling_factor to 1 decimal places
+					scaling_factor = round(scaling_factor*10.0)/10.0;
+					#endif
+					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma, scaling_factor);
 					MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
 					MHDOp::DimToNonDimcalc(a_U_ghost);
 					a_U_ghost.copyTo(a_U[dit],BoundBox);

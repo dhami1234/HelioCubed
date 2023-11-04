@@ -256,7 +256,7 @@ int main(int argc, char* argv[])
 				time += dt;
 				dt_old = dt;
 				time_seconds = time/inputs.velocity_scale;
-
+				state.m_time = time;
 				double physical_time = MHD_Probe::getPhysTime(time/inputs.velocity_scale);
 				double checkpoint_phys_time = inputs.CME_Enter_Time - (inputs.CME_get_checkpoint_before/365.25/24/3600);
 				if (!state.m_CME_checkpoint_written && (physical_time >= checkpoint_phys_time)) {
