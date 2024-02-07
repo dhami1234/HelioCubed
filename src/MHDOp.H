@@ -15,6 +15,26 @@ constexpr unsigned int NUMCOMPS=2*DIM+2 + TURB*3;
 #define CPRES 4
 #define CENG 4
 
+#if DIM == 2
+#define iRHO 0
+#define iVX 1
+#define iMOMX 1
+#define iVY 2
+#define iMOMY 2
+#define iE 3
+#define iP 3
+#define iBX 4
+#define iBY 5
+#if TURB == 1
+	#define iRHOZ2 6
+	#define iZ2 6
+	#define iRHOZ2SIGMA 7
+	#define iSIGMA 7
+	#define iRHOLAMBDA 8
+	#define iLAMBDA 8
+#endif
+#endif
+
 #if DIM == 3
 #define iRHO 0
 #define iVX 1
