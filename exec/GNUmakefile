@@ -21,7 +21,7 @@ HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
 HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
-TARGET:=cubedSphereTest.exe
+TARGET:=CubedSphere.exe
 
 SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard ../../_common/*.cpp) 
 NODIRSRC = $(notdir $(SRC))
