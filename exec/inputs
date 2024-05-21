@@ -38,7 +38,7 @@
 -BC_start_time                   2020.08993624772313296903460837887067
 -BC_cadence                      24.0
 -probe_cadence                   3600  # Seconds
--BC_file                         ../BC_files/POT3D360x180_2020010120_2020022020_fixeddtheta.h5
+-BC_file                         ../../BC_files/POT3D360x180_2020010120_2020022020_fixeddtheta.h5
 -Data_file_Prefix                Data_
 -Checkpoint_file_Prefix          Checkpoint_
 -Probe_trajectory_file           trajEarth2020.dat
