@@ -4,7 +4,6 @@
 #include "Proto.H"
 #include "Proto_LevelBoxData.H"
 #include "MHDOp.H"
-#include "MHD_Artificial_Viscosity.H"
 #include <iostream>
 using namespace Proto;
 
@@ -128,17 +127,6 @@ class MHDLevelDatadivBOp
 public:
 	MHDLevelDatadivBOp();
 	~MHDLevelDatadivBOp();
-	void operator()(MHDLevelDataDX& a_DX,
-	                double a_time,
-	                double a_dt,
-	                MHDLevelDataState& a_State);
-};
-
-class MHDLevelDataViscosityOp
-{
-public:
-	MHDLevelDataViscosityOp();
-	~MHDLevelDataViscosityOp();
 	void operator()(MHDLevelDataDX& a_DX,
 	                double a_time,
 	                double a_dt,
