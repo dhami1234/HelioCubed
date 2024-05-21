@@ -6,8 +6,8 @@ CXX=mpicxx
 DIM=3
 TURB=1
 USE_HDF5=TRUE
-HDF5_LIB=/opt/homebrew/Cellar/hdf5-mpi/1.14.2/lib
-HDF5_INC=/opt/homebrew/Cellar/hdf5-mpi/1.14.2/include
+HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
+HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
 
 PROTO= /Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/proto
 
@@ -17,7 +17,7 @@ CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 CXXOPTFLAGS+= -DPR_OPS=TRUE
-TARGET:=HelioCubed.exe
+TARGET:=FullSphere.exe
 
 SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/_common/*.cpp) 
 NODIRSRC = $(notdir $(SRC))

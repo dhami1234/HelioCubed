@@ -9,6 +9,7 @@
 *.d
 *.o
 *.table
+*.dat
 *.exe
 .DS_Store
 *.err
