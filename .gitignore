@@ -4,11 +4,11 @@
 /exec/Expanse
 /.vscode
 *.hdf5
+*.h5
 *.vtk
 *.d
 *.o
 *.table
-*.dat
 *.exe
 .DS_Store
 *.err
