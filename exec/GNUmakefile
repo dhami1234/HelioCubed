@@ -5,7 +5,7 @@ DEPXX=mpicxx
 CXX=mpicxx
 DIM=3
 USE_HDF5=TRUE
-PROTO=../../..
+PROTO=/Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/proto
 
 
 LAPACK_LIB=/opt/homebrew/opt/openblas/lib
@@ -31,10 +31,10 @@ OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
 NODIRDEP = $(subst .cpp,.d,$(NODIRSRC))
 DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
 
-VPATH=o. ../src  ../../_common
+VPATH=o. ../src  $(PROTO)/examples/_common
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/ops -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I../../_common
+CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/ops -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I$(PROTO)/examples/_common
 CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20
 
 ifdef HDF5_LIB
