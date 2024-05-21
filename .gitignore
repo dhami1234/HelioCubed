@@ -8,6 +8,8 @@
 *.d
 *.o
 *.table
+*.h5
+*.dat
 *.exe
 .DS_Store
 *.err
