@@ -961,13 +961,13 @@ namespace MHD_Mapping
 				b4_temp = Operator::cellQuotient(b4, a_A_row_mag_avg);
 				w2_temp = Operator::cellQuotient(w2, a_A_row_mag_avg);
 				b2_temp = Operator::cellQuotient(b2, a_A_row_mag_avg);
-				U4_temp = MHD_Operator::_cellTensorProduct(w4_temp, a_r2rdot_avg, w2_temp, a_r2rdot_avg);
-				B4_temp = MHD_Operator::_cellTensorProduct(b4_temp, a_r2rdot_avg, b2_temp, a_r2rdot_avg);
+				// U4_temp = MHD_Operator::_cellTensorProduct(w4_temp, a_r2rdot_avg, w2_temp, a_r2rdot_avg);
+				// B4_temp = MHD_Operator::_cellTensorProduct(b4_temp, a_r2rdot_avg, b2_temp, a_r2rdot_avg);
 			}
 			else
 			{
-				U4_temp = MHD_Operator::_cellTensorProduct(w4, a_r2rdot_avg, w2, a_r2rdot_avg);
-				B4_temp = MHD_Operator::_cellTensorProduct(b4, a_r2rdot_avg, b2, a_r2rdot_avg);
+				// U4_temp = MHD_Operator::_cellTensorProduct(w4, a_r2rdot_avg, w2, a_r2rdot_avg);
+				// B4_temp = MHD_Operator::_cellTensorProduct(b4, a_r2rdot_avg, b2, a_r2rdot_avg);
 			}
 			BoxData<double, DIM, MEM> JU4 = Operator::_matrixProductAB2(A4, U4_temp);
 			BoxData<double, DIM, MEM> JB4 = Operator::_matrixProductAB2(A4, B4_temp);

@@ -4,7 +4,7 @@ VARS_OLD := $(.VARIABLES)
 DEPXX=mpicxx
 CXX=mpicxx
 DIM=3
-TURB=1
+TURB=0
 USE_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
 HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
@@ -32,7 +32,7 @@ VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 CPPFLAGS:=-DDIM=$(DIM) -DTURB=$(TURB) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/EBProto/include -I. -I../src -I$(PROTO)/examples/_common 
-CXXFLAGS:= $(CXXOPTFLAGS) -std=c++14 -w
+CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20 -w -Wno-c++11-narrowing
 
 LIBS += $(LAPACK_LIB)
 
