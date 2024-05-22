@@ -5,9 +5,6 @@
 #include "MHDLevelDataRK4.H"
 namespace MHD_Set_Boundary_Values {
 
-	void Set_Boundary_Values(LevelBoxData<double,NUMCOMPS>& a_JU,
-	                         MHDLevelDataState& a_State);
-
 	void Set_Boundary_Values_Spherical_2O(LevelBoxData<double,NUMCOMPS>& a_U,
 	                         MHDLevelDataState& a_State);					 
 

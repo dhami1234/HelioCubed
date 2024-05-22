@@ -92,152 +92,7 @@ namespace MHD_Set_Boundary_Values {
 	}
 	PROTO_KERNEL_END(scale_with_r_calcF, scale_with_r_calc)
 
-	void Set_Boundary_Values(LevelBoxData<double,NUMCOMPS>& a_JU,
-	                         MHDLevelDataState& a_State)
-	{
-		double a_dx = a_State.m_dx;
-		double a_dy = a_State.m_dy;
-		double a_dz = a_State.m_dz;
-		double a_gamma = a_State.m_gamma;
-		double a_time = a_State.m_time;
-		for (auto dit : a_State.m_U){	
-
-			Box dbx0 = a_JU[dit].box();
-			//Filling ghost cells for low side of dir == 0 here. This will be the inner boundary in r direction once we map to polar, spherical, or cubed sphere grids.
-			if (dbx0.low()[0] < a_State.m_probDom.box().low()[0] && inputs.LowBoundType == 1) {
-				if (inputs.sph_inner_BC_hdf5 == 1){
-					#if DIM == 2
-						Point source_low = Point(a_State.m_probDom.box().low()[0],a_JU[dit].box().low()[1]);
-						Point source_high = Point(a_State.m_probDom.box().low()[0],a_JU[dit].box().high()[1]);
-					#endif
-					#if DIM == 3
-						Point source_low = Point(a_State.m_probDom.box().low()[0],a_JU[dit].box().low()[1],a_JU[dit].box().low()[2]);
-						Point source_high = Point(a_State.m_probDom.box().low()[0],a_JU[dit].box().high()[1],a_JU[dit].box().high()[2]);
-					#endif
-					Box sourceBox(source_low,source_high);
-					Box sourceBox1 = sourceBox.grow(1);
-					Point ghost_low = dbx0.low();
-					#if DIM == 2
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1]);
-					#endif
-					#if DIM == 3
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
-					#endif
-					Box BoundBox(ghost_low,ghost_high);
-					Vector a_U_ghost(BoundBox), a_JU_ghost(BoundBox), a_U_sph(BoundBox), a_U_sph_scaled_r(BoundBox);
-
-					for (int i = 1; i <= NGHOST; i++ ) {
-						a_State.m_BC[dit].copyTo(a_U_sph,sourceBox,Point::Basis(0)*(-i));// Using shifting option of copyTo
-					}
-					BoxData<double,DIM> x_sph(BoundBox);
-					MHD_Mapping::get_sph_coords_cc(x_sph,BoundBox,a_dx, a_dy, a_dz);
-					double scaling_factor;
-					#if TURB == 1
-					double time_days = a_time/inputs.velocity_scale/24./60./60.;
-					scaling_factor = min(time_days,inputs.Scaling_time)/inputs.Scaling_time;
-					// round of scaling_factor to 1 decimal places
-					scaling_factor = round(scaling_factor*10.0)/10.0;
-					#endif
-					forallInPlace_p(scale_with_r_calc, BoundBox, a_U_sph_scaled_r, a_U_sph, x_sph, a_gamma, scaling_factor);
-					
-					if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_sph_scaled_r, a_State.m_detAA_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true, 2);
-					} else {
-						MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
-						a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
-					}
-					MHDOp::DimToNonDimcalc(a_JU_ghost);
-					a_JU_ghost.copyTo(a_JU[dit],BoundBox);
-
-				} else {
-
-					Point ghost_low = dbx0.low();
-					#if DIM == 2
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1]);
-					#endif
-					#if DIM == 3
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
-					#endif
-					Box BoundBox(ghost_low,ghost_high);
-					Vector a_U(BoundBox), a_JU_ghost(BoundBox);
-					BoxData<double,DIM> eta(BoundBox);
-					forallInPlace_p(iotaFunc, BoundBox, eta, a_dx, a_dy, a_dz);
-					BoxData<double,DIM> x(BoundBox);
-					MHD_Mapping::eta_to_x_calc(x,eta, BoundBox);
-					MHD_Initialize::InitializeStatecalc(a_U,x,eta,a_gamma,BoundBox);
-					
-					if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-						MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U, a_State.m_detAA_avg[dit],a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], true, 2);
-					} else {
-						a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U);
-					}
-					// a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U);
-					a_JU_ghost.copyTo(a_JU[dit],BoundBox);
-				}
-			}
-
-			//Filling ghost cells for high side of dir == 0 here, to make an open boundary. Ghost cells are filled by outermost cells of problem domain. This will be the outer boundary in r direction once we map to polar, spherical, or cubed sphere grids.
-			if (dbx0.high()[0] > a_State.m_probDom.box().high()[0] && inputs.HighBoundType == 2) {
-	#if DIM == 2
-				Point source_low = Point(a_State.m_probDom.box().high()[0],a_JU[dit].box().low()[1]);
-				Point source_high = Point(a_State.m_probDom.box().high()[0],a_JU[dit].box().high()[1]);
-	#endif
-	#if DIM == 3
-				Point source_low = Point(a_State.m_probDom.box().high()[0],a_JU[dit].box().low()[1],a_JU[dit].box().low()[2]);
-				Point source_high = Point(a_State.m_probDom.box().high()[0],a_JU[dit].box().high()[1],a_JU[dit].box().high()[2]);
-	#endif
-				Box sourceBox(source_low,source_high);
-				Box sourceBox1 = sourceBox.grow(1);
-
-				Vector a_U(sourceBox1);
-				Vector a_U_exterp(sourceBox1);
-
-				Stencil<double> m_exterp_f_2nd;
-		
-				if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-					MHD_Mapping::JU_to_U_Sph_ave_calc_func(a_U, a_JU[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit],a_State.m_A_row_mag_avg[dit], false, 2);
-				} else {
-					MHD_Mapping::JU_to_U_2ndOrdercalc(a_U, a_JU[dit], a_State.m_Jacobian_ave[dit], sourceBox1);
-				}
-				// MHD_Mapping::JU_to_U_2ndOrdercalc(a_U, a_JU[dit], a_State.m_Jacobian_ave[dit], sourceBox1);
-
-				
-
-	#if DIM == 2
-				Point ghost_low = Point(a_State.m_probDom.box().high()[0]+1, dbx0.low()[1]);
-	#endif
-	#if DIM == 3
-				Point ghost_low = Point(a_State.m_probDom.box().high()[0]+1, dbx0.low()[1], dbx0.low()[2]);
-	#endif
-				Point ghost_high = dbx0.high();
-				Box BoundBox(ghost_low,ghost_high);
-				// Box BoundBox1 = BoundBox.grow(1);
-				Box BoundBox1 = BoundBox.grow(0);
-				Vector a_U_ghost(BoundBox), a_JU_ghost(BoundBox);
-
-				for (int i = 1; i <= NGHOST; i++ ) {
-					//Using outermost 2 layers to extrapolate to rest.
-					m_exterp_f_2nd = (i+1.0)*Shift(Point::Zeros()) - (i*1.0)*Shift(-Point::Basis(0)); 
-					a_U_exterp = m_exterp_f_2nd(a_U);
-					a_U_exterp.copyTo(a_U_ghost,sourceBox,Point::Basis(0)*(i));// Using shifting option of copyTo
-				}
-
-				if (inputs.grid_type_global == 2 && inputs.initialize_in_spherical_coords == 1){
-					MHD_Mapping::U_Sph_ave_to_JU_calc_func(a_JU_ghost, a_U_ghost, a_State.m_detAA_avg[dit], a_State.m_detAA_inv_avg[dit], a_State.m_r2rdot_avg[dit], a_State.m_detA_avg[dit], a_State.m_A_row_mag_avg[dit], false, 2);
-				} else {
-					a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
-				}
-				// a_JU_ghost = forall<double,NUMCOMPS>(dot_pro_calcF, a_State.m_Jacobian_ave[dit], a_U_ghost);
-				a_JU_ghost.copyTo(a_JU[dit],BoundBox);
-			}
-		}
-	}
-
-
 	
-
-	
-
 	void Set_Boundary_Values_Spherical_2O(LevelBoxData<double,NUMCOMPS>& a_U,
 	                         			  MHDLevelDataState& a_State)
 	{
@@ -251,25 +106,18 @@ namespace MHD_Set_Boundary_Values {
 			Box dbx0 = a_U[dit].box();
 			//Filling ghost cells for low side of dir == 0 here. This will be the inner boundary in r direction once we map to polar, spherical, or cubed sphere grids.
 			
-			if (dbx0.low()[0] < a_State.m_probDom.box().low()[0] && inputs.LowBoundType == 1) {
+			if (dbx0.low()[0] < a_State.m_probDom.box().low()[0]) {
 				if (inputs.sph_inner_BC_hdf5 == 1){
-					#if DIM == 2
-						Point source_low = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().low()[1]);
-						Point source_high = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().high()[1]);
-					#endif
-					#if DIM == 3
-						Point source_low = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().low()[1],a_U[dit].box().low()[2]);
-						Point source_high = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().high()[1],a_U[dit].box().high()[2]);
-					#endif
+
+					Point source_low = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().low()[1],a_U[dit].box().low()[2]);
+					Point source_high = Point(a_State.m_probDom.box().low()[0],a_U[dit].box().high()[1],a_U[dit].box().high()[2]);
+					
 					Box sourceBox(source_low,source_high);
 					Box sourceBox1 = sourceBox.grow(1);
 					Point ghost_low = dbx0.low();
-					#if DIM == 2
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1]);
-					#endif
-					#if DIM == 3
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
-					#endif
+
+					Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
+					
 					Box BoundBox(ghost_low,ghost_high);
 					Vector a_U_ghost(BoundBox), a_U_sph(BoundBox), a_U_sph_scaled_r(BoundBox);
 
@@ -289,17 +137,9 @@ namespace MHD_Set_Boundary_Values {
 					MHD_Mapping::Spherical_to_Cartesian(a_U_ghost, a_U_sph_scaled_r, x_sph);
 					MHDOp::DimToNonDimcalc(a_U_ghost);
 					a_U_ghost.copyTo(a_U[dit],BoundBox);
-					
-
-
 				} else {
 					Point ghost_low = dbx0.low();
-					#if DIM == 2
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1]);
-					#endif
-					#if DIM == 3
-						Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
-					#endif
+					Point ghost_high = Point(a_State.m_probDom.box().low()[0]-1, dbx0.high()[1], dbx0.high()[2]);
 					Box BoundBox(ghost_low,ghost_high);
 					Vector a_U_sph(BoundBox), a_U_ghost(BoundBox);
 					BoxData<double,DIM> x_sph(BoundBox);
@@ -312,15 +152,11 @@ namespace MHD_Set_Boundary_Values {
 			
 
 			//Filling ghost cells for high side of dir == 0 here, to make an open boundary. Ghost cells are filled by outermost cells of problem domain. This will be the outer boundary in r direction once we map to polar, spherical, or cubed sphere grids.
-			if (dbx0.high()[0] > a_State.m_probDom.box().high()[0] && inputs.HighBoundType == 2) {
-	#if DIM == 2
-				Point source_low = Point(a_State.m_probDom.box().high()[0],a_U[dit].box().low()[1]);
-				Point source_high = Point(a_State.m_probDom.box().high()[0],a_U[dit].box().high()[1]);
-	#endif
-	#if DIM == 3
+			if (dbx0.high()[0] > a_State.m_probDom.box().high()[0]) {
+
 				Point source_low = Point(a_State.m_probDom.box().high()[0],a_U[dit].box().low()[1],a_U[dit].box().low()[2]);
 				Point source_high = Point(a_State.m_probDom.box().high()[0],a_U[dit].box().high()[1],a_U[dit].box().high()[2]);
-	#endif
+
 				Box sourceBox(source_low,source_high);
 				Box sourceBox1 = sourceBox.grow(1);
 
@@ -328,13 +164,8 @@ namespace MHD_Set_Boundary_Values {
 
 				Stencil<double> m_exterp_f_2nd;
 
-
-	#if DIM == 2
-				Point ghost_low = Point(a_State.m_probDom.box().high()[0]+1, dbx0.low()[1]);
-	#endif
-	#if DIM == 3
 				Point ghost_low = Point(a_State.m_probDom.box().high()[0]+1, dbx0.low()[1], dbx0.low()[2]);
-	#endif
+
 				Point ghost_high = dbx0.high();
 				Box BoundBox(ghost_low,ghost_high);
 				// Box BoundBox1 = BoundBox.grow(1);

@@ -50,35 +50,6 @@ MHDLevelDataState::MHDLevelDataState(const ProblemDomain& a_probDom,
 	m_X_corners.define(m_dbl,Point::Ones(NGHOST));
 	m_J.define(m_dbl,Point::Ones(NGHOST));
 
-    
-    m_detAA_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_detAA_inv_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_r2rdot_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_detA_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_A_row_mag_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_r2detA_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_r2detAA_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_r2detAn_1_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_row_mag_1_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_1_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotdetA_2_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotdetAA_2_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotd3ncn_2_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_row_mag_2_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_2_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotdetA_3_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotdetAA_3_avg.define(m_dbl,Point::Ones(NGHOST));
-    m_rrdotncd2n_3_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_row_mag_3_avg.define(m_dbl,Point::Ones(NGHOST));
-	m_A_3_avg.define(m_dbl,Point::Ones(NGHOST));
-
-	for (int i=0; i<DIM; i++){
-		m_Dr_detA_A_avg[i].define(m_dbl,Point::Ones(NGHOST));
-		m_Dr_detA_avg[i].define(m_dbl,Point::Ones(NGHOST));
-		m_Dr_AdjA_avg[i].define(m_dbl,Point::Ones(NGHOST));
-		m_A_row_mag_face_avg[i].define(m_dbl,Point::Ones(NGHOST));
-	}
-
 	m_x_sph_cc.define(m_dbl,Point::Ones(NGHOST));
 	m_x_sph_fc_1.define(m_dbl,Point::Ones(NGHOST));
 	m_x_sph_fc_2.define(m_dbl,Point::Ones(NGHOST));
@@ -162,32 +133,12 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 	}
 	new_state.exchange(); 
 
-	
-	
-	if (inputs.LowBoundType != 0 || inputs.HighBoundType != 0) {
-		if (inputs.Spherical_2nd_order == 0){
-			MHD_Set_Boundary_Values::Set_Boundary_Values(new_state,a_State);			
-		}
-		if (inputs.Spherical_2nd_order == 1){
-			MHD_Set_Boundary_Values::Set_Boundary_Values_Spherical_2O(new_state,a_State);
-		}
-	} 
-	
+	MHD_Set_Boundary_Values::Set_Boundary_Values_Spherical_2O(new_state,a_State);
+
 	double dt_temp = 1.0e10*inputs.velocity_scale;
 	double dt_new;
 		
-	
-	if (inputs.grid_type_global == 2){
-		if (inputs.Spherical_2nd_order == 0){
-			MHDOp::step_spherical(a_DX.m_DU,new_state,a_State, dt_temp);
-		}
-		if (inputs.Spherical_2nd_order == 1){
-			PR_TIME("MHDOp::step_spherical_2O");
-			MHDOp::step_spherical_2O(a_DX.m_DU,new_state,a_State, dt_temp);
-		}
-	} else {
-		MHDOp::step(a_DX.m_DU,new_state,a_State, dt_temp);
-	}
+	MHDOp::step_spherical_2O(a_DX.m_DU,new_state,a_State, dt_temp);
 
 	if (!a_State.m_min_dt_calculated){
 		double mintime;
@@ -199,7 +150,6 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 	}
 	a_State.m_divB_calculated = true; // This makes sure that divB is calculated only once in RK4
 	a_State.m_divV_calculated = true; // This makes sure that divV is calculated only once in RK4
-	a_State.m_Viscosity_calculated = true; // This makes sure that Viscosity is calculated only once in RK4
 	a_State.m_min_dt_calculated = true; // This makes sure that min_dt is calculated only once in RK4
 	a_DX*=a_dt;
 }

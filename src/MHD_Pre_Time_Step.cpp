@@ -29,17 +29,9 @@ namespace MHD_Pre_Time_Step {
 
         double r_dom, theta_dom, phi_dom;
 
-        if (inputs.Spherical_2nd_order == 0){
-            r_dom = sqrt(x*x+y*y+z*z);
-            phi_dom = atan2(y,x);
-            theta_dom = acos(z/r_dom);
-        }
-
-        if (inputs.Spherical_2nd_order == 1){
-            r_dom = x;
-            theta_dom = y;
-            phi_dom = z;
-        }
+        r_dom = x;
+        theta_dom = y;
+        phi_dom = z;
 
         double R_t = inputs.CME_r1; // In R_Sun
         double R_p = inputs.CME_r0; // In R_Sun
@@ -383,18 +375,9 @@ namespace MHD_Pre_Time_Step {
             for (auto dit : a_state.m_CME){	
                 a_state.m_CME[dit].setVal(0.0);	  
                 Box dbx1 = a_state.m_CME[dit].box();
-                BoxData<double,DIM> eta(dbx1);
-                MHD_Mapping::eta_calc(eta,dbx1,a_dx, a_dy, a_dz);
                 BoxData<double,DIM> x(dbx1);		
-                if (inputs.Spherical_2nd_order == 0){
-                    MHD_Mapping::eta_to_x_calc(x, eta, dbx1);
-                }
-                if (inputs.Spherical_2nd_order == 1){
-                    MHD_Mapping::get_sph_coords_cc(x, dbx1, a_dx, a_dy, a_dz);
-                }
-
+                MHD_Mapping::get_sph_coords_cc(x, dbx1, a_dx, a_dy, a_dz);
                 forallInPlace_p(define_CME,a_state.m_CME[dit],x);
-
                 forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit]);
             }
             a_state.m_CME_inserted = true;

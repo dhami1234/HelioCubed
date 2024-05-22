@@ -8,16 +8,6 @@ typedef Var<double,NUMCOMPS> State;
 
 
 namespace MHD_Limiters {
-	void MHD_Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave_low_lim_flat,
-	                  BoxData<double,NUMCOMPS>& a_W_ave_high_lim_flat,
-	                  BoxData<double,NUMCOMPS>& a_W_ave_low,
-	                  BoxData<double,NUMCOMPS>& a_W_ave_high,
-	                  BoxData<double,NUMCOMPS>& a_W_ave,
-	                  BoxData<double,NUMCOMPS>& a_W_bar,
-	                  const int a_d,
-	                  const double a_dx,
-	                  const double a_dy,
-	                  const double a_dz);
 
 	void MHD_Limiters_minmod(BoxData<double,NUMCOMPS>& a_W_low_lim,
 	                  BoxData<double,NUMCOMPS>& a_W_high_lim,

@@ -54,16 +54,6 @@ namespace MHDOp
 			  MHDLevelDataState& a_State,
 			  double& a_min_dt);
 
-	
-	void step(LevelBoxData<double,NUMCOMPS>& a_Rhs,
-			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
-			  MHDLevelDataState& a_State,
-			  double& a_min_dt);
-
-	void step_spherical(LevelBoxData<double,NUMCOMPS>& a_Rhs,
-			  LevelBoxData<double,NUMCOMPS>& a_JU_ave,
-			  MHDLevelDataState& a_State,
-			  double& a_min_dt);
 
 	void consToPrimcalc(BoxData<double,NUMCOMPS>& a_W,
 	                    const BoxData<double,NUMCOMPS>& a_U,

@@ -122,7 +122,6 @@ namespace MHD_Probe {
                 bool give_space)
 
     {
-        #if DIM == 3
         int pid = procID();
         ofstream outputFile;
     	outputFile.open(inputs.Probe_data_file,std::ios::app);
@@ -258,10 +257,8 @@ namespace MHD_Probe {
         Point index_n2(pt0_nearest,pt1_nearest,pt2_neigbor);
         for (auto dit : state.m_U){
             Box dbx0 = state.m_U[dit].box();
-            if (inputs.Spherical_2nd_order == 0) dbx0 = dbx0.grow(-NGHOST);
             BoxData<double,NUMCOMPS> U_dim(dbx0);
             if (inputs.Spherical_2nd_order == 1) state.m_U[dit].copyTo(U_dim);
-            if (inputs.Spherical_2nd_order == 0) MHD_Mapping::JU_to_U_ave_calc_func(U_dim, state.m_U[dit], state.m_r2rdot_avg[dit], state.m_detA_avg[dit]);
             MHDOp::NonDimToDimcalc(U_dim);
             BoxData<double,DIM> x_sph_cc(dbx0);
             MHD_Mapping::get_sph_coords_cc(x_sph_cc,dbx0,a_dx,a_dy,a_dz);
@@ -332,6 +329,6 @@ namespace MHD_Probe {
         }
 
         outputFile.close();
-        #endif
+       
     }
 }

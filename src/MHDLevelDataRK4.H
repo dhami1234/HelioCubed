@@ -50,37 +50,6 @@ public:
 	LevelBoxData<double,DIM> m_X_corners;
 	LevelBoxData<double> m_J;
 
-// Things needed by Spherical mapping with radial flow correction
-	LevelBoxData<double,DIM*DIM> m_detAA_avg;
-	LevelBoxData<double,DIM*DIM> m_detAA_inv_avg;
-	LevelBoxData<double,1> m_r2rdot_avg;
-	LevelBoxData<double,1> m_detA_avg;
-	LevelBoxData<double,DIM> m_A_row_mag_avg;
-	LevelBoxData<double,1> m_r2detA_1_avg;
-	LevelBoxData<double,DIM*DIM> m_r2detAA_1_avg;
-	LevelBoxData<double,DIM> m_r2detAn_1_avg;
-	LevelBoxData<double,DIM> m_A_row_mag_1_avg;
-	LevelBoxData<double,DIM*DIM> m_A_1_avg;
-	LevelBoxData<double,1> m_rrdotdetA_2_avg;
-	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_2_avg;
-	LevelBoxData<double,DIM> m_rrdotd3ncn_2_avg;
-	LevelBoxData<double,DIM> m_A_row_mag_2_avg;
-	LevelBoxData<double,DIM*DIM> m_A_2_avg;
-	LevelBoxData<double,1> m_rrdotdetA_3_avg;
-	LevelBoxData<double,DIM*DIM> m_rrdotdetAA_3_avg;
-	LevelBoxData<double,DIM> m_rrdotncd2n_3_avg;
-	LevelBoxData<double,DIM> m_A_row_mag_3_avg;
-	LevelBoxData<double,DIM*DIM> m_A_3_avg;
-
-
-
-// Extra things needed by Spherical mapping with radial flow correction when using Phil's operators
-	Array<LevelBoxData<double,DIM*DIM,MEM>,DIM> m_Dr_detA_A_avg;
-	Array<LevelBoxData<double,1,MEM>,DIM> m_Dr_detA_avg;
-	Array<LevelBoxData<double,DIM,MEM>,DIM> m_Dr_AdjA_avg;
-	Array<LevelBoxData<double,DIM,MEM>,DIM> m_A_row_mag_face_avg;
-
-
 // Things needed by Second order Spherical
 	LevelBoxData<double,DIM> m_x_sph_cc;
 	LevelBoxData<double,DIM> m_x_sph_fc_1;
