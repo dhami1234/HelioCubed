@@ -20,221 +20,6 @@ namespace MHD_Mapping
 {
 
 	PROTO_KERNEL_START
-	void iotaFuncF(Point &a_p,
-				   V &a_X,
-				   const double a_dx,
-				   const double a_dy,
-				   const double a_dz)
-	{
-		for (int ii = 0; ii < DIM; ii++)
-		{
-			double dxd;
-			if (ii == 0)
-				dxd = a_dx;
-			if (ii == 1)
-				dxd = a_dy;
-			if (ii == 2)
-				dxd = a_dz;
-			a_X(ii) = a_p[ii] * dxd + 0.5 * dxd;
-		}
-	}
-	PROTO_KERNEL_END(iotaFuncF, iotaFunc)
-
-	PROTO_KERNEL_START
-	void iotaFuncCornerF(Point &a_p,
-						 V &a_X,
-						 const double a_dx,
-						 const double a_dy,
-						 const double a_dz)
-	{
-		for (int ii = 0; ii < DIM; ii++)
-		{
-			double dxd;
-			if (ii == 0)
-				dxd = a_dx;
-			if (ii == 1)
-				dxd = a_dy;
-			if (ii == 2)
-				dxd = a_dz;
-			a_X(ii) = a_p[ii] * dxd;
-		}
-	}
-	PROTO_KERNEL_END(iotaFuncCornerF, iotaFuncCorner)
-
-	PROTO_KERNEL_START
-	void iotaFuncFaceF(Point &a_p,
-					   V &a_X,
-					   const double a_dx,
-					   const double a_dy,
-					   const double a_dz,
-					   int a_d)
-	{
-		for (int ii = 0; ii < DIM; ii++)
-		{
-			double dxd;
-			if (ii == 0)
-				dxd = a_dx;
-			if (ii == 1)
-				dxd = a_dy;
-			if (ii == 2)
-				dxd = a_dz;
-			if (ii == a_d)
-			{
-				a_X(ii) = a_p[ii] * dxd;
-			}
-			else
-			{
-				a_X(ii) = a_p[ii] * dxd + 0.5 * dxd;
-			}
-		}
-	}
-	PROTO_KERNEL_END(iotaFuncFaceF, iotaFuncFace)
-
-	void eta_calc(BoxData<double, DIM> &a_eta,
-				  const Box &a_bx,
-				  const double a_dx,
-				  const double a_dy,
-				  const double a_dz)
-	{
-		forallInPlace_p(iotaFunc, a_bx, a_eta, a_dx, a_dy, a_dz);
-	}
-
-	void etaCorner_calc(BoxData<double, DIM> &a_eta,
-						const Box &a_bx,
-						const double a_dx,
-						const double a_dy,
-						const double a_dz)
-	{
-		forallInPlace_p(iotaFuncCorner, a_bx, a_eta, a_dx, a_dy, a_dz);
-	}
-
-	void etaFace_calc(BoxData<double, DIM> &a_eta,
-					  const Box &a_bx,
-					  const double a_dx,
-					  const double a_dy,
-					  const double a_dz,
-					  int a_d)
-	{
-		forallInPlace_p(iotaFuncFace, a_bx, a_eta, a_dx, a_dy, a_dz, a_d);
-	}
-
-	PROTO_KERNEL_START
-	void eta_to_xF(const Point &a_pt,
-				   Var<double, DIM> &a_x,
-				   const Var<double, DIM> &a_eta)
-	{
-
-#if DIM == 2
-		if (inputs.grid_type_global == 0)
-		{
-			a_x(0) = a_eta(0);
-			a_x(1) = a_eta(1);
-		}
-		if (inputs.grid_type_global == 1)
-		{
-			double C1 = inputs.C1_fix;
-			double C2 = C1;
-			a_x(0) = a_eta(0) + C1 * sin(2.0 * c_PI * a_eta(0)) * sin(2.0 * c_PI * a_eta(1));
-			a_x(1) = a_eta(1) + C2 * sin(2.0 * c_PI * a_eta(0)) * sin(2.0 * c_PI * a_eta(1));
-		}
-		if (inputs.grid_type_global == 2)
-		{
-			a_x(0) = (inputs.r_in * c_AU + a_eta(0) * (inputs.r_out * c_AU - inputs.r_in * c_AU)) * cos(2.0 * c_PI * a_eta(1));
-			a_x(1) = (inputs.r_in * c_AU + a_eta(0) * (inputs.r_out * c_AU - inputs.r_in * c_AU)) * sin(2.0 * c_PI * a_eta(1));
-		}
-#endif
-#if DIM == 3
-		if (inputs.grid_type_global == 0)
-		{
-			a_x(0) = a_eta(0);
-			a_x(1) = a_eta(1);
-			a_x(2) = a_eta(2);
-		}
-		if (inputs.grid_type_global == 2)
-		{
-			if (inputs.Spherical_2nd_order == 0)
-			{
-				double R_t = (inputs.r_out * c_AU - inputs.r_in * c_AU) / (exp(inputs.C_rad) - 1.0);
-				double r = inputs.r_in * c_AU + R_t * (exp(inputs.C_rad * a_eta(0)) - 1.0);
-				a_x(0) = r * sin(c_PI * a_eta(1)) * cos(2.0 * c_PI * a_eta(2));
-				a_x(1) = r * sin(c_PI * a_eta(1)) * sin(2.0 * c_PI * a_eta(2));
-				a_x(2) = r * cos(c_PI * a_eta(1));
-			}
-			if (inputs.Spherical_2nd_order == 1)
-			{
-				double R_t = (inputs.r_out * c_AU - inputs.r_in * c_AU) / (exp(inputs.C_rad) - 1.0);
-				double r = inputs.r_in * c_AU + R_t * (exp(inputs.C_rad * a_eta(0)) - 1.0);
-				double theta = c_PI * a_eta(1);
-				double phi = 2.0 * c_PI * a_eta(2);
-
-				if (theta < 0)
-				{
-					theta = -theta;
-					if (phi < c_PI)
-					{
-						phi = phi + c_PI;
-					}
-					else
-					{
-						phi = phi - c_PI;
-					}
-				}
-				if (theta > c_PI)
-				{
-					theta = c_PI - (theta - c_PI);
-					if (phi < c_PI)
-					{
-						phi = phi + c_PI;
-					}
-					else
-					{
-						phi = phi - c_PI;
-					}
-				}
-
-				a_x(0) = r * sin(theta) * cos(phi);
-				a_x(1) = r * sin(theta) * sin(phi);
-				a_x(2) = r * cos(theta);
-			}
-		}
-
-#endif
-	}
-	PROTO_KERNEL_END(eta_to_xF, eta_to_x)
-
-	void eta_to_x_calc(BoxData<double, DIM> &a_x,
-					   const BoxData<double, DIM> &a_eta,
-					   const Box &dbx0)
-	{
-		forallInPlace_p(eta_to_x, dbx0, a_x, a_eta);
-	}
-
-	void phys_coords_calc(BoxData<double, DIM> &a_x,
-						  const Box &dbx1,
-						  const double a_dx,
-						  const double a_dy,
-						  const double a_dz)
-	{
-		Box dbx0 = a_x.box();
-		BoxData<double, DIM> eta(dbx0);
-		MHD_Mapping::eta_calc(eta, dbx0, a_dx, a_dy, a_dz);
-		MHD_Mapping::eta_to_x_calc(a_x, eta, dbx0);
-	}
-
-	void phys_coords_face_calc(BoxData<double, DIM> &a_x,
-							   const Box &dbx1,
-							   const double a_dx,
-							   const double a_dy,
-							   const double a_dz,
-							   const int a_d)
-	{
-		Box dbx0 = a_x.box();
-		BoxData<double, DIM> eta(dbx0);
-		MHD_Mapping::etaFace_calc(eta, dbx0, a_dx, a_dy, a_dz, a_d);
-		MHD_Mapping::eta_to_x_calc(a_x, eta, dbx0);
-	}
-
-	PROTO_KERNEL_START
 	void out_data_joinF(Var<double, NUMCOMPS + DIM> &a_out_data,
 						const Var<double, DIM> &a_phys_coords,
 						const Var<double, NUMCOMPS> &a_W)
@@ -433,6 +218,80 @@ namespace MHD_Mapping
 	}
 
 	PROTO_KERNEL_START
+	void get_cart_coords_fc_calcF(const Point &a_pt,
+								 Var<double, DIM> &a_x_cart,
+								 const double a_dx,
+								 const double a_dy,
+								 const double a_dz,
+								 int a_d)
+	{
+		double eta[3];
+		for (int i = 0; i < DIM; i++)
+		{
+			double dxd;
+			if (i == 0)
+				dxd = a_dx;
+			if (i == 1)
+				dxd = a_dy;
+			if (i == 2)
+				dxd = a_dz;
+			if (i == a_d)
+			{
+				eta[i] = a_pt[i] * dxd;
+			}
+			else
+			{
+				eta[i] = a_pt[i] * dxd + 0.5 * dxd;
+			}
+		}
+
+		double R_t = (inputs.r_out * c_AU - inputs.r_in * c_AU) / (exp(inputs.C_rad) - 1.0);
+
+		double r = inputs.r_in * c_AU + R_t * (exp(inputs.C_rad * eta[0]) - 1.0);
+		double theta = c_PI * eta[1];
+		double phi = 2.0 * c_PI * eta[2];
+
+		if (theta < 0)
+		{
+			theta = -theta;
+			if (phi < c_PI)
+			{
+				phi = phi + c_PI;
+			}
+			else
+			{
+				phi = phi - c_PI;
+			}
+		}
+		if (theta > c_PI)
+		{
+			theta = c_PI - (theta - c_PI);
+			if (phi < c_PI)
+			{
+				phi = phi + c_PI;
+			}
+			else
+			{
+				phi = phi - c_PI;
+			}
+		}
+		a_x_cart(0) = r*sin(theta)*cos(phi);	// x
+		a_x_cart(1) = r*sin(theta)*sin(phi);    // y
+		a_x_cart(2) = r*cos(theta);				// z
+	}
+	PROTO_KERNEL_END(get_cart_coords_fc_calcF, get_cart_coords_fc_calc)
+
+	void get_cart_coords_fc(BoxData<double, DIM> &a_x_cart,
+						   const Box &a_bx,
+						   const double a_dx,
+						   const double a_dy,
+						   const double a_dz,
+						   int a_d)
+	{
+		forallInPlace_p(get_cart_coords_fc_calc, a_bx, a_x_cart, a_dx, a_dy, a_dz, a_d);
+	}
+
+	PROTO_KERNEL_START
 	void get_sph_coords_cc_calcF(const Point &a_pt,
 								 Var<double, DIM> &a_x_sph,
 								 const double a_dx,
@@ -504,6 +363,80 @@ namespace MHD_Mapping
 						   const double a_dz)
 	{
 		forallInPlace_p(get_sph_coords_cc_calc, a_bx, a_x_sph, a_dx, a_dy, a_dz);
+	}
+
+	PROTO_KERNEL_START
+	void get_cart_coords_cc_calcF(const Point &a_pt,
+								 Var<double, DIM> &a_x_cart,
+								 const double a_dx,
+								 const double a_dy,
+								 const double a_dz)
+	{
+		double R_t = (inputs.r_out * c_AU - inputs.r_in * c_AU) / (exp(inputs.C_rad) - 1.0);
+		double eta_here[3];
+		double eta_ahead[3];
+		for (int i = 0; i < DIM; i++)
+		{
+			double dxd;
+			if (i == 0)
+				dxd = a_dx;
+			if (i == 1)
+				dxd = a_dy;
+			if (i == 2)
+				dxd = a_dz;
+			eta_here[i] = a_pt[i] * dxd;
+			eta_ahead[i] = a_pt[i] * dxd + dxd;
+		}
+
+		double r_here = inputs.r_in * c_AU + R_t * (exp(inputs.C_rad * eta_here[0]) - 1.0);
+		double theta_here = c_PI * eta_here[1];
+		double phi_here = 2.0 * c_PI * eta_here[2];
+
+		double r_ahead = inputs.r_in * c_AU + R_t * (exp(inputs.C_rad * eta_ahead[0]) - 1.0);
+		double theta_ahead = c_PI * eta_ahead[1];
+		double phi_ahead = 2.0 * c_PI * eta_ahead[2];
+
+		double r = 0.5 * (r_here + r_ahead);
+		double theta = 0.5 * (theta_here + theta_ahead);
+		double phi = 0.5 * (phi_here + phi_ahead);
+
+		if (theta < 0)
+		{
+			theta = -theta;
+			if (phi < c_PI)
+			{
+				phi = phi + c_PI;
+			}
+			else
+			{
+				phi = phi - c_PI;
+			}
+		}
+		if (theta > c_PI)
+		{
+			theta = c_PI - (theta - c_PI);
+			if (phi < c_PI)
+			{
+				phi = phi + c_PI;
+			}
+			else
+			{
+				phi = phi - c_PI;
+			}
+		}
+		a_x_cart(0) = r*sin(theta)*cos(phi);	// x
+		a_x_cart(1) = r*sin(theta)*sin(phi);    // y
+		a_x_cart(2) = r*cos(theta);				// z
+	}
+	PROTO_KERNEL_END(get_cart_coords_cc_calcF, get_cart_coords_cc_calc)
+
+	void get_cart_coords_cc(BoxData<double, DIM> &a_x_cart,
+						   const Box &a_bx,
+						   const double a_dx,
+						   const double a_dy,
+						   const double a_dz)
+	{
+		forallInPlace_p(get_cart_coords_cc_calc, a_bx, a_x_cart, a_dx, a_dy, a_dz);
 	}
 
 	PROTO_KERNEL_START

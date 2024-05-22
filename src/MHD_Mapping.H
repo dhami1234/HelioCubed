@@ -63,9 +63,22 @@ namespace MHD_Mapping {
 	                    const double a_dx,
 	                    const double a_dy,
 	                    const double a_dz,
-	                    int a_d);														
+	                    int a_d);	
+
+	void get_cart_coords_fc(BoxData<double,DIM>& a_x_cart,
+	                    const Box& a_bx,
+	                    const double a_dx,
+	                    const double a_dy,
+	                    const double a_dz,
+	                    int a_d);													
 
 	void get_sph_coords_cc(BoxData<double,DIM>& a_x_sph,
+	                    const Box& a_bx,
+	                    const double a_dx,
+	                    const double a_dy,
+	                    const double a_dz);
+
+	void get_cart_coords_cc(BoxData<double,DIM>& a_x_cart,
 	                    const Box& a_bx,
 	                    const double a_dx,
 	                    const double a_dy,

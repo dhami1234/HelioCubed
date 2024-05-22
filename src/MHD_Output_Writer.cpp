@@ -43,7 +43,8 @@ namespace MHD_Output_Writer {
 				new_state3[ dit].copyTo(new_state[ dit]);
 			}
 
-			MHD_Mapping::phys_coords_calc(phys_coords[ dit],state.m_U[ dit].box(),dx,dy,dz);
+			// MHD_Mapping::phys_coords_calc(phys_coords[ dit],state.m_U[ dit].box(),dx,dy,dz);
+			MHD_Mapping::get_sph_coords_cc(phys_coords[ dit],state.m_U[ dit].box(),dx,dy,dz);
 			MHD_Mapping::out_data_calc(out_data[ dit],phys_coords[ dit],new_state[ dit]);
 		}
 	

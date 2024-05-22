@@ -86,10 +86,8 @@ namespace MHD_CFL {
 		{
 		    Scalar Lambda_f = forall<double>(lambdacalc, a_W_ave, dir, a_gamma);
             Box dbx0 = a_dbx1;
-            BoxData<double,DIM> eta(dbx0);
-            MHD_Mapping::etaFace_calc(eta, dbx0, a_dx, a_dy, a_dz, dir);
             BoxData<double,DIM> x(dbx0);		
-            MHD_Mapping::eta_to_x_calc(x,eta, dbx0);
+			MHD_Mapping::get_cart_coords_fc(x, dbx0, a_dx, a_dy, a_dz, dir);
             BoxData<double,DIM> x_ahead = alias(x,Point::Basis(dir)*(-1));
             Scalar dt_d = forall<double>(dt_dcalc, Lambda_f, x, x_ahead);
             dt[dir] = dt_d.min();
