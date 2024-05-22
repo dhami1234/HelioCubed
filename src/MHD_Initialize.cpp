@@ -32,56 +32,21 @@ namespace MHD_Initialize {
 		double rad = a_x_sph(0);
 		double theta = a_x_sph(1);
 		double phi = a_x_sph(2);
-
-		if (inputs.init_condition_type == 0) {
-			// //////Modifying parameters for constant solution/////
-			// rho = 1.0;
-			// p = 1.0;
-
-			rho = 700*1.67262192e-24;
-			p = 1.0e-7;
+		
+		//////Modifying parameters for radially out flow in spherical grid and magnetic field///////
+		rho = 700*c_MP*pow(inputs.r_in*c_AU/rad,2.0); // rho at 21.5 c_SR is about 700/cm3
+		p = 1.0e-7*pow(inputs.r_in*c_AU/rad,2.0*a_gamma); // p near 21.5 c_SR is about 1e-7 dyne/cm2
+		if (inputs.initialize_in_spherical_coords == 1){
+			u = 500.0*1e5;  // v at 21.5 c_SR is about 500 km/s
+			v = 0.0;
+			w = 0.0; 
+			Bx = -0.005*(atan(12*(theta-c_PI/2))/atan(12*(100-c_PI/2)))*pow(inputs.r_in*c_AU/rad,2.0); // Br at 21.5 c_SR is about 0.005 G
+		} else {
+			u = 5.0*sin(theta)*cos(phi);
+			v = 5.0*sin(theta)*sin(phi);
+			w = 5.0*cos(theta);
 		}
-
-		if (inputs.init_condition_type == 21) {
-			//////Modifying parameters for radially out flow in spherical grid///////
-
-			// rho = 10.0*pow(inputs.r_in*c_AU/rad,2.0);
-			rho = 700*1.67262192e-24*pow(inputs.r_in*c_AU/rad,2.0); // rho at 21.5 c_SR is about 700/cm3
-			// p = 1.0;
-			p = 1.0e-7*pow(inputs.r_in*c_AU/rad,2.0*a_gamma); // p near 21.5 c_SR is about 1e-7 dyne/cm2
-			// p = 1.0*pow(inputs.r_in*c_AU/rad,2.0*a_gamma);
-
-			if (inputs.initialize_in_spherical_coords == 1){
-				u = 500.0*1e5;  // v at 21.5 c_SR is about 500 km/s
-				v = 0.0;
-				w = 0.0; 
-			} else {
-				u = 5.0*sin(theta)*cos(phi);
-				v = 5.0*sin(theta)*sin(phi);
-				w = 5.0*cos(theta);
-			}
-		}
-
-		if (inputs.init_condition_type == 22) {
-			//////Modifying parameters for radially out flow in spherical grid and magnetic field///////
-			// rho = 10.0*pow(inputs.r_in*c_AU/rad,2.0);
-			rho = 700*c_MP*pow(inputs.r_in*c_AU/rad,2.0); // rho at 21.5 c_SR is about 700/cm3
-			// p = 1.0;
-			p = 1.0e-7*pow(inputs.r_in*c_AU/rad,2.0*a_gamma); // p near 21.5 c_SR is about 1e-7 dyne/cm2
-			// p = 1.0*pow(inputs.r_in*c_AU/rad,2.0*a_gamma);
-
-			if (inputs.initialize_in_spherical_coords == 1){
-				u = 500.0*1e5;  // v at 21.5 c_SR is about 500 km/s
-				v = 0.0;
-				w = 0.0; 
-				Bx = -0.005*(atan(12*(theta-c_PI/2))/atan(12*(100-c_PI/2)))*pow(inputs.r_in*c_AU/rad,2.0); // Br at 21.5 c_SR is about 0.005 G
-				// Bx = -0.005*pow(inputs.r_in*c_AU/rad,2.0);
-			} else {
-				u = 5.0*sin(theta)*cos(phi);
-				v = 5.0*sin(theta)*sin(phi);
-				w = 5.0*cos(theta);
-			}
-		}
+		
 
 		double e = p/(gamma-1.0) + rho*(u*u+v*v+w*w)/2.0 + (Bx*Bx+By*By+Bz*Bz)/8.0/c_PI;
 
@@ -92,15 +57,6 @@ namespace MHD_Initialize {
 		e += 0.5*a_U(iRHOZ2);
 #endif
 
-#if DIM == 2
-		a_U(0) = rho; //rho
-		a_U(1) = rho*u; //Momentum-x
-		a_U(2) = rho*v; //Momentum-y
-		a_U(3) = e; //Energy
-		a_U(4) = Bx; //Bx
-		a_U(5) = By; //By
-#endif
-#if DIM == 3
 		a_U(0) = rho; //rho
 		a_U(1) = rho*u; //Momentum-x
 		a_U(2) = rho*v; //Momentum-y
@@ -109,7 +65,7 @@ namespace MHD_Initialize {
 		a_U(5) = Bx; //Bx
 		a_U(6) = By; //By
 		a_U(7) = Bz; //Bz
-#endif
+
 	}
 	PROTO_KERNEL_END(InitializeStateSph2OF, InitializeStateSph2O)
 

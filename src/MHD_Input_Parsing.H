@@ -23,10 +23,6 @@ class Parsefrominputs {
     int limiter_apply;
     int takedivBstep;
     int timeIntegratorType; // 1: Euler Step    4: RK4 
-    int init_condition_type;
-    /*
-	   21. Radially out flow in spherical grid
-	 */
     int Riemann_solver_type;  //1: Rusanov Solver, 2: Roe Solver
     double entropy_fix_coeff;
     int initialize_in_spherical_coords;
@@ -74,7 +70,6 @@ class Parsefrominputs {
 		args.add("limiter_apply",  limiter_apply);
 		args.add("takedivBstep",  takedivBstep);
 		args.add("timeIntegratorType",  timeIntegratorType);
-		args.add("init_condition_type",  init_condition_type);
 		args.add("Riemann_solver_type",  Riemann_solver_type);
 		args.add("entropy_fix_coeff",  entropy_fix_coeff);
 		args.add("initialize_in_spherical_coords",  initialize_in_spherical_coords);
@@ -138,7 +133,6 @@ class Parsefrominputs {
 			cout << "limiter_apply: "    << limiter_apply << endl;
 			cout << "takedivBstep: "    << takedivBstep << endl;
 			cout << "timeIntegratorType: "    << takedivBstep << endl;
-			cout << "init_condition_type: "    << init_condition_type << endl;
 			cout << "Riemann_solver_type: "    << Riemann_solver_type << endl;
 			cout << "entropy_fix_coeff: "    << entropy_fix_coeff << endl;
 			cout << "initialize_in_spherical_coords: "    << initialize_in_spherical_coords << endl;
