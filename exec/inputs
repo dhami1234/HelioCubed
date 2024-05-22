@@ -67,7 +67,7 @@ Cells in r, theta, phi directions
 -BC_start_time                   2022.0000
 
 #BC cadence in days
--BC_cadence                      24.0
+-BC_cadence                      6.0
 
 #Probe cadence in seconds
 -probe_cadence                   3600  # Seconds
