@@ -1,32 +1,16 @@
-#include <cstdio>
-#include <cstring>
-#include <cassert>
-#include <cmath>
-#include <vector>
-#include <memory>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <iomanip>
 #include "Proto.H"
 #include "MHDLevelDataRK4.H"
-// #include "Proto_WriteBoxData.H"
-#include "Proto_Timer.H"
 #include "MHD_Initialize.H"
 #include "MHD_EulerStep.H"
 #include "MHDOp.H"
 #include "MHD_Mapping.H"
 #include "MHD_Output_Writer.H"
 #include "MHD_Input_Parsing.H"
-#include "MHD_Constants.H"
-#include "MHD_CFL.H"
 #include "MHD_Probe.H"
 #include "MHD_Pre_Time_Step.H"
 #include <chrono> // Used by timer
 #include "MHDReader.H"
 #include "RK4.H"
-#include "PolarExchangeCopier.H"
 #include "MHD_Set_Boundary_Values.H"
 
 using namespace std;
@@ -67,14 +51,6 @@ int main(int argc, char* argv[])
 	#ifdef PR_MPI
 		MPI_Barrier(MPI_COMM_WORLD);
 	#endif
-	int maxLev;	
-	// When using mapping, computational domain is always from 0 to 1. The physical grid is mapped from this cube.
-	
-	inputs.domsizex = 1.0;
-	inputs.domsizey = 1.0;
-	inputs.domsizez = 1.0;
-	
-
 	
 	// Creating a box for our full domain 
 	Box domain(Point::Zeros(),Point(inputs.domainSizex-1, inputs.domainSizey-1, inputs.domainSizez-1));
@@ -86,7 +62,7 @@ int main(int argc, char* argv[])
 	}
 	// Creating problem domain 
 	ProblemDomain pd(domain,per);
-	double dx = inputs.domsizex/inputs.domainSizex, dy = inputs.domsizey/inputs.domainSizey, dz = inputs.domsizez/inputs.domainSizez;
+	double dx = 1.0/inputs.domainSizex, dy = 1.0/inputs.domainSizey, dz = 1.0/inputs.domainSizez;
 	double dt = 0.;
 	
 	// Create an object state. state.m_U has all the consereved variables (multiplied by Jacobian for mapped grids)

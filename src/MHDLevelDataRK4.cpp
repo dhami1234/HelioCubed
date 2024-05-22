@@ -128,9 +128,7 @@ void MHDLevelDataRK4Op::operator()(MHDLevelDataDX& a_DX,
 		// new_state[ dit]+=(a_DX.m_DU)[ dit];
         new_state[ dit]+=idOp((a_DX.m_DU)[ dit]);  //Phil found doing this improves performance
 	}
-	if (inputs.grid_type_global == 2){
-		new_state.defineExchange<PolarExchangeCopier>(2,1);
-	}
+	new_state.defineExchange<PolarExchangeCopier>(2,1);
 	new_state.exchange(); 
 
 	MHD_Set_Boundary_Values::Set_Boundary_Values_Spherical_2O(new_state,a_State);

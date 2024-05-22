@@ -318,24 +318,24 @@ namespace MHDOp {
 						State&         a_U,
 	            		double a_gamma)
 	{
-		if (inputs.Spherical_2nd_order == 1 && inputs.grid_type_global == 2){
-			double rho = a_U(0);
-			double v2 = 0.0;
-			double B2 = 0.0;
-			double gamma = a_gamma;
+		
+		double rho = a_U(0);
+		double v2 = 0.0;
+		double B2 = 0.0;
+		double gamma = a_gamma;
 
-			for (int i = 1; i <= DIM; i++)
-			{
-				double v, B;
-				v = a_U(i) / rho;
-				B = a_U(DIM+1+i);
-				v2 += v*v;
-				B2 += B*B;
-			}
-
-			double p = std::max((a_U(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0),1.0e-14);
-			a_U(DIM+1) = p/(gamma-1.0) + .5 * rho * v2  + B2/8.0/c_PI;
+		for (int i = 1; i <= DIM; i++)
+		{
+			double v, B;
+			v = a_U(i) / rho;
+			B = a_U(DIM+1+i);
+			v2 += v*v;
+			B2 += B*B;
 		}
+
+		double p = std::max((a_U(DIM+1) - .5 * rho * v2  - B2/8.0/c_PI) * (gamma - 1.0),1.0e-14);
+		a_U(DIM+1) = p/(gamma-1.0) + .5 * rho * v2  + B2/8.0/c_PI;
+		
 	}
 	PROTO_KERNEL_END(Fix_negative_P_calcF, Fix_negative_P_calc)
 

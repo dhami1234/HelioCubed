@@ -258,7 +258,7 @@ namespace MHD_Probe {
         for (auto dit : state.m_U){
             Box dbx0 = state.m_U[dit].box();
             BoxData<double,NUMCOMPS> U_dim(dbx0);
-            if (inputs.Spherical_2nd_order == 1) state.m_U[dit].copyTo(U_dim);
+            state.m_U[dit].copyTo(U_dim);
             MHDOp::NonDimToDimcalc(U_dim);
             BoxData<double,DIM> x_sph_cc(dbx0);
             MHD_Mapping::get_sph_coords_cc(x_sph_cc,dbx0,a_dx,a_dy,a_dz);

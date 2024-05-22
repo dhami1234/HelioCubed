@@ -8,43 +8,7 @@
 typedef Var<double,NUMCOMPS> State;
 
 
-namespace MHD_Mapping {
-	void eta_calc(BoxData<double,DIM>& a_eta,
-	              const Box& a_bx,
-	              const double a_dx,
-	              const double a_dy,
-	              const double a_dz);
-
-	void etaCorner_calc(BoxData<double,DIM>& a_eta,
-	              const Box& a_bx,
-	              const double a_dx,
-	              const double a_dy,
-	              const double a_dz);
-
-	void etaFace_calc(BoxData<double,DIM>& a_eta,
-	                  const Box& a_bx,
-	                  const double a_dx,
-	                  const double a_dy,
-	                  const double a_dz,
-	                  int a_d);
-
-	void eta_to_x_calc(BoxData<double,DIM>& a_x,
-	                   const BoxData<double,DIM>& a_eta,
-					   const Box& dbx0);
-			   
-
-	void phys_coords_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
-	                      const double a_dx,
-	                      const double a_dy,
-	                      const double a_dz);	
-
-	void phys_coords_face_calc(BoxData<double,DIM>& a_x,
-	                      const Box& dbx1,
-	                      const double a_dx,
-	                      const double a_dy,
-	                      const double a_dz,				  		  
-	                      const int a_d);		  			  
+namespace MHD_Mapping {	  			  
 
 	void out_data_calc(BoxData<double,NUMCOMPS+DIM>& a_out_data,
 	                   const BoxData<double,DIM>& a_phys_coords,
