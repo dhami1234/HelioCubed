@@ -17,7 +17,6 @@
 #include "MHD_Constants.H"
 #include "MHD_CFL.H"
 #include "MHDLevelDataRK4.H"
-#include "MHD_Operator.H"
 #include "MHD_Turbulence.H"
 
 extern Parsefrominputs inputs;

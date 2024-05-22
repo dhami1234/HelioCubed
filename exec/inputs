@@ -4,7 +4,7 @@
 -domainSizex                     30
 -domainSizey                     30
 -domainSizez                     60
--maxStep                         3
+-maxStep                         5000
 -restartStep                     0
 -outputInterval                  50
 -CheckpointInterval              100
@@ -13,7 +13,7 @@
 -sph_inner_BC_hdf5               1
 -limiter_apply                   1
 -takedivBstep                    1
--timeIntegratorType              4
+-timeIntegratorType              1
 -init_condition_type             22
 -Riemann_solver_type             2
 -entropy_fix_coeff               0.3
@@ -30,7 +30,7 @@
 -Checkpoint_file_Prefix          Checkpoint_
 -Probe_trajectory_file           trajEarth2020.dat
 -Probe_data_file                 probed_data.dat 
--CME_Enter_Time                  20200.0923
+-CME_Enter_Time                  2020.1034
 -CME_get_checkpoint_before       3600
 -CME_r1                          46.67
 -CME_r0                          20.0

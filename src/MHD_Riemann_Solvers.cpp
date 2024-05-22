@@ -7,7 +7,6 @@
 #include "MHD_Output_Writer.H"
 #include "MHD_Constants.H"
 #include "MHD_Mapping.H"
-#include "MHD_Operator.H"
 typedef BoxData<double,1,HOST> Scalar;
 typedef BoxData<double,NUMCOMPS,HOST> Vector;
 

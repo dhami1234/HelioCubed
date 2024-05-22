@@ -2,13 +2,10 @@
 #include "MHD_Mapping.H"
 #include "CommonTemplates.H"
 #include "Proto_Timer.H"
-// #include "Proto_WriteBoxData.H"
 #include "MHDOp.H"
 #include "MHD_Output_Writer.H"
 #include "MHD_Input_Parsing.H"
 #include "MHD_Constants.H"
-#include "MHD_Operator.H"
-// #include "MHDLevelDataRK4.H"
 extern Parsefrominputs inputs;
 
 // constexpr MemType MEM = MEMTYPE_DEFAULT;
