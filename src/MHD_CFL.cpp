@@ -20,21 +20,7 @@ namespace MHD_CFL {
 	{
 		double gamma = a_gamma;
 		double rho=0., u=0., v=0., w=0., p=0., Bx=0., By=0., Bz=0., ce, af, B_mag, u_mag, Bdir, udir;
-#if DIM == 1
-		rho = a_W_ave(0);
-		u   = a_W_ave(1);
-		p   = a_W_ave(2);
-		Bx  = a_W_ave(3);
-#endif
-#if DIM == 2
-		rho = a_W_ave(0);
-		u   = a_W_ave(1);
-		v   = a_W_ave(2);
-		p   = a_W_ave(3);
-		Bx  = a_W_ave(4);
-		By  = a_W_ave(5);
-#endif
-#if DIM == 3
+
 		rho = a_W_ave(0);
 		u   = a_W_ave(1);
 		v   = a_W_ave(2);
@@ -43,7 +29,7 @@ namespace MHD_CFL {
 		Bx  = a_W_ave(5);
 		By  = a_W_ave(6);
 		Bz  = a_W_ave(7);
-#endif
+
 		if (a_d == 0) {
 			Bdir = Bx;
 			udir = u;
@@ -108,13 +94,8 @@ namespace MHD_CFL {
             Scalar dt_d = forall<double>(dt_dcalc, Lambda_f, x, x_ahead);
             dt[dir] = dt_d.min();
         }
-        #if DIM == 2
-            a_dt = min(dt[0], dt[1]);
-        #endif
-        #if DIM == 3 
-            double a_dt_temp = min(dt[0], dt[1]);
-            a_dt = min(a_dt_temp, dt[2]);
-        #endif
+		double a_dt_temp = min(dt[0], dt[1]);
+		a_dt = min(a_dt_temp, dt[2]);
 	}
 
 }
