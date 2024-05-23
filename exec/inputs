@@ -2,7 +2,7 @@
 -tstop                           20000000
 
 # CFL Constant
--CFL                             0.5
+-CFL                             0.6
 
 #Polytropic index
 -gamma                           1.6666666666666666666667
@@ -80,7 +80,7 @@ Cells in r, theta, phi directions
 -Checkpoint_file_Prefix          Checkpoint_
 
 #Probe trajectory file
--Probe_trajectory_file           trajEarth2020.dat
+-Probe_trajectory_file           trajEarth.dat
 
 #Probe output file
 -Probe_data_file                 probed_data.dat 
