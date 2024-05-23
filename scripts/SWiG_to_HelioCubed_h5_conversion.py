@@ -24,12 +24,10 @@ r0 = 0.1
 num_components = 8
 time = toYearFraction(dt(2022, 1, 1, 0, 0, 0))
 phys_domain = [0.1, 0, 0, 0.1, 6.28319, 3.14159]
-# Out_file = "POT3D360x180_2020020222_fixeddtheta_Ron.hdf5"
 Out_file = "SWQU_Tutorial_SWiG.h5"
 step_const = [0, 1, 0]
 
 address_of_files = '/Users/talwinder/Desktop/SWQU_Tutorial/BC_files/'
-# address_of_files = '/Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/POT3D_to_HCubed_h5/Time_dependent/'
 
 files = glob(address_of_files+'rho_r1_idx*.h5')
 files=sorted(files)
