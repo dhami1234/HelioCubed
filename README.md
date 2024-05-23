@@ -17,6 +17,10 @@ The BC file has been placed in the `/BC_files` directory and it is also added to
   ```bash
   git checkout CubedSphere
   
+- **Navigate to exec**
+  ```bash
+  cd exec
+  
 - **Edit the GNUMakefile with the correct paths to proto, openblas, and hdf5 and save the file.**
 
 - **Compile HelioCubed using**
