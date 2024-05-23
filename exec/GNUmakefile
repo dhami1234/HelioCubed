@@ -5,7 +5,7 @@ DEPXX=mpicxx
 CXX=mpicxx
 DIM=3
 USE_HDF5=TRUE
-PROTO=/Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/proto
+PROTO=../../proto
 
 
 LAPACK_LIB=/opt/homebrew/opt/openblas/lib
