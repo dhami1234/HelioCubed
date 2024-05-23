@@ -41,7 +41,6 @@ B_filename = address_of_files+"br_r1_idx.h5"
 #If n time dependent BCs availaible, they should be numbered like rho_upper_corona_Np1, ..., rho_upper_corona_Npn
 print("Number of files:",len(files))
 for i in range(len(files)):
-# for i in [0]:
     print("Converting file:",i+1)
     if (len(files) > 1):
         #make i+1 a string with 6 digits. Add leading zeros if necessary
