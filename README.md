@@ -6,25 +6,28 @@ The BC file has been placed in the `/BC_files` directory and it is also added to
 
 ## Steps for Running the Code
 
-1. **Navigate to the proto directory and set the branch to `cubedSphereDev` using:**
+- **Navigate to the proto directory and set the branch to `cubedSphereDev` using:**
    ```bash
    git checkout cubedSphereDev
 
-2. **Navigate to HelioCubed directory/exec.**
+- **Navigate to HelioCubed directory**
    ```bash
-   cd exec
+   cd HelioCubed
+- **Change branch to `CubedSphere`**
+  ```bash
+  git checkout CubedSphere
+  
+- **Edit the GNUMakefile with the correct paths to proto, openblas, and hdf5 and save the file.**
 
-3. **Edit the GNUMakefile with the correct paths to proto, openblas, and hdf5 and save the file.**
-
-4. **Compile HelioCubed using**
+- **Compile HelioCubed using**
    ```bash
    make -j8
 
-5. **The code can now be run using**
+- **The code can now be run using**
     ```bash
     mpirun -n 6 CubedSphere.exe inputs
 
-6. **The inputs file can be edited to set desired parameters of the run.**
-7. **The generated hdf5 files can be visualized using visit.**
+- **The inputs file can be edited to set desired parameters of the run.**
+- **The generated hdf5 files can be visualized using visit.**
 
 
