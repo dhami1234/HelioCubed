@@ -73,7 +73,7 @@ Cells in r, theta, phi directions
 -probe_cadence                   3600  # Seconds
 
 #BC hdf5 file
--BC_file                         /Users/talwinder/Desktop/SWQU_Tutorial/HelioCubed/scripts/SWQU_Tutorial_SWiG.h5
+-BC_file                         ../scripts/SWQU_Tutorial_SWiG.h5
 
 #Prefixes for output and Checkpoint files
 -Data_file_Prefix                Data_

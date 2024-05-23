@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime as dt
 import time
 from glob import glob
+import os
 
 def toYearFraction(date):
     def sinceEpoch(date): # returns seconds since epoch
@@ -24,12 +25,17 @@ r0 = 0.1
 num_components = 8
 time = toYearFraction(dt(2022, 1, 1, 0, 0, 0))
 phys_domain = [0.1, 0, 0, 0.1, 6.28319, 3.14159]
-# Out_file = "POT3D360x180_2020020222_fixeddtheta_Ron.hdf5"
 Out_file = "SWQU_Tutorial_SWiG.h5"
 step_const = [0, 1, 0]
 
-address_of_files = '/Users/talwinder/Desktop/SWQU_Tutorial/BC_files/'
-# address_of_files = '/Users/talwinder/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/POT3D_to_HCubed_h5/Time_dependent/'
+# Get the directory containing the current Python file
+current_directory = os.path.dirname(os.path.abspath(__file__))
+
+# Move two levels up
+parent_directory = os.path.abspath(os.path.join(current_directory, '..'))
+
+# Construct the new relative path
+address_of_files = os.path.join(parent_directory, 'BC_files/')
 
 files = glob(address_of_files+'rho_r1_idx*.h5')
 files=sorted(files)
