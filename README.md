@@ -34,6 +34,10 @@ A new file will be generated in the /scripts directory. It has already been adde
     ```bash
     mpirun -n 8 FullSphere.exe inputs
 
-6. **The inputs file can be edited to set desired parameters of the run.**
+8. **The inputs file can be edited to set desired parameters of the run.**
+
+9. **The generated Probe file can be plotted using:**
+   ```bash
+   python3 Plot_sim.py 
 
 
