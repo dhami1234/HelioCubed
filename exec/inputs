@@ -4,91 +4,91 @@
 # CFL Constant
 -CFL                             0.6
 
-#Polytropic index
+# Polytropic index
 -gamma                           1.6666666666666666666667
 
-Cells in r, theta, phi directions
+# Cells in r, theta, phi directions
 -domainSizex                     45
 -domainSizey                     45
 -domainSizez                     90
 
-#Maximum steps
--maxStep                         7500
+# Maximum steps
+-maxStep                         5000
 
-#If restart is needed, set restartStep to the step number. Checkpoint file needed
+# If restart is needed, set restartStep to the step number. Checkpoint file needed
 -restartStep                     0
 
-#Output interval of hdf5 files
+# Output interval of hdf5 files
 -outputInterval                  50
 
-#Checkpoint interval
+# Checkpoint interval
 -CheckpointInterval              100
 
-#Maximum number of checkpoint files to keep
+# Maximum number of checkpoint files to keep
 -MaxCheckpointFiles              3
 
-#Box size used in domain decomposition
+# Box size used in domain decomposition
 -BoxSize                         15
 
-#Is inner BC set using hdf5 file?
+# Is inner BC set using hdf5 file?
 -sph_inner_BC_hdf5               1
 
-#Is limited applied?
+# Is limited applied?
 -limiter_apply                   1
 
-#is divergence cleaning applied using Powell's method?
+# Is divergence cleaning applied using Powell's method?
 -takedivBstep                    1
 
-#Temporal order of accuracy
+# Temporal order of accuracy
 -timeIntegratorType              1
 
-#Riemann solver type
+# Riemann solver type
 -Riemann_solver_type             2
 
-#Entropy fix coefficient in Roe solver
+# Entropy fix coefficient in Roe solver
 -entropy_fix_coeff               0.3
 
-#Are initail conditions set in spherical coordinates?
+# Are initail conditions set in spherical coordinates?
 -initialize_in_spherical_coords  1
 
-#Output in spherical coordinates?
+# Output in spherical coordinates?
 -output_in_spherical_coords      1    
 
-#Inner radius in AU
+# Inner radius in AU
 -r_in                            0.1   
 
-#Outer radius in AU
+# Outer radius in AU
 -r_out                           1.2
 
-#Strething parameter for dr
+# Strething parameter for dr
 -C_rad                           1.0
 
-#BC start time
+# BC start time
 -BC_start_time                   2022.0000
 
-#BC cadence in days
+# BC cadence in days
 -BC_cadence                      6.0
 
-#Probe cadence in seconds
+# Probe cadence in seconds
 -probe_cadence                   3600  # Seconds
 
-#BC hdf5 file
+# BC hdf5 file
 -BC_file                         ../scripts/SWQU_Tutorial_SWiG.h5
 
-#Prefixes for output and Checkpoint files
+# Prefixes for output and Checkpoint files
 -Data_file_Prefix                Data_
 -Checkpoint_file_Prefix          Checkpoint_
 
-#Probe trajectory file
+# Probe trajectory file
 -Probe_trajectory_file           trajEarth.dat
 
-#Probe output file
+# Probe output file
 -Probe_data_file                 probed_data.dat 
 
-#Create a checkpoint file this many seconds before CME insertion
+# Create a checkpoint file this many seconds before CME insertion
 -CME_get_checkpoint_before       3600
 
-#CME properties
+# CME properties
 -CME_Enter_Time                  2022.015
 -CME_r1                          46.67
 -CME_r0                          23.33
@@ -106,6 +106,6 @@ Cells in r, theta, phi directions
 -CME_a1                          0.00276
 -CME_shift                       0.0
 
-#Scaling factors. MHD variables can be scaled using these factors
+# Scaling factors. MHD variables can be scaled using these factors
 -density_scale                   700.0
 -velocity_scale                  30000000.0    
