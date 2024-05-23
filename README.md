@@ -38,6 +38,6 @@ A new file will be generated in the /scripts directory. It has already been adde
 
 9. **The generated Probe file can be plotted using:**
    ```bash
-   python3 Plot_sim.py 
+   python3 ../Plot_sim.py 
 
 
