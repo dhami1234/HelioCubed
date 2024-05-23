@@ -1,5 +1,5 @@
 # Total simulation time in seconds
--tstop                           3608610.49
+-tstop                           20000000
 
 # CFL Constant
 -CFL                             0.5
@@ -13,7 +13,7 @@ Cells in r, theta, phi directions
 -domainSizez                     90
 
 #Maximum steps
--maxStep                         12000
+-maxStep                         7500
 
 #If restart is needed, set restartStep to the step number. Checkpoint file needed
 -restartStep                     0
@@ -89,7 +89,7 @@ Cells in r, theta, phi directions
 -CME_get_checkpoint_before       3600
 
 #CME properties
--CME_Enter_Time                  2022.04
+-CME_Enter_Time                  2022.015
 -CME_r1                          46.67
 -CME_r0                          23.33
 -CME_halfangle                   48.00

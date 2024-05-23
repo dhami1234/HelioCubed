@@ -174,7 +174,9 @@ namespace MHD_Set_Boundary_Values {
 
 				for (int i = 1; i <= NGHOST; i++ ) {
 					//Using outermost 2 layers to extrapolate to rest.
-					m_exterp_f_2nd = (i+1.0)*Shift(Point::Zeros()) - (i*1.0)*Shift(-Point::Basis(0)); 
+					// m_exterp_f_2nd = (i+1.0)*Shift(Point::Zeros()) - (i*1.0)*Shift(-Point::Basis(0)); 
+					// No extrapolation
+					m_exterp_f_2nd = (1.0)*Shift(Point::Zeros()); 
 					a_U_exterp = m_exterp_f_2nd(a_U[dit]);
 					a_U_exterp.copyTo(a_U_ghost,sourceBox,Point::Basis(0)*(i));// Using shifting option of copyTo
 				}
