@@ -30,15 +30,12 @@ int main(int argc, char *argv[])
   string BC_file = ParseInputs::get_BC_file();
   BC_global.file_to_BoxData_vec(BC_file);
   
-  double probe_cadence = ParseInputs::get_Probe_cadence();
   Array<double, DIM> offset = {0., 0., 0.};
   Array<double, DIM> exp = {1., 1., 1.};
-  MBLevelBoxData<double, NUMCOMPS, HOST> U_conv_test[3]; 
   PR_TIMER_SETFILE(to_string(domainSize) + "_DIM" + to_string(DIM) //+ "_NProc" + to_string(numProc())
                    + "_CubeSphereTest.time.table");
   PR_TIMERS("MMBEuler");
-  int levmax = 3;
-  if (convTestType == 0) levmax = 1;
+  int levmax = 1;
   for (int lev=0; lev<levmax; lev++)
 	{
     typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
@@ -106,8 +103,7 @@ int main(int argc, char *argv[])
     MBInterpOp iop = CubedSphereShell::InterpOp<HOST>(JU.layout(),OP::ghost(),4);
     MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell, double> rk4(map, iop);
     Write_W(JU, eulerOp, iop, 0, time, dt_next);
-    bool give_space_in_probe_file = true;
-    double probe_cadence_temp = 0;
+
     for (int iter = 1; iter <= max_iter; iter++)
     {
       auto start = chrono::steady_clock::now();
@@ -126,60 +122,10 @@ int main(int argc, char *argv[])
       if (iter % write_cadence == 0) Write_W(JU, eulerOp, iop, iter, time, dt);
       auto end = chrono::steady_clock::now();
       
-      int probe_cadence_new = floor(time/probe_cadence);
-      if (probe_cadence_new > probe_cadence_temp || iter == 1){
-        Probe(JU, map, eulerOp, iop, iter, time, dx, give_space_in_probe_file);
-        give_space_in_probe_file = false;
-        probe_cadence_temp = probe_cadence_new;
-        if(procID() == 0) cout << "Probed" << endl;
-      }
-      
-
       if (procID() == 0) cout << "iter = " << iter << " dt = " << dt << " time = " << time  << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms" << endl;
     }
-
-    if (convTestType > 0){
-      U_conv_test[lev].define(layout, {Point::Zeros(),Point::Zeros(),Point::Zeros(),Point::Zeros()});
-      for (auto dit : layout)
-      {
-        JU[dit].copyTo(U_conv_test[lev][dit]);
-      }
-      h5.writeMBLevel({}, map, U_conv_test[lev], "U_conv_test_" + to_string(lev));
-      
-      domainSize *= 2;
-      thickness *= 2;
-      if (convTestType == 2){
-        dt /= 2;
-        max_iter *= 2;
-      }
-      if (procID() == 0 ) cout << "domainSize = " << domainSize/2 << " is done" << endl;
-    }
   }
 
-  if (convTestType > 0){
-    //Here, we perform the error calculations on a single patch.
-    if(procID() == 0)
-    {
-      for (int varr = 0; varr < NUMCOMPS; varr++) {
-            double ErrMax[2];
-        for(int ilev=0; ilev<2; ilev++)
-        {
-          auto dit_lev=U_conv_test[ilev].begin();
-          auto dit_levp1=U_conv_test[ilev+1].begin();
-
-          BoxData<double,1> err=slice(U_conv_test[ilev][*dit_lev],varr);
-          err-=Stencil<double>::AvgDown(2)(slice(U_conv_test[ilev+1][*dit_levp1],varr));
-          ErrMax[ilev]=err.absMax();
-          std::string filename="Comp_"+std::to_string(varr)+"_err_"+std::to_string(ilev);
-          HDF5Handler h5;
-          h5.writePatch({"err"}, 1, err, filename.c_str());					
-          std::cout << "Lev: " << ilev << " , " << ErrMax[ilev] << std::endl;
-        }
-        double rate = log(abs(ErrMax[0]/ErrMax[1]))/log(2.0);
-        std::cout << "order of accuracy for var " << varr << " = " << rate << std::endl;
-      }
-    }
-  }
   PR_TIMER_REPORT();
 #ifdef PR_MPI
   MPI_Finalize();
