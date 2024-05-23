@@ -25,5 +25,6 @@ The BC file has been placed in the `/BC_files` directory and it is also added to
     mpirun -n 6 CubedSphere.exe inputs
 
 6. **The inputs file can be edited to set desired parameters of the run.**
+7. **The generated hdf5 files can be visualized using visit.**
 
 
