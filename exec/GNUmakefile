@@ -35,7 +35,7 @@ VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/ops -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I$(PROTO)/examples/_common
-CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20
+CXXFLAGS:= $(CXXOPTFLAGS) -std=c++17
 
 ifdef HDF5_LIB
 LIBS+= -L$(HDF5_LIB) -lhdf5 -lz
