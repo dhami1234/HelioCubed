@@ -8,7 +8,7 @@ The BC file has been placed in the `/BC_files` directory and it is also added to
 
 1. **Navigate to the proto directory and set the branch to `cubedSphereDev` using:**
    ```bash
-   git branch cubedSphereDev
+   git checkout cubedSphereDev
 
 2. **Navigate to HelioCubed directory/exec.**
    ```bash
