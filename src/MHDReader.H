@@ -127,7 +127,7 @@ class MHDReader
                 "MHDReader::readLevel | Error: Incorrect number of components. %i != %i",
                 C, numComps);
 
-        int read_every = domainSize[0]/inputs.domainSizez;
+        int coarse_ratio = domainSize[0]/inputs.domainSizez;
 
         int numDatasets;
         att_domain = H5Aopen(file, "num_datasets", H5P_DEFAULT);
@@ -145,7 +145,7 @@ class MHDReader
         {
             ds_data = H5Dopen2(file, ("/data" + std::to_string(ii)).c_str(), H5P_DEFAULT);
             // DEFINE BOX DATA
-            Box domainBox(Point::Zeros(),Point(0, domainSize[1]/read_every-1, 2*domainSize[0]/read_every-1));
+            Box domainBox(Point::Zeros(),Point(0, domainSize[1]/coarse_ratio-1, 2*domainSize[0]/coarse_ratio-1));
             a_data[ii].define(domainBox);
             
             Box domainBox2(Point::Zeros(),Point(0, domainSize[0]-1, domainSize[1]-1));
@@ -157,19 +157,20 @@ class MHDReader
             //     assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data.data()) >= 0);
                 assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data2.data()) >= 0);
                 // This is needed to make transpose. h5 file is (phi, theta). We need (theta, phi).
-                for (int c = 0; c < numComps; c++){
-                    for (int i = 0; i < domainSize[0]/read_every; i++ )
+                BoxData<double,C> a_data3 = Stencil<double>::AvgDown(Point(1, coarse_ratio, coarse_ratio))(a_data2);
+                for (int c = 0; c < numComps; c++){  
+                    for (int i = 0; i < domainSize[0]/coarse_ratio; i++ )
                     {
-                        for (int j = 0; j < domainSize[1]/read_every; j++ )
+                        for (int j = 0; j < domainSize[1]/coarse_ratio; j++ )
                         {
                             // Index in the final matrix.
-                            int index1 = 2*c*domainSize[0]/read_every*domainSize[1]/read_every + i*domainSize[1]/read_every+j;
+                            int index1 = 2*c*domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio + i*domainSize[1]/coarse_ratio+j;
                             // Index in the original matrix.
-                            int index2 = c*domainSize[0]*domainSize[1] + (j*domainSize[0]+i)*read_every;
-                            a_data[ii].data()[index1] = a_data2.data()[index2];
-                            a_data[ii].data()[index1+domainSize[0]/read_every*domainSize[1]/read_every] = a_data[ii].data()[index1];
+                            int index2 = c*domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio + (j*domainSize[0]/coarse_ratio+i);
+                            a_data[ii].data()[index1] = a_data3.data()[index2];
+                            a_data[ii].data()[index1+domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio] = a_data[ii].data()[index1];
                         }
-                    }   
+                    }
                 }
 
             } else {
