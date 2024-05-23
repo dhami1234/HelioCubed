@@ -39,6 +39,8 @@ A new file will be generated in the /scripts directory. It has already been adde
 9. **The generated Probe file can be plotted using:**
    ```bash
    cd ../scripts
-   python3 Plot_sim.py 
-
-
+   python3 Plot_sim.py
+10. **The generated hdf5 files will be visualized using VisIt.**
+    The mapping to spherical domain will require creation of an expression `disp` as a Vector Mesh Variable
+    ```bash
+    {X,Y,Z}-coord(Mesh)
