@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-from numpy import sqrt 
-from datetime import timedelta, datetime, date
+from datetime import timedelta, datetime
+import os
 
 def is_leap(Year):  
   # Checking if the given year is leap year  
@@ -22,15 +22,25 @@ def convert_partial_year(number):
 
 
 def main():
-    df2 = pd.read_csv('/Users/talwinder/Desktop/SWQU_Tutorial/HelioCubed/exec/probed_data.dat',delim_whitespace=True,skiprows=1,header=None)
+
+    # Get the directory containing the current Python file
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+
+    # Move one level up
+    parent_directory = os.path.abspath(os.path.join(current_directory, '..'))
+
+    # Construct the new relative path
+    address_of_file = os.path.join(parent_directory, 'exec/')
+
+    df2 = pd.read_csv(address_of_file+'probed_data.dat',delim_whitespace=True,skiprows=1,header=None)
     for i in range(len(df2.iloc[:,0])):
         df2.loc[i,"date"] = convert_partial_year(df2.iloc[i,0])
     df2[9] =  df2[9]/10  #microgauss to nT
     df2[10] = df2[10]/10  #microgauss to nT
     df2[11] = df2[11]/10  #microgauss to nT
     
-    left = datetime(2020, 2, 3,0,0,0)
-    right = datetime(2020, 2, 15,0,0,0)
+    left = datetime(2022, 1, 1,0,0,0)
+    right = datetime(2022, 1, 15,0,0,0)
 
     fig, ax = plt.subplots(5,1)
     ax[0].plot(df2.loc[:,"date"],df2.iloc[:,9])

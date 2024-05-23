@@ -31,7 +31,7 @@ step_const = [0, 1, 0]
 # Get the directory containing the current Python file
 current_directory = os.path.dirname(os.path.abspath(__file__))
 
-# Move two levels up
+# Move one level up
 parent_directory = os.path.abspath(os.path.join(current_directory, '..'))
 
 # Construct the new relative path
