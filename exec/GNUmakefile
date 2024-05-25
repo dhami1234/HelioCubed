@@ -8,6 +8,8 @@ TURB=0
 USE_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
 HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
+# HDF5_LIB=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/lib
+# HDF5_INC=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/include
 
 PROTO= ../proto
 
