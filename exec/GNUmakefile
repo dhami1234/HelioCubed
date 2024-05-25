@@ -10,6 +10,8 @@ PROTO=../proto
 
 LAPACK_LIB=/opt/homebrew/opt/openblas/lib
 LAPACK_INC=/opt/homebrew/opt/openblas/include
+# LAPACK_LIB=/apps/spack/anvil/apps/openblas/0.3.17-gcc-11.2.0-2qrsari/lib
+# LAPACK_INC=/apps/spack/anvil/apps/openblas/0.3.17-gcc-11.2.0-2qrsari/include
 #CXXOPTFLAGS=-g
 CXXOPTFLAGS=-O2 -g
 CXXOPTFLAGS+=-DmemoryFootPrint
@@ -19,6 +21,8 @@ CXXOPTFLAGS+=-DPR_OPS
 CXXOPTFLAGS+= -DPR_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
 HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
+# HDF5_LIB=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/lib
+# HDF5_INC=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/include
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 TARGET:=CubedSphere.exe
