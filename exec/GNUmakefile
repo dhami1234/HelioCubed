@@ -9,7 +9,7 @@ USE_HDF5=TRUE
 HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
 HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
 
-PROTO= ../../proto
+PROTO= ../proto
 
 CXXOPTFLAGS=-O3 
 CXXOPTFLAGS+=-DmemoryFootPrint
