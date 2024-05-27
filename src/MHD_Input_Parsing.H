@@ -53,6 +53,13 @@ class Parsefrominputs {
 	}
     
 	void parsenow(int argc, char* argv[]){
+		PROTO_ASSERT(argc >= 2, "Error: No input file name provided.");
+        std::string inputFileName = argv[1];
+		std::ifstream myfile(inputFileName);
+		PROTO_ASSERT(myfile.is_open(), "Error: Unable to open inputs file. Is the file name correct?");
+
+        std::cout << "Input file provided: " << inputFileName << std::endl;
+
 		InputArgs args;
 		args.add("tstop",  tstop);
 		args.add("CFL",  CFL);
