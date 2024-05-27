@@ -207,7 +207,7 @@ int main(int argc, char* argv[])
 			if(pid==0) cout << "Probed" << endl;
 		}
 
-		if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
+		if(((inputs.outputInterval > 0) && ((k)%inputs.outputInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || k == inputs.maxStep || ((inputs.outputInterval > 0) && (k == 0 || k == inputs.restartStep)))
 		{	
 			if (inputs.sph_inner_BC_hdf5 == 1){
 				MHD_Output_Writer::Write_data(state, k, MHD_Probe::getPhysTime(time/inputs.velocity_scale), dt/inputs.velocity_scale, false);
@@ -216,7 +216,7 @@ int main(int argc, char* argv[])
 			}
 						
 		}
-		if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
+		if((((inputs.CheckpointInterval > 0) && ((k)%inputs.CheckpointInterval == 0)) || time/inputs.velocity_scale == inputs.tstop || k == inputs.maxStep || ((inputs.CheckpointInterval > 0) && (k == 0))) && (k!=start_iter || k==0))
 		{
 			MHD_Output_Writer::Write_checkpoint(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale, false);	
 			std::string filename_to_delete=inputs.Checkpoint_file_Prefix+std::to_string(k-(inputs.CheckpointInterval*inputs.MaxCheckpointFiles))+".hdf5";
