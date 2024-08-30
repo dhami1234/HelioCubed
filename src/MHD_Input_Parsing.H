@@ -32,6 +32,7 @@ class Parsefrominputs {
     double C_rad; // A constant in exponential dr in spherical grid.
 	double BC_start_time; // In decimal year
 	double BC_cadence; // In hours
+	int BC_frame_rotate; // 0: No rotation (SWiG), 1: Rotating frames (Tae WSA)
 	double probe_cadence; // In seconds
 	string BC_file;
 	string Data_file_Prefix;
@@ -86,6 +87,7 @@ class Parsefrominputs {
 		args.add("C_rad",  C_rad);
 		args.add("BC_start_time",  BC_start_time);
 		args.add("BC_cadence",  BC_cadence);
+		args.add("BC_frame_rotate",  BC_frame_rotate);
 		args.add("probe_cadence",  probe_cadence);
 		args.add("BC_file",  BC_file);
 		args.add("Data_file_Prefix",  Data_file_Prefix);
@@ -149,6 +151,7 @@ class Parsefrominputs {
 			cout << "C_rad: "    << C_rad << endl;
 			cout << "BC_start_time: "    << BC_start_time << endl;
 			cout << "BC_cadence: "    << BC_cadence << endl;
+			cout << "BC_frame_rotate: "    << BC_frame_rotate << endl;
 			cout << "probe_cadence: "    << probe_cadence << endl;
 			cout << "BC_file: "    << BC_file << endl;
 			cout << "Data_file_Prefix: "    << Data_file_Prefix << endl;

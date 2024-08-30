@@ -253,6 +253,12 @@ namespace MHD_Set_Boundary_Values {
 
 			double effective_time1 = 360*(time_temp+low_frame*h5_cadence*3600)/carr_rot_time;
 			double effective_time2 = 360*(time_temp+(low_frame+1)*h5_cadence*3600)/carr_rot_time;
+
+			if (inputs.BC_frame_rotate == 0){
+				effective_time1 = 360*(time_temp)/carr_rot_time;
+				effective_time2 = 360*(time_temp)/carr_rot_time;
+			}
+
 			double angle_to_rotate1 = fmod(effective_time1,360);
 			double angle_to_rotate2 = fmod(effective_time2,360);
 			int cells_to_rotate1 = angle_to_rotate1/(360/inputs.domainSizez);

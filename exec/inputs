@@ -69,6 +69,9 @@
 # BC cadence in days
 -BC_cadence                      6.0
 
+# Do BC frames rotate?
+-BC_frame_rotate                 0
+
 # Probe cadence in seconds
 -probe_cadence                   3600  # Seconds
 
