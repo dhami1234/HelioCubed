@@ -342,17 +342,20 @@ namespace MHD_Pre_Time_Step {
     PROTO_KERNEL_START
 	void superimpose_CMEF(const Point& a_pt,
 								  State& a_U,
-                                  State& a_CME)
+                                  State& a_CME,
+                                double a_gamma)
 	{
         if (abs(a_CME(1)) != 0){
+            double p = (a_U(4) - (a_U(1)*a_U(1) + a_U(2)*a_U(2) + a_U(3)*a_U(3))/2/a_U(0) - (a_U(5)*a_U(5) + a_U(6)*a_U(6) + a_U(7)*a_U(7))/(8*c_PI))* (a_gamma - 1.0);
             a_U(0) = a_U(0) + a_CME(0);			
             a_U(1) = a_U(0)*a_CME(1);			
             a_U(2) = a_U(0)*a_CME(2);			
             a_U(3) = a_U(0)*a_CME(3);	
-            a_U(4) = a_U(4) + a_CME(4);	
             a_U(5) = a_CME(5);			
             a_U(6) = a_CME(6);			
-            a_U(7) = a_CME(7);		
+            a_U(7) = a_CME(7);
+            // e = p_SW/(gamma-1) + rho*(v^2)/2 + B^2/8pi // This will keep the thermal P as original value.
+            a_U(4) = p/(a_gamma-1) + a_U(0)*(a_CME(1)*a_CME(1) + a_CME(2)*a_CME(2) + a_CME(3)*a_CME(3))/2 + (a_U(5)*a_U(5) + a_U(6)*a_U(6) + a_U(7)*a_U(7))/(8*c_PI);			
 		}
     }
 	PROTO_KERNEL_END(superimpose_CMEF, superimpose_CME)
@@ -378,7 +381,7 @@ namespace MHD_Pre_Time_Step {
                 BoxData<double,DIM> x(dbx1);		
                 MHD_Mapping::get_sph_coords_cc(x, dbx1, a_dx, a_dy, a_dz);
                 forallInPlace_p(define_CME,a_state.m_CME[dit],x);
-                forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit]);
+                forallInPlace_p(superimpose_CME,a_state.m_U[dit],a_state.m_CME[dit], a_gamma);
             }
             a_state.m_CME_inserted = true;
             MHD_Output_Writer::Write_data(a_state, a_k-1, physical_time, a_dt, true);
