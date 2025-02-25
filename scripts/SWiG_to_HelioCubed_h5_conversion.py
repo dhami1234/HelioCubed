@@ -110,7 +110,6 @@ for i in range(len(files)):
         # Step 2: Transpose the array to get the final shape (360, 180)
         data_T = data_T_reduced.T
         data_T = data_T.flatten('F')   
-        data_T = data_T*1e-6  #make it Mega Kelvin
 
     data_P = 2.0*data_rho*1.3806505e-16*data_T/1e-12   # in pico Dyne
 
