@@ -47,6 +47,35 @@ namespace MHD_Initialize {
 			w = 5.0*cos(theta);
 		}
 		
+		// Compute spherical pulse initial data.
+		// double x_cart = rad*sin(theta)*cos(phi);
+		// double y_cart = rad*sin(theta)*sin(phi);
+		// double z_cart = rad*cos(theta);
+		// double p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
+		// double rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
+		// double u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
+		// double eps = 0.1;
+		// double amplitude;
+		// double arg = sqrt((x_cart+1.0) * (x_cart+1.0) + y_cart * y_cart + z_cart * z_cart);
+		// if (abs(arg) < .25)
+		// {
+		//   amplitude = eps * pow(cos(2 * M_PI * arg), 6);
+		// }
+		// else
+		// {
+		//   amplitude = 0.;
+		// }
+		// arg = sqrt((x_cart) * (x_cart) + (y_cart+1.0) * (y_cart+1.0) + z_cart * z_cart);
+		// if (abs(arg) < .25)
+		// {
+		//   amplitude += eps * pow(cos(2 * M_PI * arg), 6);
+		// }
+		// else
+		// {
+		//   amplitude += 0.;
+		// }
+		// rho = rho0 + amplitude * rho0;
+		// p = p0 * pow(rho / rho0, a_gamma);
 
 		double e = p/(gamma-1.0) + rho*(u*u+v*v+w*w)/2.0 + (Bx*Bx+By*By+Bz*Bz)/8.0/c_PI;
 

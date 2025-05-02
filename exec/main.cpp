@@ -101,6 +101,7 @@ int main(int argc, char* argv[])
 	#else
 		if (inputs.sph_inner_BC_hdf5 == 1) reader.readData(BC_data, inputs.BC_file);
 	#endif
+	// h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, BC_data, "OFT_BCs");
 
 	
 	// std::vector<double> dtheta;
