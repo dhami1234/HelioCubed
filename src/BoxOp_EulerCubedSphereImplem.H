@@ -501,7 +501,7 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
   static const LayoutT*        s_layoutPtr = nullptr;
   static std::unique_ptr<MapT> s_map;
   static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout)
+  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)
   {
       s_layoutPtr = &layout;
       s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
@@ -516,8 +516,6 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
   a_JU.copyTo(USph);
   Reduction<T,Operation::Max,MEM> dtinv;
   dtinv.reset();
-  //CubedSphereShell
-  //  ::consToSphInterpEuler<T,NUMCOMPS,MEM,PR_CELL>(JUTemp,a_iop,a_dVolr,4,0);
   for (auto dit : layout)
     {
       Box bx0 = layout[dit];
@@ -566,7 +564,6 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
       int block = layout.block(dit);
       int globalIndex = dit.global();
       BoxData<T,NUMCOMPS,MEM> W(layout[dit]);
-      //BoxData<T,NUMCOMPS,MEM> WBar(JUTemp[dit].box());
       BoxData<T,NUMCOMPS,MEM>& sph_i = USph[dit];
       BoxData<T,NUMCOMPS,MEM> sphTemp(layout[dit]);
       sph_i.copyTo(sphTemp);
@@ -601,7 +598,7 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
   static const LayoutT*        s_layoutPtr = nullptr;
   static std::unique_ptr<MapT> s_map;
   static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout)
+  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)
   {
       s_layoutPtr = &layout;
       s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
@@ -626,98 +623,12 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
     fluxes[1].setToZero();
     fluxes[2].setToZero();
     unsigned int block = layout.block(dit);
-    //Point growpt = Point::Basis(1,1) + Point::Basis(2,1);
-    //growpt = 6*growpt;
-    // if (block == 0)
-    //   {
-    //     BoxData<T,NUMCOMPS,MEM>
-    //       dUdx1 =
-    //       Stencil<T>::FluxDivergence(1)(USph_i,layout[dit].grow(growpt));
-    //     BoxData<T,NUMCOMPS,MEM>
-    //       dUdx2 =
-    //       Stencil<T>::FluxDivergence(2)(USph_i,layout[dit].grow(growpt));
-    //     for (int comp = 0; comp < NUMCOMPS; comp++)
-    //       {
-    //         cout << "spherical symmetry check: " << comp << ", "
-    //              << USph_i.box() << ", " << dUdx1.absMax(comp) << ", "
-    //              << dUdx2.absMax(comp) << ", " << USph_i.absMax(comp) << endl;
-    //       }
-    //         if (dUdx2.absMax(4) > 1.e-4)
-    //           {
-    //             HDF5Handler h5;
-    //             h5.writePatch(1.,dUdx1,"dUdx1");
-    //             h5.writePatch(1.,dUdx2,"dUdx2");
-    //             h5.writePatch(1.,USph_i,"USph_i");
-    //             abort();
-    //           }  
-    //   }
     eulerOp[dit](k_i, fluxes, USph_i, 1.0);
     auto dx = eulerOp[dit].dx();
     Box blockBox = layout.getBlock(block).domain().box();
-    //auto mbdata = a_blockreg.bounds(dit);
     a_blockreg.increment(fluxes,dit,wgtxdt);
-    CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,wgtxdt);
-    
+    CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,wgtxdt); 
   }
-  {
-    // HDF5Handler h5;
-    // h5.writeMBLevel({},map, a_k, "stageRhs"+to_string(a_kstage));
-  }
-}
-template<
-  typename T,
-  template<MemType> typename MAP,
-  MemType MEM>
-Array<T,NUMCOMPS> 
-BoxOp_EulerCubedSphere<T,MAP,MEM>::
-  applyOp(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
-          MBInterpOp& a_iop,
-          MBLevelBoxData<T,1,MEM>& a_dVolrLev) 
-{
-  PR_TIMERS("BoxOp_EulerCubedSphere::applyOp()");
-  T weight = 1.0;
-  auto layout = a_JU.layout();
-  MBBoundaryRegister<T,BoxOp_EulerCubedSphere<T,MAP,MEM>::numState(),MEM>
-    blockreg(layout,1,Point::Zeros());
-  blockreg.clear();
-  Array<Reduction<T,Operation::Sum,MEM>,BoxOp_EulerCubedSphere<T,MAP,MEM>::numState()> consSum, consRhs;
-  MBLevelBoxData<T,NUMCOMPS,MEM> JUTemp(layout,a_JU.ghost());
-  MBLevelBoxData<T,NUMCOMPS,MEM> rhs(layout,Point::Zeros());
-  T time = 0.;
-  T dt = 1.0;
-  int kstage = 0;
-  a_JU.copyTo(JUTemp);
-  kstage = 0;
-  int opswitchiv = ParseInputs::get_operator_switchiv();
-  bool flagi = (opswitchiv%4) != 1;
-  BoxOp_EulerCubedSphere<T,MAP,MEM>::
-    preStageLevel(JUTemp, rhs, a_dVolrLev, a_iop, blockreg, consSum,
-                  time,dt, weight, 0);
-  pout(0) << opswitchiv << ": flagi = " << flagi << endl;  
-  if (flagi) 
-  BoxOp_EulerCubedSphere<T,MAP,MEM>::
-    StageLevel(rhs, JUTemp, blockreg, consSum,
-               time, dt, weight, kstage);
-  blockreg.reflux(rhs);
-  
-  for (int comp = 0; comp < NUMCOMPS; comp++)
-    {
-      consRhs[comp].reset();
-      for (auto dit : layout)
-        {
-          auto rhscomp = slice(rhs[dit],comp);
-          rhscomp.reduce(consRhs[comp]);        
-        }
-    }
-  Array<T,NUMCOMPS> outcons;
-  for (int comp = 0; comp < NUMCOMPS; comp++)
-    {
-      outcons[comp] = 0.;
-      outcons[comp] += consRhs[comp].fetch();
-      outcons[comp] -= consSum[comp].fetch();
-    }
-  rhs.copyTo(a_JU);
-  return outcons;
 }
 template<
     typename T,
@@ -770,96 +681,8 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
                     dVolr,Dr,dxiPerp,
                     dxiR,dir,m_gamma);
     }
-  if (block == 0)
-    {
-        // T speedmaxpatch = speedMax.absMax();
-        // BoxData<T,1,MEM> dUdx1 =
-        //   Stencil<T>::FluxDivergence(1)(speedMax);
-        // BoxData<T,1,MEM> dUdx2 =
-        //   Stencil<T>::FluxDivergence(2)(speedMax);
-        // HDF5Handler h5;
-        // h5.writePatch(1, dUdx1, "dSpeed_dxi1"+to_string();
-        // h5.writePatch(1, dUdx2, "dSpeed_dxi2");
-        // for (int comp = 0; comp < 1; comp++)
-        //   {
-        //     cout << "radial symmetry check - speed: " << comp << ", "
-        //          << speedMax.box() << ", " << dUdx1.absMax(comp) << ", "
-        //          << dUdx2.absMax(comp) << ", "
-        //          << speedmaxpatch << endl;
-        //   }        
-    // if ((speedmaxpatch > .1) || (speedmaxpatch < .001))
-    //   {
-    //     HDF5Handler h5;
-    //     h5.writePatch(1, speedMax, "speedMax");
-    //     h5.writePatch(1,a_W,"W_speed");
-    //     abort();
-    //   }
-    }
   speedMax.reduce(a_dtInv);
 }
-#if 0
-template<
-    typename T,
-    template<MemType> typename MAP,
-    MemType MEM>
-// Use case: increment boundary registers. 
-inline void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::
-PostStagePatch(
-               std::vector<MBBoundaryData<T,NUMCOMPS,MEM> >& a_mbdata,
-               Array<BoxData<T,NUMCOMPS,MEM>,DIM>& a_fluxes, 
-               T a_time,
-               T a_dt,
-               T a_weight)
-{
-  // Increment boundary registers.
-  PR_TIMERS("BoxOp_EulerCubedSphere::postStagePatch()");
-  abort(); // Deprecated. Can resurrect if we need it.
-}
-#endif
-// Impose flux matching, apply artificial viscosity, divergence cleaning.
-template<
-  typename T,
-  template<MemType> typename MAP,
-  MemType MEM>
-inline void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::
-postStepLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_rhsTotal,             
-              MBBoundaryRegister<T,NUMCOMPS,MEM,PR_CELL>& a_blockReg)
-{
-  PR_TIMERS("BoxOp_EulerCubedSphere::postStepLevel()");
-  abort();
-}
-#if 0
- template<
-    typename T,
-    template<MemType> typename MAP,
-    MemType MEM>
-static inline void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::radialGhost(State& a_U,
-                                                BoxData<T,1,MEM>& a_radius,
-                                                T a_dxi0,
-                                                Box a_bxGhosted,
-                                                Box a_blockBox
-                                                )
-{
-  PR_TIMERS("BoxOp_EulerCubedSphere::radialGhost()");
-  if (a_blockBox.high()[0] < a_bxGhosted.high()[0])
-    {
-      Point low = a_bxGhosted.low();
-      low[0] = a_blockBox.high()[0] + 1;
-      Box bdryBoxHigh(low, a_bxGhosted.high());
-      forallInPlace_p(f_radialBCs, bdryBoxHigh, a_USph, a_radius, a_dxi0, m_gamma, m_eps, thickness);
-    }
-  if (a_blockBox.low()[0] > a_bxGhosted.low()[0])
-    {
-      Point high = a_bxGhosted.high();
-      high[0] = a_blockBox.low()[0] + 1;
-      Box bdryBoxLow(a_bxGhosted.low(), high);
-      forallInPlace_p(f_radialBCs, bdryBoxLow, a_USph, radius, a_dxi0, m_gamma, m_eps, thickness);
-    }
-}
-#endif
 
 // ====================================================================================
 // Pre and Post implems end here.
@@ -907,8 +730,6 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
       BoxData<double, NUMCOMPS, HOST> W_point(USph[dit].box());
       W.copyTo(W_point);
       W_point += Stencil<double>::Laplacian()(W,-1./24.);  
-      // BoxData<T,1,MEM> ke = eulerOp[dit].kineticEnergyW(W_point,block,-1);
-      // BoxData<T,1,MEM> me = eulerOp[dit].magneticEnergyW(W_point,block,-1);
       BoxData<double,1,HOST> ke(W_point.box());
       BoxData<double,1,HOST> me(W_point.box());
       eulerOp[dit].EnergyW(ke,me,W_point,block,-1);

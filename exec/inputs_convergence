@@ -1,0 +1,26 @@
+## See Inputs_Parsing.H file for supported input values
+-convTestType                    1
+-init_condition_type             0
+-domainSize                      30
+-thickness                       60
+-boxSize_nonrad                  15
+-boxSize_rad                     60
+-max_iter                        3
+-CFL                             0.5
+-limiter                         1
+-write_cadence                   1
+-checkpoint_cadence              50
+-P_floor_cadence                 50
+-data_file_prefix                data
+-checkpoint_file_prefix          checkpoint
+-scale_data_with_r               1
+-max_checkpoint_files            3
+-gamma                           1.6666666666666666666667
+-temporal_order                  1
+-divergence_cleaning             1
+-linear_viscosity                1
+-boundary_reflux                 1
+-radial_refinement               1
+-operator_switchiv               0
+-operator_switchln               0
+-MBInterp_define                 1

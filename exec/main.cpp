@@ -59,8 +59,6 @@ int main(int argc, char *argv[])
   for (int lev=0; lev<levmax; lev++)
     {
       typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
-      bool cullRadialGhost = true;
-      bool use2DFootprint = true;
       
       Array<Array<uint, DIM>, 6> permute = {{2, 1, 0}, {2, 1, 0}, {1, 0, 2}, {0, 1, 2}, {1, 0, 2}, {0, 1, 2}};
       Array<Array<int, DIM>, 6> sign = {{-1, 1, 1}, {1, 1, -1}, {-1, 1, 1}, {1, 1, 1}, {1, -1, 1}, {-1, -1, 1}}; 

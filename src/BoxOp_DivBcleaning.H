@@ -25,13 +25,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell(
   Box bx = a_USph.box();
   State W;
   State WBar;
-  //cout << "inputbox = " << bx << endl;
-  
   sphToPrim(W,WBar,a_USph,a_block);
-  // Compute Fluxes, rhs.
-  
   Box outputbox = bx;
-  // Loop over directions.
   T one = 1.0;
   T half = 0.5;
   T dxiPerp = this->dx()[1];  
@@ -39,16 +34,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell(
   {
     PR_TIME("BoxOp_Euler::operator()::directional flux calculation");        
     State WFace = Stencil<T>::CellToFace(dir)(W);   
-  
     BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
-
-    //Required mapping variables.
     Box bxface = WFace.box();
     BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir); 
     Box bx = W.box();
     Box bxdir = bx.extrude(Point::Basis(dir));
-    
-
     State fluxdir(bxface);
     forallInPlace([ ] PROTO_LAMBDA
       (Var<T,NUMCOMPS,MEM>& a_fluxout,
@@ -68,8 +58,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell(
       BoxData<T,1,MEM> advfluxprod = faceProduct(advfluxcomp,adjDrDir,dir);
       advfluxprod.copyTo(advfluxcomp);
     }
-
-    // update RHS.
     BoxData<T,NUMCOMPS,MEM> rhsIncr;
     T dxInv = -1.0/(this->dx()[dir]);
     rhsIncr = Stencil<T>::FluxDivergence(dir)(fluxdir,dxInv);
@@ -86,12 +74,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell(
         }
       },rhs, rhsIncr);
     outputbox &= rhsIncr.box();   
-  }
-  if (a_block == BLOCKTEST)
-  {
-    HDF5Handler h5;
-    BoxData<T,NUMCOMPS,MEM> rhsRadial = checkRadial(rhs,dxiPerp,a_block);
-    h5.writePatch(dxiPerp,rhsRadial,"rhsDivBRadial");
   }
   rhs *= (a_scale);
 

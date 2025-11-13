@@ -60,10 +60,6 @@ typedef BoxData<double, NUMCOMPS> State;
 typedef BoxData<double, DIM> Vector;
 #define BLOCKTEST -1
 
-//State: [rho, G0, G1, ..., E]
-// Gi = rho*vi
-// E = p/(gamma-1) + 0.5*rho*|v|^2
-//template<typename T, MemType MEM>
 template<typename T,MemType MEM>
 PROTO_KERNEL_START
 void f_sphToPrim_F(
@@ -281,17 +277,6 @@ public:
                          State& a_W,
                          const State& a_USph,
                          uint a_block) const;
-  
-  // Implemented.
-  inline void primToSph(
-                         State& a_USph,
-                         const State& a_WPoint,
-                         const BoxData<T,1,MEM>& a_dVolr,
-                         uint a_block) const;
-  // Implemented.
-  inline BoxData<T,NUMCOMPS,MEM> consToSph(State& a_input,
-                                           Box a_bx,
-                                          unsigned int a_block) const;
 
   /// Compute conserved quantities only on valid cells, given point values
   /// of primitive variables. Typically used for initialization. 
@@ -302,18 +287,6 @@ public:
                          T a_gamma,
                          T a_h,
                          uint a_block) const;
-  
-  // Implemented.
-  inline BoxData<T,NUMCOMPS,MEM> sphToCart(State& a_input,
-                                           Box a_bx,
-                                           unsigned int a_block) const;
-
-  //Implemented.
-  inline void cartToSph(
-                        State& a_USph,
-                        const State& a_JU,
-                        const BoxData<T,1,MEM>& a_dVolr,
-                        uint a_block) const;
 
   inline void dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,const State& a_W) const;
    
@@ -525,46 +498,6 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
              T a_weight,
              int a_kstage);
 
-  // Implemented.
-  inline void
-  PostStagePatch(
-                 std::vector<MBBoundaryData<T,NUMREG,MEM> >& a_mbdata,
-                 Array<BoxData<T,NUMCOMPS,MEM>,DIM>& a_fluxes, 
-                 T a_time,
-                 T a_dt,
-                 T a_weight);
-                 
-
-  /// Update solution, impose flux matching.
-  static inline void
-  postStepLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_rhsTotal,
-                MBBoundaryRegister<T,NUMREG,MEM,PR_CELL>& a_blockReg);
-  
-  /// Apply operator. Usede for convergence testing.
-  static Array<T,NUMCOMPS>
-  applyOp(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
-          MBInterpOp& a_iop,
-          MBLevelBoxData<T,1,MEM>& a_dVolrLev);
-  inline BoxData<T,NUMCOMPS,MEM> checkRadial(
-                                             State& a_inputs,
-                                             T a_h,
-                                             unsigned int a_block) const;
-
-  inline void radialGhost(State& a_USph,
-                          BoxData<T,1,MEM>& a_radius,
-                          T a_dxi0,
-                          Box a_ghostedBox,
-                          Box a_blockBox);
-  
-  // static inline void
-  // preStageLevel(MBLevelBoxData<T,NUMCOMPS,HOST>& UStage,
-  //               const MBInterpOp& a_iop,
-  //               const MBLevelBoxData<T,NUMCOMPS,MEM>& a_dVolrLev);
-  
-  static inline void
-  postStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_rhsStage,
-                 MBBoundaryRegister<T,NUMREG,MEM,PR_CELL>& a_blockReg,
-                 const MBLevelBoxData<T,NUMCOMPS,MEM>& a_dVolrLev);
 private:
   int m_count = 0;
   
