@@ -501,7 +501,7 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
   static const LayoutT*        s_layoutPtr = nullptr;
   static std::unique_ptr<MapT> s_map;
   static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)
+  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)  // In conv test, grid changes size.
   {
       s_layoutPtr = &layout;
       s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
@@ -598,7 +598,7 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
   static const LayoutT*        s_layoutPtr = nullptr;
   static std::unique_ptr<MapT> s_map;
   static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)
+  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0) // In conv test, grid changes size.
   {
       s_layoutPtr = &layout;
       s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
