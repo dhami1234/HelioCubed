@@ -15,8 +15,8 @@ using namespace std;
 /// @brief ParseInputs Singleton class
 class ParseInputs {
 private:
-    int convTestType; // 0: No convergence test, 1: Space Convergence test, 2: Space and Time Convergence test
-    int init_condition_type; 
+    int convTestType = 0; // 0: No convergence test, 1: Space Convergence test, 2: Space and Time Convergence test
+    int init_condition_type = 3; 
     // 0 for radial shell, 
     // 1 for nonradial pulse, 
     // 2 for radial outflow
@@ -32,14 +32,14 @@ private:
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
     double strength; // Strength of perturbation for test problems.
-    int write_cadence; 
-    int slice_cadence;
-    double write_time_cadence; // In seconds
-    double slice_time_cadence; // In seconds
-    int checkpoint_cadence;
-    int P_floor_cadence; // Iteration cadence for P_floor
-    string data_file_prefix;
-    string checkpoint_file_prefix;
+    int write_cadence = 10000000000; 
+    int slice_cadence = 10000000000;
+    double write_time_cadence = 1000000000; // In seconds
+    double slice_time_cadence = 1000000000; // In seconds
+    int checkpoint_cadence = 1000000000;
+    int P_floor_cadence = 1000000000; // Iteration cadence for P_floor
+    string data_file_prefix = "data";
+    string checkpoint_file_prefix = "checkpoint";
     std::string slices_raw;
     bool slice_X = false;
     bool slice_Y = false;
@@ -56,29 +56,27 @@ private:
             else if (token == "R") slice_R = true;
         }
     }
-    int scale_data_with_r; // 0: No scaling, 1: Scale with r
-    int max_checkpoint_files;
+    int scale_data_with_r = 0; // 0: No scaling, 1: Scale with r
+    int max_checkpoint_files = 1;
     string restart_file;
-    double gamma; // Ratio of specific heats
-    int temporal_order; // Temporal order of accuracy
-    int divergence_cleaning; // 0: No divergence cleaning, 1: Divergence cleaning
-    int linear_viscosity; // 0: No linear viscosity, 1: Linear viscosity
-    int boundary_reflux; // 0: don't reflux at block boundaries, 1: reflux
-    int radial_refinement; // 0: refine in all directions by 2 for convergence studies;
+    double gamma = 1.66667; // Ratio of specific heats
+    int temporal_order = 4; // Temporal order of accuracy
+    int divergence_cleaning = 1; // 0: No divergence cleaning, 1: Divergence cleaning
+    int linear_viscosity = 1; // 0: No linear viscosity, 1: Linear viscosity
+    int boundary_reflux = 1; // 0: don't reflux at block boundaries, 1: reflux
+    int radial_refinement = 0; // 0: refine in all directions by 2 for convergence studies;
                            // 1 refine only in radial direction.
-    int operator_switchiv;   // no inviscid (1) no viscous (2) both on (0).
-    int operator_switchln;   // no linear (1) no nonlinear (2) both on (0)
     int MBInterp_define;   // old define (0) new define (1)
     string BC_file;
     int num_probes = 0;                                
     std::vector<std::string> probe_filenames;           
     std::vector<std::string> probe_coords;  // Accepts HGI coordinates              
-    double Probe_cadence; // In seconds
-    double BC_start_time; // Like 2024.0 for year 2024
-    double BC_cadence; // In hours
-    int BC_frame_rotate; // 0: Frames don't rotate (SWiG), 1: Frames rotate
-    int BC_force_single_frame; // 1: Use only one frame for BCs, 0: Use all frames for BCs (if present)
-    int CME_type; // 0: No CME, 1: CME
+    double Probe_cadence = 1000000000; // In seconds
+    double BC_start_time = 0.0; // Like 2024.0 for year 2024
+    double BC_cadence = 1.0; // In hours
+    int BC_frame_rotate = 0; // 0: Frames don't rotate (SWiG), 1: Frames rotate
+    int BC_force_single_frame = 0; // 1: Use only one frame for BCs, 0: Use all frames for BCs (if present)
+    int CME_type = 0; // 0: No CME, 1: CME
     double CME_Enter_Time;
     double CME_r1;
     double CME_r0;
@@ -142,8 +140,6 @@ public:
     static int get_linear_viscosity() {return getInstance().linear_viscosity;}
     static int get_boundary_reflux() {return getInstance().boundary_reflux;}
     static int get_radial_refinement() {return getInstance().radial_refinement;}
-    static int get_operator_switchiv() {return getInstance().operator_switchiv;}
-    static int get_operator_switchln() {return getInstance().operator_switchln;}
     static int get_MBInterp_define() {return getInstance().MBInterp_define;}
     static string get_BC_file() {return getInstance().BC_file;}
     static int get_num_probes() { return getInstance().num_probes; }                               
@@ -203,8 +199,6 @@ public:
         args.add("linear_viscosity", linear_viscosity);
         args.add("boundary_reflux", boundary_reflux);
         args.add("radial_refinement", radial_refinement);
-        args.add("operator_switchiv", operator_switchiv);
-        args.add("operator_switchln", operator_switchln);
         args.add("MBInterp_define", MBInterp_define);
         args.add("BC_file", BC_file);
         args.add("num_probes", num_probes); 
@@ -275,8 +269,6 @@ public:
         pout(0) << "linear_viscosity: " << linear_viscosity << endl;
         pout(0) << "boundary_reflux: " << boundary_reflux << endl;
         pout(0) << "radial_refinement: " << radial_refinement << endl;
-        pout(0) << "operator_switchiv: " << operator_switchiv << endl;
-        pout(0) << "operator_switchln: " << operator_switchln << endl;
         pout(0) << "MBInterp_define: " << MBInterp_define << endl;
         pout(0) << "BC_file: " << BC_file << endl;
         pout(0) << "Probe_cadence: " << Probe_cadence << endl;

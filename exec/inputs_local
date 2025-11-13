@@ -27,8 +27,6 @@
 -linear_viscosity                1
 -boundary_reflux                 1
 -radial_refinement               0
--operator_switchiv               0
--operator_switchln               0
 -MBInterp_define                 1
 -BC_file                         ../scripts/psi_eclipse24_swig_wsa2_smth5_bc_r21_5_corotating_Bp_two_frames.h5
 -num_probes                      3
