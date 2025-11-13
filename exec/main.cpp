@@ -218,6 +218,7 @@ int main(int argc, char *argv[])
       
       auto end = chrono::steady_clock::now();
       pout(0) << "iter = " << iter << " dt = " << dt << " time = " << time  << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms" << endl;
+      if (procID() == 0) cout << "iter = " << iter << " dt = " << dt << " time = " << time  << " Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms" << endl;
     }
 
       if ((convTestType > 0) && (convTestType != 4)) {
