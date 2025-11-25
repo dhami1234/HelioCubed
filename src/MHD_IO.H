@@ -1359,20 +1359,37 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     BoxData<double, DIM, HOST> Dr(dVolrLev[dit].box());
     BoxData<double, DIM, HOST> adjDr(dVolrLev[dit].box());
     a_eulerOp[dit].radialMetrics(radiusLev[dit], Dr, adjDr, dVolrLev[dit], Dr.box());
-    a_JU[dit].copyTo(JUTemp[dit]);
+    // a_JU[dit].copyTo(JUTemp[dit]);
   }
 
-  CubedSphereShell::consToCartInterpEuler(JUTemp, a_iop, dVolrLev, 4);
+  // CubedSphereShell::consToCartInterpEuler(JUTemp, a_iop, dVolrLev, 4);
 
 
-  
+  Point size = layout.domain().getBlock(0).sizes();
+  double dxiPerp = 1.0/size[1];
+
   for (auto dit : layout)
   {
-    auto block = layout.block(dit);
-    Box dbx0 = a_JU[dit].box();
+    auto& JU_i = a_JU[dit];
+    auto& dVolr_i = dVolrLev[dit];
+    BoxData<double,1,HOST> deta = CubedSphereShell::detA<double,HOST>(JU_i.box(),dxiPerp,0); 
+    // auto block = layout.block(dit);
+    Box dbx0 = JU_i.box();
     Box dbx1 = dbx0.grow(-NGHOST);
     BoxData<double, NUMCOMPS, HOST> U_dim(dbx0);
-    JUTemp[dit].copyTo(U_dim);
+    // JUTemp[dit].copyTo(U_dim);
+
+    forallInPlace([ ] PROTO_LAMBDA
+      (Var<double,NUMCOMPS,HOST>& l_U,
+        const Var<double,NUMCOMPS,HOST>& l_JU,
+        const Var<double,1,HOST>& l_deta,
+        const Var<double,1,HOST>& l_dVolr)
+      {                    
+        for (int comp = 0; comp < NUMCOMPS; comp++)
+          {
+            l_U(comp) = l_JU(comp)/(l_deta(0)*l_dVolr(0));
+          } 
+      },U_dim,JU_i,deta,dVolr_i);
 
     if (dbx1.containsPoint(index_cc))
     {
