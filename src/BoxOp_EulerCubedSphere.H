@@ -365,14 +365,7 @@ public:
   viscFlux(
            State& a_Rhs,
            Array<BoxData<double, NUMCOMPS>, DIM>& a_fluxes,
-           const State& a_USph,
-           T a_scale,
-           T a_dt) const;
-  inline void LinearVisc(
-                        State& a_Rhs,
-                        Array<BoxData<double, NUMCOMPS>, DIM>& a_fluxes,
-                        const State& a_USph,
-                        T a_scale = 1.0) const;
+           const State& a_USph) const;
 
   inline void
   LinearViscCoef(
@@ -413,10 +406,24 @@ public:
 
   // DivB cleaning starts here.
 
-  inline void DivBPowell(
+    inline void DivBPowell(
                         State& a_Rhs,
                         const State& a_USph,
                         T a_scale = 1.0) const;
+                        
+  // Calculate -div(B) here.
+  inline void DivBPowell1(State& a_Rhs,
+                        const State& a_WFace,
+                        const BoxData<T,1,MEM>& a_deta,
+                        const BoxData<T,1,MEM>& a_adjDrDir,
+                        int a_dir,
+                        const Box& a_bxface) const;
+  
+  // Multiply other Powell terms to get final RHS.
+  inline void DivBPowell2(State& a_Rhs,
+                          State& a_Brhs,
+                        const State& a_W,
+                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const;
 
   // End DivB cleaning.
 
@@ -468,10 +475,7 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
   PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_UStage,
                 BoxData<T,NUMCOMPS,MEM>& a_BC,
                 BoxData<T,1,MEM>& a_dVolr,
-                Box a_blockBox,
-                T a_time,
-                T a_dt,
-                int a_kstage);
+                Box a_blockBox);
   
   /// Exchange, block boundary conditions, transform from JU to USph. 
   // Implemented.

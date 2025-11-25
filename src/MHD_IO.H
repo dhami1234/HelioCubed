@@ -508,28 +508,81 @@ void writeTecplotSlice_plane(
 
     std::vector<int> counts, displs;
     if (rank == 0) counts.resize(nprocs);
-    MPI_Gather(&localN, 1, MPI_INT, (rank==0?counts.data():nullptr), 1, MPI_INT, 0, comm);
+    MPI_Gather(&localN, 1, MPI_INT,
+               (rank == 0 ? counts.data() : nullptr), 1, MPI_INT,
+               0, comm);
 
     std::vector<char> big;
     if (rank == 0) {
-        displs.resize(nprocs,0);
-        int tot=0; for (int p=0;p<nprocs;++p){ displs[p]=tot; tot+=counts[p]; }
+        displs.resize(nprocs, 0);
+        int tot = 0;
+        for (int p = 0; p < nprocs; ++p) {
+            displs[p] = tot;
+            tot += counts[p];
+        }
         big.resize(tot);
-        MPI_Gatherv(localBuf.data(), localN, MPI_CHAR, big.data(), counts.data(), displs.data(), MPI_CHAR, 0, comm);
+        MPI_Gatherv(localBuf.data(), localN, MPI_CHAR,
+                    big.data(), counts.data(), displs.data(), MPI_CHAR,
+                    0, comm);
+
+        // ---------- Keep only the unique ZONE blocks ----------
+        std::string merged(big.begin(), big.end());
+        std::string filtered;
+
+        // we use a hash of the entire ZONE text as the signature
+        std::unordered_set<std::size_t> seen;
+        std::hash<std::string_view> hasher;
+
+        std::size_t pos = 0;
+        const std::size_t N = merged.size();
+
+        while (pos < N) {
+            // Find next "ZONE"
+            std::size_t zoneStart = merged.find("ZONE", pos);
+            if (zoneStart == std::string::npos) {
+                // no more zones; append any trailing whitespace and break
+                filtered.append(merged.substr(pos));
+                break;
+            }
+
+            // Append anything between pos and zoneStart (usually nothing or whitespace)
+            if (zoneStart > pos) {
+                filtered.append(merged.substr(pos, zoneStart - pos));
+            }
+
+            // Find the start of the next zone (or end of string)
+            std::size_t nextZone = merged.find("ZONE", zoneStart + 4);
+            std::size_t zoneEnd  = (nextZone == std::string::npos) ? N : nextZone;
+
+            std::string_view zv(merged.data() + zoneStart,
+                                zoneEnd - zoneStart);
+            auto h = hasher(zv);
+
+            // only keep this ZONE block if we have not seen its hash yet
+            if (seen.insert(h).second) {
+                filtered.append(zv);
+            }
+
+            pos = zoneEnd;
+        }
+        // -------------------------------------------
 
         std::ofstream ofs(a_filename, std::ios::out);
         ofs.setf(std::ios::scientific);
         ofs << std::setprecision(6);
-        ofs << "TITLE = \"t=" << a_time << " step="<< a_iter<<"\"\n";
+        ofs << "TITLE = \"t=" << a_time << " step=" << a_iter << "\"\n";
         ofs << "VARIABLES=\"X\" \"Y\" \"Z\"";
         for (const auto& nm : a_varNames) ofs << " \"" << nm << "\"";
         ofs << "\n";
-        ofs << "DATASETAUXDATA PhysTime = \"" << std::setprecision(12) << a_physTime << "\"\n";
+        ofs << "DATASETAUXDATA PhysTime = \"" << std::setprecision(12)
+            << a_physTime << "\"\n";
         ofs << std::setprecision(6);
-        ofs.write(big.data(), (std::streamsize)big.size());
+        ofs.write(filtered.data(), (std::streamsize)filtered.size());
         ofs.close();
     } else {
-        MPI_Gatherv(localBuf.data(), localN, MPI_CHAR, nullptr, nullptr, nullptr, MPI_CHAR, 0, comm);
+        MPI_Gatherv(localBuf.data(), localN, MPI_CHAR,
+                    nullptr, nullptr, nullptr, MPI_CHAR,
+                    0, comm);
     }
 #else
     std::ofstream ofs(a_filename, std::ios::out);
@@ -539,7 +592,8 @@ void writeTecplotSlice_plane(
     ofs << "VARIABLES=\"X\" \"Y\" \"Z\"";
     for (const auto& nm : a_varNames) ofs << " \"" << nm << "\"";
     ofs << "\n";
-    ofs << "DATASETAUXDATA PhysTime = \"" << std::setprecision(12) << a_physTime << "\"\n";
+    ofs << "DATASETAUXDATA PhysTime = \"" << std::setprecision(12)
+        << a_physTime << "\"\n";
     ofs << std::setprecision(6);
     ofs << localStr;
     ofs.close();
@@ -1017,21 +1071,40 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 
   if (write_slice){
     double physical_time = getPhysTime(time);
+
+
+    Point ghost  = Point(0, 3, 3);      // base ghost
+    Point offset = Point(0, 2, 2);      // extra padding for interpolation
+    MBLevelBoxData<double, NUMCOMPS, HOST> W_sph_in(layout, ghost + offset);
+    MBLevelBoxData<double, NUMCOMPS, HOST> W_sph_out_ghost(layout, ghost);
+
+    W_sph_in.setVal(0.0);
+    W_sph_out_ghost.setVal(0.0);
+
+    W_sph_out.copyTo(W_sph_in);
+    W_sph_out.copyTo(W_sph_out_ghost);
+
+    W_sph_in.exchange();
+    W_sph_in.copyTo(W_sph_out_ghost);
+    a_iop.apply(W_sph_out_ghost, W_sph_in);
+    W_sph_out_ghost.exchange0();
+
+
     if (ParseInputs::get_slice_X()){
       std::string tecplot_slice_file_x = ParseInputs::get_data_file_prefix() + ".x." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
+      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
     }
     if (ParseInputs::get_slice_Y()){
       std::string tecplot_slice_file_y = ParseInputs::get_data_file_prefix() + ".y." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
+      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
     }
     if (ParseInputs::get_slice_Z()){
       std::string tecplot_slice_file_z = ParseInputs::get_data_file_prefix() + ".z." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
+      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
     }
     if (ParseInputs::get_slice_R()){
       std::string tecplot_spherical_slice_file = ParseInputs::get_data_file_prefix() + ".r." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_spherical(map, W_sph_out, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13); 
+      writeTecplotSlice_spherical(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13); 
     }
     pout(0) << "Tecplot slice files written at iteration " << iter << endl;                                     
   }

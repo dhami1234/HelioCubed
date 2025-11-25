@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
             unsigned int block = layout.block(dit);
             Box blockBox = layout.getBlock(block).domain().box();           
             auto &USph_i = JUTemp[dit];
-            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox,0.,0.,0);
+            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox);
           }
       }
     

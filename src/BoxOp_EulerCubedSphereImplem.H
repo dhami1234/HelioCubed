@@ -47,6 +47,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
   BoxData<T,1,MEM>speedMax(this->box());
   speedMax.setVal(0.0);
+
+  // State Brhs(a_Rhs.box());
+  // Brhs.setVal(0.0);
   
   for (int dir = 0; dir < DIM; dir++)
     {
@@ -82,6 +85,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
                       dxiPerp,offseta,offsetb);
       spreadSlice(A_matrix);
       if (dir == 0) A_matrix.copyTo(A_matrix0);
+
+      // DivBPowell1(Brhs, WFace_L, deta, adjDrDir, dir, bxface);
       
       int limiter = ParseInputs::get_limiter();
       if (limiter != 0 && limiter != 1 && limiter != 2)
@@ -160,6 +165,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         },a_Rhs, rhsIncr);
 
     }
+
+    // We have calculated -div(B) in Brhs. Need to multiply other Powell terms to get the final RHS.
+    // DivBPowell2(a_Rhs, Brhs, W, A_matrix0);
+    
 }
 template<
     typename T,
@@ -607,8 +616,6 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
   auto& map     = *s_map;
   auto& eulerOp = *s_eulerOp;
 
-  T dt_min = 1.0e20;
-  T dt_next_local = 1.e20;
   T wgtxdt = a_weight*a_dt;
   for (auto dit : a_UStage.layout())
   {
@@ -722,7 +729,7 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
   {
       auto block = a_layout.block(dit);
       Box blockBox = a_layout.getBlock(block).domain().box();
-      eulerOp[dit].PreStagePatch(USph[dit],dstData[dit],a_dVolrLev[dit],blockBox,a_time,a_dt,0);
+      eulerOp[dit].PreStagePatch(USph[dit],dstData[dit],a_dVolrLev[dit],blockBox);
       Array<double, DIM> dx = eulerOp[dit].dx();
       BoxData<double, NUMCOMPS, HOST> W(USph[dit].box());
       BoxData<double, NUMCOMPS, HOST> WBar(USph[dit].box());

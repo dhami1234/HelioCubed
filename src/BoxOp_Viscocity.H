@@ -7,9 +7,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::
 viscFlux(
          State& a_Rhs,
          Array<BoxData<double, NUMCOMPS>, DIM>& a_fluxes,
-         const State& a_USph,
-         T a_scale,
-         T a_dt) const
+         const State& a_USph) const
 {
   PR_TIME("BoxOp_EulerCubedSphere::viscFlux terms()");
   int block = this->block();
@@ -139,7 +137,6 @@ viscFlux(
       
       outputbox &= rhsIncr.box();
     }
-  rhs *= (a_scale);
   a_Rhs += rhs;
 }
 template<

@@ -79,10 +79,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::
 PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
               BoxData<T,NUMCOMPS,MEM>& a_BC,
               BoxData<T,1,MEM>& a_dVolr,
-              Box a_blockBox,
-              T a_time,
-              T a_dt,
-              int a_kstage)
+              Box a_blockBox)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::PreStagePatch()");
   HDF5Handler h5;
@@ -421,7 +418,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox,a_time,a_dt,a_kstage);
+    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox);
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     int linear_visc = ParseInputs::get_linear_viscosity();
@@ -439,7 +436,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         fluxes[1].setToZero();
         fluxes[2].define(rhs_i.box().extrude(2));
         fluxes[2].setToZero();
-        eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i, 1.0, a_dt); //dt is not used in viscFlux. dt is multiplied in RK4
+        eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i);
         a_blockreg.increment(fluxes, dit, a_dt);
         CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,a_dt);
       }
