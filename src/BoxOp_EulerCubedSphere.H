@@ -405,12 +405,6 @@ public:
   // End Viscosity.
 
   // DivB cleaning starts here.
-
-    inline void DivBPowell(
-                        State& a_Rhs,
-                        const State& a_USph,
-                        T a_scale = 1.0) const;
-                        
   // Calculate -div(B) here.
   inline void DivBPowell1(State& a_Rhs,
                         const State& a_WFace,
@@ -489,7 +483,8 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
                 T a_time,
                 T a_dt,
                 T a_weight,
-                int a_kstage);
+                int a_kstage,
+                bool flag_viscosity);
 
   /// Compute fluxes, and RHS.
   static inline void

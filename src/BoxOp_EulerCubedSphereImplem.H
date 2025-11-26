@@ -48,8 +48,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   BoxData<T,1,MEM>speedMax(this->box());
   speedMax.setVal(0.0);
 
-  // State Brhs(a_Rhs.box());
-  // Brhs.setVal(0.0);
+  State Brhs(a_Rhs.box());
+  Brhs.setVal(0.0);
   
   for (int dir = 0; dir < DIM; dir++)
     {
@@ -86,7 +86,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       spreadSlice(A_matrix);
       if (dir == 0) A_matrix.copyTo(A_matrix0);
 
-      // DivBPowell1(Brhs, WFace_L, deta, adjDrDir, dir, bxface);
+      DivBPowell1(Brhs, WFace_L, deta, adjDrDir, dir, bxface);
       
       int limiter = ParseInputs::get_limiter();
       if (limiter != 0 && limiter != 1 && limiter != 2)
@@ -167,7 +167,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
 
     // We have calculated -div(B) in Brhs. Need to multiply other Powell terms to get the final RHS.
-    // DivBPowell2(a_Rhs, Brhs, W, A_matrix0);
+    DivBPowell2(a_Rhs, Brhs, W, A_matrix0);
     
 }
 template<

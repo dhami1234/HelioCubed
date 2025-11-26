@@ -375,7 +375,8 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
               T a_time,
               T a_dt,
               T a_weight,
-              int a_kstage)
+              int a_kstage,
+              bool a_flag_viscosity)
 {
   
   PR_TIMERS("BoxOp_EulerCubedSphere::PreStageLevel()");
@@ -423,7 +424,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     // Compute viscous operators here, and increment a_rhsTotal.
     int linear_visc = ParseInputs::get_linear_viscosity();
     int divBcleaning = ParseInputs::get_divergence_cleaning();
-    if (linear_visc == 1 && a_kstage == 0)
+    if (linear_visc == 1 && a_flag_viscosity)
       {
         PR_TIMERS("artificial viscosity");
         unsigned int block = layout.block(dit);
@@ -440,6 +441,5 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         a_blockreg.increment(fluxes, dit, a_dt);
         CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,a_dt);
       }
-    if (divBcleaning == 1 && a_kstage == 0) eulerOp[dit].DivBPowell(rhs_i, USph_i, 1.0);
   }
 }
