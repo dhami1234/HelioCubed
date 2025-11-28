@@ -711,44 +711,70 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
     double a_gamma)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::P_floor()");
-  auto map = CubedSphereShell::Map(a_JU.layout(), ghost());
-  auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
-  MBLevelBoxData<double, NUMCOMPS, HOST> USph(a_layout, ghost());
-  a_JU.exchange();
-  a_JU.copyTo(USph);
+  // auto map = CubedSphereShell::Map(a_JU.layout(), ghost());
+  // auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
+  // MBLevelBoxData<double, NUMCOMPS, HOST> USph(a_layout, ghost());
+  // a_JU.exchange();
+  // a_JU.copyTo(USph);
 
-  CubedSphereShell
-    ::consToSphInterpEuler<T,NUMCOMPS,MEM,PR_CELL>(USph,a_iop,a_dVolrLev, 4,0);
-  // Transform a_JU -> USph.
-  int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
-  int thetaCoord = (rCoord + 1) % DIM;
-  int phiCoord = (rCoord + 2) % DIM;
-  MBLevelBoxData<double, 8, HOST> dstData(a_layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-  if (ParseInputs::get_init_condition_type() == 3) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time);
+  // CubedSphereShell
+  //   ::consToSphInterpEuler<T,NUMCOMPS,MEM,PR_CELL>(USph,a_iop,a_dVolrLev, 4,0);
+  // // Transform a_JU -> USph.
+  // int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
+  // int thetaCoord = (rCoord + 1) % DIM;
+  // int phiCoord = (rCoord + 2) % DIM;
+  // MBLevelBoxData<double, 8, HOST> dstData(a_layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+  // if (ParseInputs::get_init_condition_type() == 3) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time);
+  // for (auto dit : a_layout)
+  // {
+  //     auto block = a_layout.block(dit);
+  //     Box blockBox = a_layout.getBlock(block).domain().box();
+  //     eulerOp[dit].PreStagePatch(USph[dit],dstData[dit],a_dVolrLev[dit],blockBox);
+  //     Array<double, DIM> dx = eulerOp[dit].dx();
+  //     BoxData<double, NUMCOMPS, HOST> W(USph[dit].box());
+  //     BoxData<double, NUMCOMPS, HOST> WBar(USph[dit].box());
+  //     eulerOp[dit].sphToPrim(W,WBar,USph[dit],block); // Transform to primitive variables, spherical velocities.
+  //     BoxData<double, NUMCOMPS, HOST> W_point(USph[dit].box());
+  //     W.copyTo(W_point);
+  //     W_point += Stencil<double>::Laplacian()(W,-1./24.);  
+  //     BoxData<double,1,HOST> ke(W_point.box());
+  //     BoxData<double,1,HOST> me(W_point.box());
+  //     eulerOp[dit].EnergyW(ke,me,W_point,block,-1);
+  //     forallInPlace([ ] PROTO_LAMBDA
+  //                 (Var<double, NUMCOMPS, HOST> &a_W,
+  //                   const Var<double, 1, HOST> &a_ke,
+  //                   const Var<double, 1, HOST> &a_me)                    
+  //     { 
+  //       double eps = 1.0e-10;
+  //       a_W(iP) = std::max(a_W(iP),eps*(a_ke(0) + a_me(0)));
+  //     },W_point, ke, me);
+  //     eulerOp[dit].primToCons(USph[dit], W_point, a_dVolrLev[dit], a_gamma, dx[2], block);
+  // }
+  // USph.copyTo(a_JU);
+
+  Point size = a_layout.domain().getBlock(0).sizes();
+  double dxiPerp = 1.0/size[1];
   for (auto dit : a_layout)
   {
-      auto block = a_layout.block(dit);
-      Box blockBox = a_layout.getBlock(block).domain().box();
-      eulerOp[dit].PreStagePatch(USph[dit],dstData[dit],a_dVolrLev[dit],blockBox);
-      Array<double, DIM> dx = eulerOp[dit].dx();
-      BoxData<double, NUMCOMPS, HOST> W(USph[dit].box());
-      BoxData<double, NUMCOMPS, HOST> WBar(USph[dit].box());
-      eulerOp[dit].sphToPrim(W,WBar,USph[dit],block); // Transform to primitive variables, spherical velocities.
-      BoxData<double, NUMCOMPS, HOST> W_point(USph[dit].box());
-      W.copyTo(W_point);
-      W_point += Stencil<double>::Laplacian()(W,-1./24.);  
-      BoxData<double,1,HOST> ke(W_point.box());
-      BoxData<double,1,HOST> me(W_point.box());
-      eulerOp[dit].EnergyW(ke,me,W_point,block,-1);
-      forallInPlace([ ] PROTO_LAMBDA
-                  (Var<double, NUMCOMPS, HOST> &a_W,
-                    const Var<double, 1, HOST> &a_ke,
-                    const Var<double, 1, HOST> &a_me)                    
-      { 
-        double eps = 1.0e-10;
-        a_W(iP) = std::max(a_W(iP),eps*(a_ke(0) + a_me(0)));
-      },W_point, ke, me);
-      eulerOp[dit].primToCons(USph[dit], W_point, a_dVolrLev[dit], a_gamma, dx[2], block);
+  auto& JU_i = a_JU[dit];
+  BoxData<double,1,HOST> deta = CubedSphereShell::detA<double,HOST>(JU_i.box(),dxiPerp,0); 
+  auto& dVolr_i = a_dVolrLev[dit];
+  forallInPlace([ ] PROTO_LAMBDA
+    (Var<double,NUMCOMPS,HOST>& l_JU,
+      const Var<double,1,HOST>& l_deta,
+      const Var<double,1,HOST>& l_dVolr,
+      const double l_gamma)
+    {
+      double rho = l_JU(iRHO)/(l_deta(0)*l_dVolr(0));
+      double Vx = l_JU(iMOMX)/l_JU(iRHO);
+      double Vy = l_JU(iMOMY)/l_JU(iRHO);
+      double Vz = l_JU(iMOMZ)/l_JU(iRHO);
+      double Bx = l_JU(iBX)/(l_deta(0)*l_dVolr(0));
+      double By = l_JU(iBY)/(l_deta(0)*l_dVolr(0));
+      double Bz = l_JU(iBZ)/(l_deta(0)*l_dVolr(0));
+      double p = (l_gamma - 1.0)*(l_JU(iE)/(l_deta(0)*l_dVolr(0)) - 0.5*rho*(Vx*Vx + Vy*Vy + Vz*Vz) - (Bx*Bx + By*By + Bz*Bz)/8.0/M_PI);
+      if (p < 0.0) l_JU(iE) = l_deta(0)*l_dVolr(0)*(0.5*rho*(Vx*Vx + Vy*Vy + Vz*Vz) + (Bx*Bx + By*By + Bz*Bz)/8.0/M_PI);
+    },JU_i,deta,dVolr_i,a_gamma);
   }
-  USph.copyTo(a_JU);
+
 }
