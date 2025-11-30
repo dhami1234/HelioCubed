@@ -232,21 +232,28 @@ int main(int argc, char *argv[])
         pout(0) << "Probed at iteration " << iter << endl;
       }
       
-      // Convert time in seconds to days, hours, minutes, seconds
-      int total_seconds = static_cast<int>(time);
-      int days = total_seconds / 86400;
-      total_seconds %= 86400;
-      int hours = total_seconds / 3600;
-      total_seconds %= 3600;
-      int minutes = total_seconds / 60;
-      int seconds = total_seconds % 60;
-      // Create string representation
-      char timeStr[100];
-      snprintf(timeStr, sizeof(timeStr), "%d days, %d hours, %d minutes, %d seconds", days, hours, minutes, seconds);
-
+      std::string timeStr = getPhysTime_duration(time);
+      std::string dateStr = getPhysTime_date(time);
+      char outStr[512];
       auto end = chrono::steady_clock::now();
-      pout(0) << "iter = " << iter << " dt = " << dt << " time = " << time << " (" << timeStr << ") Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms" << endl;
-      if (procID() == 0) cout << "iter = " << iter << " dt = " << dt << " time = " << time  << " (" << timeStr << ") Time taken: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms" << endl;
+      std::chrono::duration<double> elapsed_seconds = end-start;
+      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.4f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)\n",
+            iter,
+            dt,
+            time,
+            timeStr.c_str(),
+            dateStr.c_str(),
+            elapsed_seconds.count());
+      if (init_condition_type != 3) {
+        snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)\n",
+            iter,
+            dt,
+            time,
+            elapsed_seconds.count());
+      }
+      std::string out_string(outStr);
+      pout(0) << out_string << endl;
+      if (procID() == 0) cout << out_string;
     }
 
       if ((convTestType > 0) && (convTestType != 4)) {

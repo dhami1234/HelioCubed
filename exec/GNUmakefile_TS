@@ -8,8 +8,8 @@ USE_HDF5=TRUE
 PROTO=/Users/talwindersingh/Desktop/My_Computer/Work/UAH/Current_projects/SWQU/proto
 
 # Cubed-sphere shell defaults; override on make command line if needed.
-CUBED_SPHERE_SHELL_R0 ?= 0.1 #1496400000000.0 #0.1
-CUBED_SPHERE_SHELL_R1 ?= 2.0 #16112400000000.0 #2.0
+CUBED_SPHERE_SHELL_R0 ?= 1496400000000.0 #0.1
+CUBED_SPHERE_SHELL_R1 ?= 16112400000000.0 #2.0
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0
 CUBED_SPHERE_RADIAL_STRETCH ?= 1.5
 

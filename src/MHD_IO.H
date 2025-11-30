@@ -83,6 +83,103 @@ double getPhysTime(double a_time)
   return PhysTime;
 }
 
+std::string getPhysTime_duration(double a_time)
+{
+    // Convert time in seconds to days, hours, minutes, seconds
+    int total_seconds = static_cast<int>(a_time);
+
+    int days = total_seconds / 86400;
+    total_seconds %= 86400;
+
+    int hours = total_seconds / 3600;
+    total_seconds %= 3600;
+
+    int minutes = total_seconds / 60;
+    int seconds = total_seconds % 60;
+
+    // Create string representation
+    char timeStr[100];
+    std::snprintf(timeStr, sizeof(timeStr),
+                  "%d:%02d:%02d:%02d",
+                  days, hours, minutes, seconds);
+
+    return std::string(timeStr);
+}
+
+std::string getPhysTime_date(double a_time)
+{
+    double physical_time = getPhysTime(a_time);
+
+    // Split into year + fractional part
+    double year_part;
+    double fracpart = std::modf(physical_time, &year_part);
+    int year = static_cast<int>(year_part);
+
+    // ---- 1. Handle leap year and days in year ----
+    auto is_leap = [](int y) {
+        return ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0));
+    };
+
+    bool leap = is_leap(year);
+    double days_in_year = leap ? 366.0 : 365.0;
+
+    // Convert fraction of year to (day of year + fraction of that day)
+    double day_of_year_real = fracpart * days_in_year;   // 0-based, fractional
+    int day_of_year = static_cast<int>(day_of_year_real); // 0-based integer
+    double day_frac = day_of_year_real - day_of_year;     // fraction of the day
+
+    // ---- 2. Convert day_of_year to month/day ----
+    static const int days_in_month_common[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    static const int days_in_month_leap[]   = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
+    const int* days_in_month = leap ? days_in_month_leap : days_in_month_common;
+
+    int month = 0;               // 0-based
+    int day_index = day_of_year; // still 0-based
+
+    for (month = 0; month < 12; ++month) {
+        if (day_index < days_in_month[month]) {
+            break;
+        }
+        day_index -= days_in_month[month];
+    }
+
+    int day = day_index + 1;  // 1-based day of month
+
+    // ---- 3. Time of day from fraction of the *day* ----
+    double hours_real   = day_frac * 24.0;
+    int hour            = static_cast<int>(hours_real);
+
+    double minutes_real = (hours_real - hour) * 60.0;
+    int minute          = static_cast<int>(minutes_real);
+
+    double seconds_real = (minutes_real - minute) * 60.0;
+    int second          = static_cast<int>(seconds_real + 0.5); // round
+
+    // Optional: handle second == 60 corner case
+    if (second >= 60) {
+        second = 0;
+        ++minute;
+        if (minute >= 60) {
+            minute = 0;
+            ++hour;
+            if (hour >= 24) {
+                hour = 0;
+                ++day;
+            }
+        }
+    }
+
+    // ---- 4. Format UTC string manually (no DST, no timezone conversion) ----
+    char dateStr[64];
+    std::snprintf(dateStr, sizeof(dateStr),
+                  "%04d-%02d-%02dT%02d:%02d:%02d UTC",
+                  year, month + 1, day,   // month+1 for 1–12
+                  hour, minute, second);
+
+    return std::string(dateStr);
+}
+
 template<
   template<MemType> typename MAP,
   typename T, unsigned int C, MemType MEM, Centering CTR
