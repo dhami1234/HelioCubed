@@ -5,6 +5,20 @@
 #include "MHD_CME.H"
 #include <chrono> // Used by timer
 
+#ifndef GIT_HASH_RAW
+#define GIT_HASH_RAW unknown_hash
+#endif
+
+#ifndef GIT_MESSAGE_RAW
+#define GIT_MESSAGE_RAW unknown_message
+#endif
+
+#define STRINGIFY2(x) #x
+#define STRINGIFY(x) STRINGIFY2(x)
+
+#define GIT_HASH    STRINGIFY(GIT_HASH_RAW)
+#define GIT_MESSAGE STRINGIFY(GIT_MESSAGE_RAW)
+
 MHDReader BC_global;
 
 int main(int argc, char *argv[])
@@ -12,6 +26,8 @@ int main(int argc, char *argv[])
   #ifdef PR_MPI
     MPI_Init(&argc, &argv);
   #endif
+  pout(0) << "Git hash: " << GIT_HASH << " Commit message: " << GIT_MESSAGE << endl;
+  if (procID() == 0) cout << "Git hash: " << GIT_HASH << " Commit message: " << GIT_MESSAGE << endl;  
   ParseInputs::getInstance().parsenow(argc, argv);
   HDF5Handler h5;
 
