@@ -7,7 +7,7 @@
 
 #define NUMCOMPS 2*DIM+2
 #define NUMREG NUMCOMPS
-#define NGHOST 5
+#define NGHOST 7
 #if DIM == 2
 #define iRHO 0
 #define iVX 1

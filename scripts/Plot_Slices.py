@@ -33,13 +33,15 @@ AU_CM       = 1.495978707e13  # AU in cm
 START_ISO   = "2024-03-16T12:00:00"  # simulation t=0 (UTC)
 
 #--- address variables ---
-slice_folder = "/Users/talwindersingh/Desktop/My_Computer/Work/UAH/Current_projects/Ron/With_HelioCubed_single_frame"
-# slice_folder = "/Users/talwindersingh/Desktop/My_Computer/Work/UAH/Current_projects/Ron/With_HelioCubed"
+# slice_folder = "/Users/talwindersingh/Desktop/My_Computer/Work/UAH/Current_projects/Ron/With_HelioCubed_single_frame"
+slice_folder = "/Users/talwindersingh/Desktop/My_Computer/Work/UAH/Current_projects/Ron/With_HelioCubed"
 
 out_dir = slice_folder + "/Images_inertial"
 
 #-- Corotation needed? ---
-COROTATE = False
+COROTATE = True
+if COROTATE:
+    out_dir = slice_folder + "/Images_corotating"
 
 #-- process all or new only ---
 PROCESS_ALL = False
@@ -52,8 +54,8 @@ RADIAL_SCALE = {
     "Vt": 0,
     "Vp": 0,
     "Br": 2,
-    "Bt": 2,
-    "Bp": 2,
+    "Bt": 1,
+    "Bp": 1,
     "density": 2,
     "T": 1,
     "P": 2.1
@@ -88,14 +90,14 @@ COLOR_SETTINGS = {
 
     # Magnetic Fields
     "Br": {"cmap": "bwr", "vmin": -3.0, "vmax": 3.0},
-    "Bp": {"cmap": "bwr", "vmin": -1.0, "vmax": 1.0},
-    "Bt": {"cmap": "bwr", "vmin": -0.2, "vmax": 0.2},
+    "Bp": {"cmap": "bwr", "vmin": -2.0, "vmax": 2.0},
+    "Bt": {"cmap": "bwr", "vmin": -0.3, "vmax": 0.3},
 
     # Mass density
     "density": {"cmap": "terrain_r", "vmin": 0.0, "vmax": 0.25e-22},
 
     # Temperature
-    "T": {"cmap": "hot", "vmin": 0.0, "vmax": 1.5e5},
+    "T": {"cmap": "hot", "vmin": 0.0, "vmax": 2.5e5},
 
     # Pressure
     "P": {"cmap": "plasma", "vmin": 0.0, "vmax": 800},

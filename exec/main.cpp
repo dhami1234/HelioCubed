@@ -27,7 +27,6 @@ int main(int argc, char *argv[])
     MPI_Init(&argc, &argv);
   #endif
   pout(0) << "Git hash: " << GIT_HASH << " Commit message: " << GIT_MESSAGE << endl;
-  if (procID() == 0) cout << "Git hash: " << GIT_HASH << " Commit message: " << GIT_MESSAGE << endl;  
   ParseInputs::getInstance().parsenow(argc, argv);
   HDF5Handler h5;
 
@@ -237,7 +236,7 @@ int main(int argc, char *argv[])
       char outStr[512];
       auto end = chrono::steady_clock::now();
       std::chrono::duration<double> elapsed_seconds = end-start;
-      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.4f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)\n",
+      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.4f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)",
             iter,
             dt,
             time,
@@ -245,7 +244,7 @@ int main(int argc, char *argv[])
             dateStr.c_str(),
             elapsed_seconds.count());
       if (init_condition_type != 3) {
-        snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)\n",
+        snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)",
             iter,
             dt,
             time,
@@ -253,7 +252,6 @@ int main(int argc, char *argv[])
       }
       std::string out_string(outStr);
       pout(0) << out_string << endl;
-      if (procID() == 0) cout << out_string;
     }
 
       if ((convTestType > 0) && (convTestType != 4)) {
