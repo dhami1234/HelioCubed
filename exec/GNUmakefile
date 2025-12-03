@@ -15,8 +15,13 @@ CUBED_SPHERE_RADIAL_STRETCH ?= 1.5
 # --- Git info ---
 GIT_HASH    := $(shell git rev-parse --short HEAD)
 GIT_MESSAGE := $(shell git log -1 --pretty=%s | tr -d '"\\')
+
 empty  :=
 space  := $(empty) $(empty)
+comma  := ,
+# First replace commas with underscores
+GIT_MESSAGE := $(subst $(comma),_,$(GIT_MESSAGE))
+# Then replace spaces with underscores
 GIT_MESSAGE := $(subst $(space),_,$(GIT_MESSAGE))
 
 LAPACK_LIB=-lblas -llapack
