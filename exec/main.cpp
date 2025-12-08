@@ -168,7 +168,7 @@ int main(int argc, char *argv[])
             unsigned int block = layout.block(dit);
             Box blockBox = layout.getBlock(block).domain().box();           
             auto &USph_i = JUTemp[dit];
-            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox);
+            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox, time);
           }
       }
     
@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
             timeStr.c_str(),
             dateStr.c_str(),
             elapsed_seconds.count());
-      if (init_condition_type != 3) {
+      if (init_condition_type != 3 && init_condition_type != 2) {
         snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)",
             iter,
             dt,
