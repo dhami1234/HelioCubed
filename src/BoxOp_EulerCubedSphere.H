@@ -7,7 +7,7 @@
 
 #define NUMCOMPS 2*DIM+2
 #define NUMREG NUMCOMPS
-#define NGHOST 7
+#define NGHOST 5
 #if DIM == 2
 #define iRHO 0
 #define iVX 1
@@ -161,6 +161,36 @@ void f_speedmax_F
   a_speedmax(0) += (af + sqrt(v2))/dx_d;
 }
 PROTO_KERNEL_END(f_speedmax_F, f_speedmax);
+template<typename T,MemType MEM>
+PROTO_KERNEL_START
+void f_primflux_F
+     (
+      Var<T,NUMCOMPS,MEM>& a_flux,
+      const Var<T,NUMCOMPS,MEM>& a_wface,      
+      const Var<T,1,MEM>& a_ke,
+      const Var<T,1,MEM>& a_me,
+      const Var<T,1,MEM>& a_vb,
+      const Var<T,1,MEM>& a_adjddir,
+      const T a_gamma,
+      uint a_block,
+      uint a_centering)
+     {
+       T velnorm = a_wface(a_centering+iVX);
+       T veltan1 = a_wface((a_centering+1)%DIM + iVX);
+       T veltan2 = a_wface((a_centering+2)%DIM + iVX);
+       T bnorm = a_wface(a_centering+iBX);
+       T btan1 = a_wface((a_centering+1)%DIM + iBX);
+       T btan2 = a_wface((a_centering+2)%DIM + iBX);
+       a_flux(iRHO) = a_wface(iRHO)*velnorm;
+       a_flux(a_centering+iMOMX) = a_flux(iRHO)*velnorm - bnorm*bnorm/4.0/M_PI;
+       a_flux((a_centering+1)%DIM + iMOMX) = a_flux(iRHO)*veltan1 - bnorm*btan1/4.0/M_PI;
+       a_flux((a_centering+2)%DIM + iMOMX) = a_flux(iRHO)*veltan2 - bnorm*btan2/4.0/M_PI;
+       a_flux(iE) = (2.0*a_me(0) + a_ke(0) + a_wface(iP)*a_gamma/(a_gamma - 1.0))*velnorm - bnorm*a_vb(0)/4.0/M_PI;
+       a_flux(iBX) = velnorm*a_wface(iBX) - a_wface(iVX)*bnorm;
+       a_flux(iBY) = velnorm*a_wface(iBY) - a_wface(iVY)*bnorm;
+       a_flux(iBZ) = velnorm*a_wface(iBZ) - a_wface(iVZ)*bnorm;
+     }
+PROTO_KERNEL_END(f_primflux_F, f_primflux);
 template<typename T,MemType MEM>
 PROTO_KERNEL_START
 void f_csq_F

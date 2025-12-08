@@ -436,7 +436,10 @@ primToFlux(
   BoxData<T,1,MEM> mePoint(WFacePoint.box());
   BoxData<T,1,MEM> vbPoint(WFacePoint.box());
   EnergyW(kePoint,mePoint,vbPoint,WFacePoint,a_block,a_centering);
-
+   BoxData<T,1,MEM> keBar(a_WFaceBar.box());
+  BoxData<T,1,MEM> meBar(a_WFaceBar.box());
+  BoxData<T,1,MEM> vbBar(a_WFaceBar.box());
+  EnergyW(keBar,meBar,vbBar,a_WFaceBar,a_block,a_centering);
  
   BoxData<T,1,MEM> adjDdirPoint;
   if (a_centering != 0)
@@ -448,37 +451,13 @@ primToFlux(
       adjDdirPoint.define(a_adjDdir.box());
       a_adjDdir.copyTo(adjDdirPoint);
     }
-  State fluxPoint = forall<T,NUMCOMPS>
-    ([ ] PROTO_LAMBDA
-     (
-      Var<T,NUMCOMPS>& a_flux,
-      const Var<T,NUMCOMPS>& a_wface,      
-      const Var<T,1>& a_ke,
-      const Var<T,1>& a_me,
-      const Var<T,1>& a_vb,
-      const Var<T>& a_adjddir,
-      const T a_gamma,
-      uint a_block,
-      uint a_centering)
-     {
-       T velnorm = a_wface(a_centering+iVX);
-       T veltan1 = a_wface((a_centering+1)%DIM + iVX);
-       T veltan2 = a_wface((a_centering+2)%DIM + iVX);
-       T bnorm = a_wface(a_centering+iBX);
-       T btan1 = a_wface((a_centering+1)%DIM + iBX);
-       T btan2 = a_wface((a_centering+2)%DIM + iBX);
-       a_flux(iRHO) = a_wface(iRHO)*velnorm;
-       a_flux(a_centering+iMOMX) = a_flux(iRHO)*velnorm - bnorm*bnorm/4.0/M_PI;
-       a_flux((a_centering+1)%DIM + iMOMX) = a_flux(iRHO)*veltan1 - bnorm*btan1/4.0/M_PI;
-       a_flux((a_centering+2)%DIM + iMOMX) = a_flux(iRHO)*veltan2 - bnorm*btan2/4.0/M_PI;
-       a_flux(iE) = (2.0*a_me(0) + a_ke(0) + a_wface(iP)*a_gamma/(a_gamma - 1.0))*velnorm - bnorm*a_vb(0)/4.0/M_PI;
-       a_flux(iBX) = velnorm*a_wface(iBX) - a_wface(iVX)*bnorm;
-       a_flux(iBY) = velnorm*a_wface(iBY) - a_wface(iVY)*bnorm;
-       a_flux(iBZ) = velnorm*a_wface(iBZ) - a_wface(iVZ)*bnorm;
-     },WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
+  State fluxPoint = forall<T,NUMCOMPS>(f_primflux,WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
+  State fluxBar = forall<T,NUMCOMPS>(f_primflux,a_WFaceBar,keBar,meBar,vbBar,adjDdirPoint,m_gamma,a_block,a_centering);
+
+  a_physFlux = _convolveFace(fluxPoint,fluxBar,a_centering); 
   // Compute Average fluxes from pointwise values.
-  a_physFlux = (1.0*Shift(Point::Zeros()) +
-                (1.0/24.0)*Stencil<T>::LaplacianFace(a_centering))(fluxPoint);
+  //a_physFlux = (1.0*Shift(Point::Zeros()) +
+  //             (1.0/24.0)*Stencil<T>::LaplacianFace(a_centering))(fluxPoint);
 }
 
 
