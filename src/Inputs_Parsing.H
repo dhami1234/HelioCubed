@@ -10,6 +10,20 @@
 #include "MHD_pout.H"
 #include "MHD_Constants.H"
 
+#ifndef GIT_HASH_RAW
+#define GIT_HASH_RAW unknown_hash
+#endif
+
+#ifndef GIT_MESSAGE_RAW
+#define GIT_MESSAGE_RAW unknown_message
+#endif
+
+#define STRINGIFY2(x) #x
+#define STRINGIFY(x) STRINGIFY2(x)
+
+#define GIT_HASH    STRINGIFY(GIT_HASH_RAW)
+#define GIT_MESSAGE STRINGIFY(GIT_MESSAGE_RAW)
+
 using namespace Proto;
 using namespace std;
 
@@ -240,11 +254,17 @@ public:
         probe_filenames.resize((size_t)std::max(0, num_probes));
         probe_coords.resize((size_t)std::max(0, num_probes));
 
-        pout(0) << "Running with the following Cubed Sphere inputs (these have to changed in Makefile at compile time)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
-        pout(0) << "Inner Radius: " << CUBED_SPHERE_SHELL_R0/c_SR << endl;
-        pout(0) << "Outer Radius: " << CUBED_SPHERE_SHELL_R1/c_SR << endl;
-        pout(0) << "Radial Grid Stretching Parameter: " << CUBED_SPHERE_RADIAL_STRETCH << endl;
+        pout(0) << "Last git pull info:" << endl;
+        pout(0) << setw(75) << setfill('-') << "-" << endl;
+        pout(0) << "Git hash: " << GIT_HASH << endl; 
+        pout(0) << "Commit message: " << GIT_MESSAGE << endl;
+        pout(0) << setw(75) << setfill('-') << "-" << endl;
+        pout(0) << "Running with the following Cubed Sphere inputs (these can be changed in Makefile at compile time)" << endl;
+        pout(0) << setw(75) << setfill('-') << "-" << endl;
+        pout(0) << "Inner Radius: " << CUBED_SPHERE_SHELL_R0/c_SR << " SR" << endl;
+        pout(0) << "Outer Radius: " << CUBED_SPHERE_SHELL_R1/c_SR << " SR" << endl;
+        pout(0) << "Radial Grid Stretching Parameter (C): " << CUBED_SPHERE_RADIAL_STRETCH << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
         pout(0) << "Running with the following inputs (these can be changed in the inputs file)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
