@@ -8,6 +8,7 @@
 #include <vector>
 #include <sstream>
 #include "MHD_pout.H"
+#include "MHD_Constants.H"
 
 using namespace Proto;
 using namespace std;
@@ -239,7 +240,13 @@ public:
         probe_filenames.resize((size_t)std::max(0, num_probes));
         probe_coords.resize((size_t)std::max(0, num_probes));
 
-        pout(0) << "Running with the following inputs (these can be changed in the file 'inputs')" << endl;
+        pout(0) << "Running with the following Cubed Sphere inputs (these have to changed in Makefile at compile time)" << endl;
+        pout(0) << setw(75) << setfill('-') << "-" << endl;
+        pout(0) << "Inner Radius: " << CUBED_SPHERE_SHELL_R0/c_SR << endl;
+        pout(0) << "Outer Radius: " << CUBED_SPHERE_SHELL_R1/c_SR << endl;
+        pout(0) << "Radial Grid Stretching Parameter: " << CUBED_SPHERE_RADIAL_STRETCH << endl;
+        pout(0) << setw(75) << setfill('-') << "-" << endl;
+        pout(0) << "Running with the following inputs (these can be changed in the inputs file)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
         pout(0) << "convTestType: " << convTestType << endl;
         pout(0) << "init_condition_type: " << init_condition_type << endl;
@@ -300,7 +307,7 @@ public:
         pout(0) << "CME_a1: " << CME_a1 << endl;
         pout(0) << "CME_shift: " << CME_shift << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
-        
+                
     }
 
     // Utility function to remove spaces from a string
