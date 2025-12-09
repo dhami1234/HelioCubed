@@ -372,7 +372,7 @@ Insert_CME(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
         {
             auto block = a_layout.block(dit);
             Box blockBox = a_layout.getBlock(block).domain().box();
-            eulerOp[dit].PreStagePatch(USph_CME[dit],dstData[dit],a_dVolrLev[dit],blockBox);
+            eulerOp[dit].PreStagePatch(USph_CME[dit],dstData[dit],a_dVolrLev[dit],blockBox, a_time);
             Array<double, DIM> dx = eulerOp[dit].dx();
             double dxiPerp = dx[2];
             BoxData<double> radius(a_dVolrLev[dit].box());

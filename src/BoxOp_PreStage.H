@@ -40,22 +40,28 @@ void f_radialoutflowIBCs_F(
     Var<T> &a_radius,
     Var<T, DIM> &a_X_cart,
     T a_gamma,
-    int a_nradius)
+    int a_nradius,
+    T a_time)
 {
   T r = sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1) + a_X_cart(2) * a_X_cart(2));
-  T theta = acos(a_X_cart(2) / r);
+  T theta = atan2(sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1)), a_X_cart(2)); // polar angle
+  T phi = atan2(a_X_cart(1), a_X_cart(0)); // azimuthal angle
   // Compute spherical BCs.
   // FIX this !
+
+
   double r_BC = CUBED_SPHERE_SHELL_R0; //in cm
   T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
   T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
   T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
-  T rho = rho0;
-  //T rho = rho0*pow(a_radius(0)/r_BC, -2.0);
-  //T p = p0 * pow(rho / rho0, a_gamma);
-  T p = p0;
-  T ur = u0;
-  // T ur = u0 - u0/10 * sin(theta);
+  T rho = rho0*pow(r_BC/r,2.0);
+  T p = p0*pow(r_BC/r,2.0*a_gamma);;
+  // T ur = u0;
+  // T ur = u0 - u0/10 * sin(5.0*phi)*sin(theta);
+  double carr_rot_time = 25.38 * 24 * 60 * 60; // Seconds
+  T omega = 2.0 * M_PI / carr_rot_time; 
+  T phit  = phi - omega * a_time; // or + for opposite rotation
+  T ur = u0 - u0/3 * ((1 + 2*cos(5*phit)) * sin(5*phit));
   a_USph(iRHO) = rho;
   a_USph(iMOMX) = ur * rho;
   a_USph(iMOMY) = 0.0;
@@ -79,7 +85,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::
 PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
               BoxData<T,NUMCOMPS,MEM>& a_BC,
               BoxData<T,1,MEM>& a_dVolr,
-              Box a_blockBox)
+              Box a_blockBox,
+              T a_time)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::PreStagePatch()");
   HDF5Handler h5;
@@ -229,7 +236,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       forallInPlace_p(f_radialBCs, bdryBoxLow, a_USphStage, radius, dxradius, m_gamma, thickness);
     }
     if (init_condition_type == 2){ 
-      forallInPlace_p(f_radialoutflowIBCs, bdryBoxLow, a_USphStage, radius, XCart, m_gamma, thickness);
+      forallInPlace_p(f_radialoutflowIBCs, bdryBoxLow, a_USphStage, radius, XCart, m_gamma, thickness, a_time);
     }
     if (init_condition_type == 3){
       Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
@@ -419,7 +426,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox);
+    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox, a_time);
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     int linear_visc = ParseInputs::get_linear_viscosity();
