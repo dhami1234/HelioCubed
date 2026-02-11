@@ -31,6 +31,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   State W;
   State WBar;
   sphToPrim(W,WBar,a_USph,a_block);
+  
   BoxData<T,1,MEM> me = magneticEnergyW(WBar,a_block,0);
   // Compute Fluxes, rhs.
   // a_Rhs.setVal(0.0);
@@ -59,7 +60,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       State WFace_R(WFace_L.box());
       WFace_L.copyTo(WFace_R);
       State WFaceBar = Stencil<T>::CellToFace(dir,Side::Lo,2)(WBar);    
-
+      
       //Required mapping variables.
       Box bxface = WFace_L.box().grow(-2);     
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
@@ -131,6 +132,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir);
       Box bxface0 = a_fluxes[dir].box();
       State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Rus(bxface);
+      
       primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
       primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
       primToMappedRusanovFlux(fluxdir_Rus,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir);
@@ -170,6 +172,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     DivBPowell2(a_Rhs, Brhs, W, A_matrix0);
     
 }
+// primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
 template<
     typename T,
     template<MemType> typename MAP,
@@ -218,8 +221,34 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
       BoxData<T,1,MEM> advfluxprod = faceProduct(advfluxcomp,a_adjDrDir,a_dir);
       advfluxprod.copyTo(advfluxcomp);
     }
+#if 1
+ {
+   HDF5Handler h5;
+    BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
+    //BoxData<T,1,MEM> psliceBar(a_WFaceBar.box());
+    BoxData<T,1,MEM> psliceBar = slice(a_WFaceBar,iP);
+    // pBar.copyTo(psliceBar);
+    BoxData<T> tmp4 = psliceBar * a_adjDrDir;
+    //BoxData<T,DIM,MEM> tmp2(a_ntrow.box());
+    //a_ntrow.copyTo(tmp2);
+    BoxData<T,DIM,MEM> pforce(a_ntrow.box());
+    pforce.setVal(0.);
+    BoxData<T,1,MEM> tmp3 =
+      _faceProduct(a_adjDrDir,pslice,a_adjDrDir,psliceBar,a_dir);
+        for (int dirvec = 0; dirvec < DIM; dirvec++)
+      {
+        BoxData<T> ntSlice = slice(a_ntrow,dirvec);
+        BoxData<T> pforceSlice = slice(pforce,dirvec);
+        _faceProduct(pforceSlice,tmp3,ntSlice,tmp4,ntSlice,a_dir);
+        
+      }
     
-  // Momentum fluxes - pressure forces.      
+    fluxdirMom += pforce;
+    
+  }
+#endif
+  // Momentum fluxes - pressure forces.
+#if 0
   {
     BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
     BoxData<T,DIM,MEM> tmp2(a_ntrow.box());
@@ -232,6 +261,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
       }
     fluxdirMom += tmp2;
   }
+#endif
 }
 
 template<
