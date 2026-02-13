@@ -221,8 +221,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
       BoxData<T,1,MEM> advfluxprod = faceProduct(advfluxcomp,a_adjDrDir,a_dir);
       advfluxprod.copyTo(advfluxcomp);
     }
-#if 1
- {
+
+  //adding pressure forces to momentum fluxes.
    BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
    BoxData<T,1,MEM> psliceBar = slice(a_WFaceBar,iP);
    BoxData<T,NUMCOMPS,MEM> WPoint = _deconvolveFace(a_WFace,a_WFaceBar,a_dir);
@@ -244,23 +244,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
         
      }    
     fluxdirMom += pforce;   
-  }
-#endif
-  // Momentum fluxes - pressure forces.
-#if 0
-  {
-    BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
-    BoxData<T,DIM,MEM> tmp2(a_ntrow.box());
-    a_ntrow.copyTo(tmp2);
-    BoxData<T,1,MEM> tmp3 = faceProduct(a_adjDrDir,pslice,a_dir);
-    for (int dirvec = 0; dirvec < DIM; dirvec++)
-      {
-        BoxData<T> ntslice = slice(tmp2,dirvec);          
-        ntslice *= tmp3;
-      }
-    fluxdirMom += tmp2;
-  }
-#endif
 }
 
 template<

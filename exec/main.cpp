@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
       char outStr[512];
       auto end = chrono::steady_clock::now();
       std::chrono::duration<double> elapsed_seconds = end-start;
-      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.4f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)",
+      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.6f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)",
             iter,
             dt,
             time,

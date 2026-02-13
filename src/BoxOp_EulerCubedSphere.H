@@ -182,6 +182,7 @@ void f_primflux_F
        T btan1 = a_wface((a_centering+1)%DIM + iBX);
        T btan2 = a_wface((a_centering+2)%DIM + iBX);
        a_flux(iRHO) = a_wface(iRHO)*velnorm;
+       // The pressure term in momentum fluxes will be added later in mapped flux calculation.
        a_flux(a_centering+iMOMX) = a_flux(iRHO)*velnorm - bnorm*bnorm/4.0/M_PI;
        a_flux((a_centering+1)%DIM + iMOMX) = a_flux(iRHO)*veltan1 - bnorm*btan1/4.0/M_PI;
        a_flux((a_centering+2)%DIM + iMOMX) = a_flux(iRHO)*veltan2 - bnorm*btan2/4.0/M_PI;
