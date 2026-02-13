@@ -223,28 +223,27 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
     }
 #if 1
  {
-   HDF5Handler h5;
-    BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
-    //BoxData<T,1,MEM> psliceBar(a_WFaceBar.box());
-    BoxData<T,1,MEM> psliceBar = slice(a_WFaceBar,iP);
-    // pBar.copyTo(psliceBar);
-    BoxData<T> tmp4 = psliceBar * a_adjDrDir;
-    //BoxData<T,DIM,MEM> tmp2(a_ntrow.box());
-    //a_ntrow.copyTo(tmp2);
-    BoxData<T,DIM,MEM> pforce(a_ntrow.box());
-    pforce.setVal(0.);
-    BoxData<T,1,MEM> tmp3 =
-      _faceProduct(a_adjDrDir,pslice,a_adjDrDir,psliceBar,a_dir);
-        for (int dirvec = 0; dirvec < DIM; dirvec++)
-      {
-        BoxData<T> ntSlice = slice(a_ntrow,dirvec);
-        BoxData<T> pforceSlice = slice(pforce,dirvec);
-        _faceProduct(pforceSlice,tmp3,ntSlice,tmp4,ntSlice,a_dir);
+   BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
+   BoxData<T,1,MEM> psliceBar = slice(a_WFaceBar,iP);
+   BoxData<T,NUMCOMPS,MEM> WPoint = _deconvolveFace(a_WFace,a_WFaceBar,a_dir);
+   auto meBar = magneticEnergyW(a_WFaceBar,a_block,a_dir);
+   auto mePoint = magneticEnergyW(WPoint,a_block,a_dir);
+   auto me = _convolveFace(mePoint,meBar,a_dir);
+   BoxData<T,1,MEM> p0 = pslice + me;
+   BoxData<T,1,MEM> p0Bar = psliceBar + meBar;
+   BoxData<T,1,MEM> tmp4 = p0Bar * a_adjDrDir;
+   BoxData<T,DIM,MEM> pforce(a_ntrow.box());
+   pforce.setVal(0.);
+   BoxData<T,1,MEM> tmp3 =
+     _faceProduct(a_adjDrDir,p0,a_adjDrDir,p0Bar,a_dir);
+   for (int dirvec = 0; dirvec < DIM; dirvec++)
+     {
+       BoxData<T> ntSlice = slice(a_ntrow,dirvec);
+       BoxData<T> pforceSlice = slice(pforce,dirvec);
+       _faceProduct(pforceSlice,tmp3,ntSlice,tmp4,ntSlice,a_dir);
         
-      }
-    
-    fluxdirMom += pforce;
-    
+     }    
+    fluxdirMom += pforce;   
   }
 #endif
   // Momentum fluxes - pressure forces.
