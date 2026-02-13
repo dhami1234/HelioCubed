@@ -370,6 +370,17 @@ public:
 			PR_TIMERS("MHDReader::BoxData_to_BC::applyBCOp");
 			s_cache.BCOp.apply(a_dstData, *s_cache.srcData);
 		}
+		// Set B_field to zero
+		// for (auto dit : a_dstData.layout())
+		// {
+		// 	forallInPlace([ ] PROTO_LAMBDA
+		// 	(Var<double,NUMCOMPS,HOST>& l_dst)
+		// 	{
+		// 		l_dst(iBX) = 0;
+		// 		l_dst(iBY) = 0;
+		// 		l_dst(iBZ) = 0;
+		// 	},a_dstData[dit]);
+		// }	
 	}
 
 

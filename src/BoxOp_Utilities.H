@@ -497,8 +497,8 @@ template<
   MemType MEM>
 void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
-                                              BoxData<T,1,MEM>& a_me,
                                               BoxData<T,1,MEM>& a_ke,
+                                              BoxData<T,1,MEM>& a_me,
                                               const State& a_WPoint, 
                                               uint a_block,
                                               uint a_centering) const
@@ -534,8 +534,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
   spreadSlice(Amat);
 
   forallInPlace([]PROTO_LAMBDA(
-                              Var<T,1,MEM>& l_me,
                               Var<T,1,MEM>& l_ke,
+                              Var<T,1,MEM>& l_me,
                               const Var<T,DIM,MEM,DIM>& a_amat,
                               const Var<T,NUMCOMPS>& a_wpoint)
                   {
@@ -570,7 +570,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
                         l_me(0) += bCart[dir0]*bCart[dir0]/8.0/M_PI;
                       }
                     l_ke(0) *= a_wpoint(iRHO)*.5;
-                  },a_me,a_ke,Amat,a_WPoint);
+                  },a_ke,a_me,Amat,a_WPoint);
 }
 
 template<
