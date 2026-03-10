@@ -5,8 +5,8 @@
 -thickness                       90
 -boxSize_nonrad                  30
 -boxSize_rad                     90
--max_iter                        10
--CFL                             0.5
+-max_iter                        10000
+-CFL                             1.5
 -limiter                         1
 -strength                        100.
 -write_cadence                   100
@@ -15,14 +15,14 @@
 -slice_time_cadence              120000
 -checkpoint_cadence              100
 -P_floor_cadence                 100
--data_file_prefix                data
--checkpoint_file_prefix          checkpoint
+-data_file_prefix                data_g
+-checkpoint_file_prefix          checkpoint_g
 -slices                          X Y Z R
 -scale_data_with_r               1
 -max_checkpoint_files            3
 #-restart_file                    checkpoint_1000.hdf5
 -gamma                           1.5
--temporal_order                  1
+-temporal_order                  4
 -divergence_cleaning             1
 -linear_viscosity                1
 -boundary_reflux                 1
@@ -41,6 +41,7 @@
 -BC_cadence                      1.0
 -BC_frame_rotate                 0
 -BC_force_single_frame           0
+-Sun_gravity                     1
 # CME properties
 -CME_type                        0
 -CME_Enter_Time                  2021.015

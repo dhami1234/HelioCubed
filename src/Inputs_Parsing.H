@@ -91,6 +91,7 @@ private:
     double BC_cadence = 1.0; // In hours
     int BC_frame_rotate = 0; // 0: Frames don't rotate (SWiG), 1: Frames rotate
     int BC_force_single_frame = 0; // 1: Use only one frame for BCs, 0: Use all frames for BCs (if present)
+    int Sun_gravity = 1; // 0: No gravity, 1: Include Sun's gravity as source term
     int CME_type = 0; // 0: No CME, 1: CME
     double CME_Enter_Time;
     double CME_r1;
@@ -165,6 +166,7 @@ public:
     static double get_BC_cadence() {return getInstance().BC_cadence;}
     static int get_BC_frame_rotate() {return getInstance().BC_frame_rotate;}
     static int get_BC_force_single_frame() {return getInstance().BC_force_single_frame;}
+    static int get_Sun_gravity() {return getInstance().Sun_gravity;}
     static int get_CME_type() {return getInstance().CME_type;}
     static double get_CME_Enter_Time() {return getInstance().CME_Enter_Time;}
     static double get_CME_r1() {return getInstance().CME_r1;}
@@ -231,6 +233,7 @@ public:
         args.add("BC_cadence", BC_cadence);
         args.add("BC_frame_rotate", BC_frame_rotate);
         args.add("BC_force_single_frame", BC_force_single_frame);
+        args.add("Sun_gravity", Sun_gravity);
         args.add("CME_Enter_Time", CME_Enter_Time);
         args.add("CME_type", CME_type);
         args.add("CME_r1", CME_r1);
@@ -309,6 +312,7 @@ public:
         pout(0) << "BC_cadence: " << BC_cadence << endl;
         pout(0) << "BC_frame_rotate: " << BC_frame_rotate << endl;
         pout(0) << "BC_force_single_frame: " << BC_force_single_frame << endl;
+        pout(0) << "Sun_gravity: " << Sun_gravity << endl;
         pout(0) << "CME_type: " << CME_type << endl;
         pout(0) << "CME_Enter_Time: " << CME_Enter_Time << endl;
         pout(0) << "CME_r1: " << CME_r1 << endl;

@@ -452,6 +452,14 @@ public:
 
   // End DivB cleaning.
 
+  // Gravity starts here.
+  inline void Gravity(State& a_Rhs,
+                      const State& a_W,
+                      const BoxData<T,1,MEM>& a_radius,
+                      const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const; 
+
+  // End Gravity.
+
   // Begin Limiter.
   inline void Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave_L_lim_flat,
                               BoxData<double,NUMCOMPS>& a_W_ave_R_lim_flat,
@@ -536,6 +544,7 @@ private:
 #include "BoxOp_Utilities.H"
 #include "BoxOp_Viscocity.H"
 #include "BoxOp_DivBcleaning.H"
+#include "BoxOp_Gravity.H"
 #include "BoxOp_Limiters.H"
 #include "BoxOp_PreStage.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
