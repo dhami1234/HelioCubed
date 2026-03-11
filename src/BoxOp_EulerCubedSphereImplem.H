@@ -171,7 +171,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   // We have calculated -div(B) in Brhs. Need to multiply other Powell terms to get the final RHS.
   if (ParseInputs::get_divergence_cleaning() == 1) DivBPowell2(a_Rhs, Brhs, W, A_matrix0);
 
-  if (ParseInputs::get_Sun_gravity() == 1) Gravity(a_Rhs, W, radius, A_matrix0);
+  if (ParseInputs::get_Sun_gravity() == 1) Gravity(a_Rhs, W, radius, A_matrix0, deta0, dVolr);
     
 }
 // primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);

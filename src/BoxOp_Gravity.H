@@ -9,7 +9,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
                         State& a_Rhs,
                         const State& a_W,
                         const BoxData<T,1,MEM>& a_radius,
-                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const
+                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0,
+                        const BoxData<T,1,MEM>& a_deta0,
+                        const BoxData<T,1,MEM>& a_dVolr) const
 {
     PR_TIME("BoxOp_EulerCubedSphere::Gravity()");
 
@@ -33,16 +35,18 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
         const Var<T,DIM,MEM>& a_Vsph,
         const Var<T,DIM,MEM>& a_Gsph,
         const Var<T,DIM,MEM>& a_Gcart,
-        const Var<T,1,MEM>& a_rho)
+        const Var<T,1,MEM>& a_rho,
+        const Var<T,1,MEM>& l_deta0,
+        const Var<T,1,MEM>& l_dVolr)
         {               
         a_rhs(iRHO) += 0;
-        a_rhs(iMOMX) += a_rho(0)*a_Gcart(0);
-        a_rhs(iMOMY) += a_rho(0)*a_Gcart(1);
-        a_rhs(iMOMZ) += a_rho(0)*a_Gcart(2);
-        a_rhs(iE) += a_rho(0)*a_Vsph(0)*a_Gsph(0);
+        a_rhs(iMOMX) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(0);
+        a_rhs(iMOMY) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(1);
+        a_rhs(iMOMZ) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(2);
+        a_rhs(iE) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Vsph(0)*a_Gsph(0);
         a_rhs(iBX) += 0;
         a_rhs(iBY) += 0;
         a_rhs(iBZ) += 0;
 
-        },a_Rhs,Vsph,Gsph,Gcart,rho);
+        },a_Rhs,Vsph,Gsph,Gcart,rho,a_deta0,a_dVolr);
 }

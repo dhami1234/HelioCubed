@@ -456,7 +456,9 @@ public:
   inline void Gravity(State& a_Rhs,
                       const State& a_W,
                       const BoxData<T,1,MEM>& a_radius,
-                      const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const; 
+                      const BoxData<T,DIM,MEM,DIM>& a_A_matrix0,
+                      const BoxData<T,1,MEM>& a_deta0,
+                      const BoxData<T,1,MEM>& a_dVolr) const; 
 
   // End Gravity.
 
