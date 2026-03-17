@@ -28,4 +28,4 @@ endif
 
 echo $LD_LIBRARY_PATH
 
-mpiexec -np 864 /nobackup/tsingh4/proto/examples/CubedSphereMHDCons/exec/cubedSphereTest.exe inputs_local
+mpiexec -np 864 /nobackup/tsingh4/HelioCubed/exec/cubedSphereTest.exe inputs_local
