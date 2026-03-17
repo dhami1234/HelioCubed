@@ -62,7 +62,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       State WFaceBar = Stencil<T>::CellToFace(dir,Side::Lo,2)(WBar);    
       
       //Required mapping variables.
-      Box bxface = WFace_L.box().grow(-2);     
+      Box bxface = WFace_L.box().grow(-2);  
+      int limiter = ParseInputs::get_limiter();
+      if (limiter != 0 && limiter != 1 && limiter != 2)
+      {
+        limiter = 1;
+      }   
+      if (limiter == 2) bxface = WFace_L.box(); 
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,a_block,dir);
       BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir); 
@@ -89,11 +95,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
 
       DivBPowell1(Brhs, WFace_L, deta, adjDrDir, dir, bxface);
       
-      int limiter = ParseInputs::get_limiter();
-      if (limiter != 0 && limiter != 1 && limiter != 2)
-      {
-        limiter = 1;
-      }
+      
 
       if (limiter == 1){
         PR_TIMERS("BoxOp_Euler::operator()::limiters");
@@ -122,6 +124,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
           }                   
         },dx,ntrow,adjDrDir,deta,dVolr,Dr,dxiPerp,dxiR,dir);
         Limiters_minmod(WFace_L,WFace_R,W,dx,dir);
+        WFaceBar *= 0.0;
+        WFaceBar += WFace_L;
+        WFaceBar += WFace_R;
+        WFaceBar *= 0.5;
       }
 
       // Fluxes on dir face.
