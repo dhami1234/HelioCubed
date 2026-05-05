@@ -91,7 +91,7 @@ private:
     double BC_cadence = 1.0; // In hours
     int BC_frame_rotate = 0; // 0: Frames don't rotate (SWiG), 1: Frames rotate
     int BC_force_single_frame = 0; // 1: Use only one frame for BCs, 0: Use all frames for BCs (if present)
-    int Sun_gravity = 1; // 0: No gravity, 1: Include Sun's gravity as source term
+    int Sun_gravity = 0; // 0: No gravity, 1: Include Sun's gravity as source term
     int CME_type = 0; // 0: No CME, 1: CME
     double CME_Enter_Time;
     double CME_r1;
