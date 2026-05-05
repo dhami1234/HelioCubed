@@ -303,7 +303,7 @@ NonLinearViscCoef(
       T scale = 1.0/dxidir;
       volflowdir *= adjDrdircen;
       volflowdir *= deta0;
-      BoxData<T,1,MEM> temp = (1.0*Shift(Point::Zeros()) - 1.0*Shift(Point::Basis(0,-1)))
+      BoxData<T,1,MEM> temp = (1.0*Shift(Point::Zeros()) - 1.0*Shift(Point::Basis(dir,-1)))
         (volflowdir,scale);
       dvoldn[dir].define(temp.box());
       temp.copyTo(dvoldn[dir]);
@@ -355,7 +355,7 @@ NonLinearViscCoef(
                                   T                        a_beta)
                   {
                     T lambda = abs(a_divu(0));
-                    a_coef(0) = a_alpha*lambda;
+                    a_coef(0) = a_alpha*lambda*
                     min(1.,lambda*lambda/
                         (min(a_csql(0),min(a_csqr(0),
                                            min(a_csql2(0),a_csqr2(0))))
