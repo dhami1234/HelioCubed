@@ -281,6 +281,9 @@ NonLinearViscCoef(
   HDF5Handler h5;
   // Compute divergence of the velocity.
   BoxData<T,DIM,MEM> volflow(a_W.box());
+  BoxData<T,1,MEM> jac(a_deta.box());
+  a_deta.copyTo(jac);
+  jac *= a_dVolr;
   BoxData<T,DIM,MEM> vel = slice<T,NUMCOMPS,DIM,MEM>(a_W,iVX);
   Array<BoxData<T,1,MEM>,DIM> dvoldn;
   BoxData<T,1,MEM> deta0 = CubedSphereShell::detA<T,MEM>(a_W.box(),a_dxi[1],0);
@@ -333,10 +336,7 @@ NonLinearViscCoef(
                       /(a_deta0(0)*a_dvolr(0));
                     },dvoldn[a_dir],dvft1dtan1,dvft1dtan2,deta0,a_dVolr);
   
-  int nrad = int (1.0/a_dxi[0]);
   
-  {
-    divu *= a_dxi[a_dir];
     T alpha = .3;
     T beta = .3;
     BoxData<T,1,MEM> csq = forall<T,1,MEM>(f_csq,a_W,a_A,m_gamma);
@@ -345,6 +345,8 @@ NonLinearViscCoef(
     BoxData<T,1,MEM> csqshiftl = alias(csq,Point::Basis(a_dir,-1));
     forallInPlace([] PROTO_LAMBDA(
                                   Var<T,1,MEM>&            a_coef,
+                                  const Var<T,DIM,MEM>&    a_ntrow,
+                                  const Var<T,1,MEM>&      a_jac,
                                   const Var<T,1,MEM>&      a_divu,
                                   const Var<T,1,MEM>&      a_csql,
                                   const Var<T,1,MEM>&      a_csqr,
@@ -354,14 +356,20 @@ NonLinearViscCoef(
                                   T                        a_alpha,
                                   T                        a_beta)
                   {
-                    T lambda = abs(a_divu(0));
+                    T lambda = 0.;
+                    for (int dir = 0;dir < DIM; dir++)
+                      {
+                        lambda += a_ntrow(dir)*a_ntrow(dir);
+                      }
+                    lambda = a_jac(0)/sqrt(lambda);
+                    lambda = a_dx*a_divu(0);
                     a_coef(0) = a_alpha*lambda*
                     min(1.,lambda*lambda/
                         (min(a_csql(0),min(a_csqr(0),
                                            min(a_csql2(0),a_csqr2(0))))
                          *a_beta));
-                  },a_NLViscCoef,divu,
-                  csq,csqshiftr,csqshiftl,csqshiftr2,
+                  },a_NLViscCoef,a_ntrow,
+                  jac,divu,csq,csqshiftr,csqshiftl,csqshiftr2,
                   a_dxi[a_dir],alpha,beta);
-  }
+  
 }
