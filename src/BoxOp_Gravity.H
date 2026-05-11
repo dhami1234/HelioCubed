@@ -39,14 +39,56 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
         const Var<T,1,MEM>& l_deta0,
         const Var<T,1,MEM>& l_dVolr)
         {               
-        a_rhs(iRHO) += 0;
-        a_rhs(iMOMX) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(0);
-        a_rhs(iMOMY) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(1);
-        a_rhs(iMOMZ) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(2);
-        a_rhs(iE) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Vsph(0)*a_Gsph(0);
-        a_rhs(iBX) += 0;
-        a_rhs(iBY) += 0;
-        a_rhs(iBZ) += 0;
-
+          a_rhs(iMOMX) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(0);
+          a_rhs(iMOMY) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(1);
+          a_rhs(iMOMZ) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(2);
+          a_rhs(iE) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Vsph(0)*a_Gsph(0);
         },a_Rhs,Vsph,Gsph,Gcart,rho,a_deta0,a_dVolr);
+}
+
+template<
+    typename T,
+    template<MemType> typename MAP,
+    MemType MEM>
+inline void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity_Euler(
+                        State& a_Rhs,
+                        const State& a_USph) const
+{
+    PR_TIME("BoxOp_EulerCubedSphere::Gravity_Euler()");
+
+    int block = this->block();
+    Box bxRad = a_USph.box().grow(Point::Basis(0,2));
+    BoxData<T,DIM,MEM> Dr(bxRad);
+    BoxData<T,1,MEM> radius(bxRad);
+    BoxData<T,DIM,MEM> adjDr(bxRad);
+    BoxData<T,1,MEM> dVolr(bxRad);
+    radialMetrics(radius,Dr,adjDr,dVolr,bxRad);
+
+    State W;
+    State WBar;
+    sphToPrim(W,WBar,a_USph,block);
+
+    Box bx = a_USph.box();
+    T dxiPerp = this->dx()[1];
+    BoxData<T,1,MEM> deta0(bx);
+    BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
+    T half = 0.5;
+
+    BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bx,dxiPerp,0);
+    deta.copyTo(deta0);
+
+    Array<Array<uint,DIM>,6> permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+    Array<Array<int,DIM>,6> sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
+    Point high = bx.high();
+    Point low = bx.low();
+    high[0] = low[0];
+    Box bx0(low,high);
+    BoxData<T,DIM,MEM,DIM> A_matrix(bx);
+    forallInPlace_p(f_Amatrix,bx0,A_matrix,permute[block],sign[block],
+                    dxiPerp,half,half);
+    spreadSlice(A_matrix);
+    A_matrix.copyTo(A_matrix0);
+
+    Gravity(a_Rhs,W,radius,A_matrix0,deta0,dVolr);
 }

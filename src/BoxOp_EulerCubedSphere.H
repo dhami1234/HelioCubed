@@ -460,6 +460,9 @@ public:
                       const BoxData<T,1,MEM>& a_deta0,
                       const BoxData<T,1,MEM>& a_dVolr) const; 
 
+  inline void Gravity_Euler(State& a_Rhs,
+                            const State& a_USph) const;
+
   // End Gravity.
 
   // Begin Limiter.
