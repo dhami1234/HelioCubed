@@ -411,6 +411,7 @@ public:
   NonLinearViscCoef(
                     BoxData<T,1,MEM>& a_NLViscCoef,
                     const State& a_W,
+                    const BoxData<T,DIM,MEM>& a_Dr,
                     const BoxData<T,DIM,MEM>& a_adjDr,
                     const BoxData<T,DIM,MEM,DIM>& a_A,
                     const BoxData<T,DIM,MEM>& a_ntrow,

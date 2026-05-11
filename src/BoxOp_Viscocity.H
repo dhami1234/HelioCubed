@@ -100,7 +100,7 @@ viscFlux(
           primToMappedViscFlux(fluxtemp,NLViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> nlvisccoef(bxface);
-          NonLinearViscCoef(nlvisccoef,W,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
+          NonLinearViscCoef(nlvisccoef,W,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
           for (int comp = 0 ; comp < NUMCOMPS; comp++)
             {
               auto fluxtempcomp = slice(fluxtemp,comp);
@@ -267,6 +267,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::
 NonLinearViscCoef(
                   BoxData<T,1,MEM>& a_NLViscCoef,
                   const State& a_W,
+                  const BoxData<T,DIM,MEM>& a_Dr,
                   const BoxData<T,DIM,MEM>& a_adjDr,
                   const BoxData<T,DIM,MEM,DIM>& a_A,
                   const BoxData<T,DIM,MEM>& a_ntrow,
@@ -343,16 +344,21 @@ NonLinearViscCoef(
     BoxData<T,1,MEM> csqshiftr = alias(csq,Point::Basis(a_dir));
     BoxData<T,1,MEM> csqshiftr2 = alias(csq,Point::Basis(a_dir,2));
     BoxData<T,1,MEM> csqshiftl = alias(csq,Point::Basis(a_dir,-1));
+    BoxData<T,1,MEM> DrDir = slice(a_Dr,a_dir);
+    BoxData<T,1,MEM> adjDrDir = slice(a_adjDr,a_dir);
     forallInPlace([] PROTO_LAMBDA(
                                   Var<T,1,MEM>&            a_coef,
                                   const Var<T,DIM,MEM>&    a_ntrow,
                                   const Var<T,1,MEM>&      a_jac,
+                                  const Var<T,1,MEM>&      a_DrDir,
+                                  const Var<T,1,MEM>&      a_adjDrDir,
                                   const Var<T,1,MEM>&      a_divu,
                                   const Var<T,1,MEM>&      a_csql,
                                   const Var<T,1,MEM>&      a_csqr,
                                   const Var<T,1,MEM>&      a_csql2,
                                   const Var<T,1,MEM>&      a_csqr2,
                                   T                        a_dx,
+                                  int                      a_d,
                                   T                        a_alpha,
                                   T                        a_beta)
                   {
@@ -362,6 +368,14 @@ NonLinearViscCoef(
                         lambda += a_ntrow(dir)*a_ntrow(dir);
                       }
                     lambda = a_jac(0)/sqrt(lambda);
+                    if (a_d == 0)
+                      {
+                        lambda = a_DrDir(0);
+                      }
+                    else
+                      {
+                        lambda /= a_adjDrDir(0);
+                      }
                     lambda *= a_dx*abs(a_divu(0));
                     a_coef(0) = a_alpha*lambda*
                     min(1.,lambda*lambda/
@@ -369,7 +383,7 @@ NonLinearViscCoef(
                                            min(a_csql2(0),a_csqr2(0))))
                          *a_beta));
                   },a_NLViscCoef,a_ntrow,
-                  jac,divu,csq,csqshiftr,csqshiftl,csqshiftr2,
-                  a_dxi[a_dir],alpha,beta);
+                  jac,DrDir,adjDrDir,divu,csq,csqshiftr,csqshiftl,csqshiftr2,
+                  a_dxi[a_dir],a_dir,alpha,beta);
   
 }
