@@ -362,7 +362,7 @@ NonLinearViscCoef(
                         lambda += a_ntrow(dir)*a_ntrow(dir);
                       }
                     lambda = a_jac(0)/sqrt(lambda);
-                    lambda = a_dx*a_divu(0);
+                    lambda *= a_dx*abs(a_divu(0));
                     a_coef(0) = a_alpha*lambda*
                     min(1.,lambda*lambda/
                         (min(a_csql(0),min(a_csqr(0),
