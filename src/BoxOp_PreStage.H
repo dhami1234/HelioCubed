@@ -444,7 +444,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         fluxes[1].setToZero();
         fluxes[2].define(rhs_i.box().extrude(2));
         fluxes[2].setToZero();
-        eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i);
+        eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i,a_dt);
         if (ParseInputs::get_Sun_gravity() == 1) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
         a_blockreg.increment(fluxes, dit, a_dt);
         CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,a_dt);

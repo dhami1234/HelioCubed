@@ -396,7 +396,8 @@ public:
   viscFlux(
            State& a_Rhs,
            Array<BoxData<double, NUMCOMPS>, DIM>& a_fluxes,
-           const State& a_USph) const;
+           const State& a_USph,
+           double a_dt) const;
 
   inline void
   LinearViscCoef(

@@ -7,7 +7,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::
 viscFlux(
          State& a_Rhs,
          Array<BoxData<double, NUMCOMPS>, DIM>& a_fluxes,
-         const State& a_USph) const
+         const State& a_USph,
+         double a_dt) const
 {
   PR_TIME("BoxOp_EulerCubedSphere::viscFlux terms()");
   int block = this->block();
@@ -40,7 +41,7 @@ viscFlux(
       PR_TIME("BoxOp_Euler::viscous operator");
       // high order linear viscosity.
       State WFace = Stencil<T>::CellToFace(dir)(W);
-      BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
+      // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       Stencil<double> D2 = 1.0*Shift(Point::Basis(dir)) + (-2.0)*Shift(Point::Zeros())
         + 1.0*Shift(Point::Basis(dir,-1));
       Stencil<double> D1 = (1.0)*Shift(Point::Zeros()) + (-1.0)*Shift(Point::Basis(dir,-1));
@@ -74,6 +75,36 @@ viscFlux(
       BoxData<T,NUMCOMPS,MEM> linearViscFlux;
       BoxData<T,NUMCOMPS,MEM> NLViscFlux;
       BoxData<T,NUMCOMPS,MEM> rhsIncr(bxface);
+      BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
+      BoxData<T,1,MEM> dxdtlocal =
+        forall<T,1,MEM>([ ] PROTO_LAMBDA
+        (Var<T,1,MEM>& a_dxdtlocal,
+         const Var<T,DIM,MEM>& a_ntrow,
+         const Var<T,1,MEM>& a_deta,
+         const Var<T,1,MEM>& a_dvolr,
+         const Var<T,DIM,MEM>& a_dr,
+         const Var<T,1,MEM>& a_adjdrdir,
+         T a_dt,
+         T a_dxi,
+         int a_d)
+        {
+          T lambda = 0.;
+          if (a_d == 0)
+            {
+              lambda = a_dr(0);
+            }
+          else
+            {
+              for (int dir = 0;dir < DIM; dir++)
+                {
+                  lambda += a_ntrow(dir)*a_ntrow(dir);
+                }
+              lambda = a_deta(0)*a_dvolr(0)/sqrt(lambda);
+              lambda /= a_adjdrdir(0);
+            }
+          T coef = 
+          a_dxdtlocal(0) = lambda*a_dxi/a_dt;
+        },ntrow,deta,dVolr,Dr,adjDrDir,a_dt,dxi[dir],dir);
       if (viscl)
         {
           State fluxtemp(bxface);
@@ -82,13 +113,13 @@ viscFlux(
           linearViscFlux = D5(a_USph, 1.0/384); // more stable at short wavelengths
           primToMappedViscFlux(fluxtemp,linearViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
-          BoxData<T,1,MEM> linvisccoef(bxface);
-          LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
+          //BoxData<T,1,MEM> 
+          //LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
           for (int comp = 0 ; comp < NUMCOMPS; comp++)
             {
               auto fluxtempcomp = slice(fluxtemp,comp);
               auto fluxcomp = slice(fluxdir,comp);
-              fluxtempcomp *= linvisccoef;
+              fluxtempcomp *= dxdtlocal;
               fluxcomp += fluxtempcomp;
             }
         }
