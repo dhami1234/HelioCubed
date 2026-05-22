@@ -76,6 +76,7 @@ viscFlux(
       BoxData<T,NUMCOMPS,MEM> NLViscFlux;
       BoxData<T,NUMCOMPS,MEM> rhsIncr(bxface);
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
+#if 0      
       BoxData<T,1,MEM> dxdtlocal =
         forall<T,1,MEM>([ ] PROTO_LAMBDA
         (Var<T,1,MEM>& a_dxdtlocal,
@@ -105,6 +106,20 @@ viscFlux(
           T coef = 
           a_dxdtlocal(0) = lambda*a_dxi/a_dt;
         },ntrow,deta,dVolr,Dr,adjDrDir,a_dt,dxi[dir],dir);
+#endif
+      T D_rScale;
+      double r0 = CUBED_SPHERE_SHELL_R0;
+      double r1 = CUBED_SPHERE_SHELL_R1;
+      double C_rad = CUBED_SPHERE_RADIAL_STRETCH;
+      T R_t = (r1 - r0) / (exp(C_rad) - 1.0);
+      if (dir == 0)
+        {
+          D_rScale = R_t*(exp(C_rad*dxi[dir]) - 1.0)/dxi[dir];
+        }
+      else
+        {
+          D_rScale = r0;
+        }
       if (viscl)
         {
           State fluxtemp(bxface);
@@ -113,13 +128,33 @@ viscFlux(
           linearViscFlux = D5(a_USph, 1.0/384); // more stable at short wavelengths
           primToMappedViscFlux(fluxtemp,linearViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
-          //BoxData<T,1,MEM> 
-          //LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
+          BoxData<T,1,MEM> linvisccoef(bxface);
+            LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
+            if (dir == 0)
+              {
+                auto Drslice = slice(Dr,0);
+                linvisccoef *= Drslice;
+                linvisccoef /= D_rScale;
+              }
+            else
+              {
+                linvisccoef *= radius;
+                linvisccoef /= D_rScale;
+              }
+            // cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", max linvisccoef = " << linvisccoef.absMax();
+            if (dir == 0)
+              {
+                // cout << ", maxratio = "<< Dr.absMax()/D_rScale << endl;
+              }
+            else
+              {
+                //cout << ", maxratio = "<< radius.absMax()/D_rScale << endl;
+              }
           for (int comp = 0 ; comp < NUMCOMPS; comp++)
             {
               auto fluxtempcomp = slice(fluxtemp,comp);
               auto fluxcomp = slice(fluxdir,comp);
-              fluxtempcomp *= dxdtlocal;
+              fluxtempcomp *= linvisccoef;
               fluxcomp += fluxtempcomp;
             }
         }
@@ -234,21 +269,21 @@ inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                                                   BoxData<T,1,MEM>& a_LNViscCoef,
                                                   const State& a_WFace,
-                                                  const BoxData<T,1,MEM>& a_deta,
+                                                  const BoxData<T,1,MEM>& a_detA,
                                                   const BoxData<T,DIM,MEM,DIM>& a_A,
-                                                  const BoxData<T,DIM,MEM>& a_ntrow,
+                                                  const BoxData<T,DIM,MEM>& a_ntrow,                                                
                                                   uint a_block,
                                                   uint a_dir) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::LinearViscCoef()");
-  // Find (|w_d| + c_fast*Adj(A)_{d,.}) and multiply with a_fluxdir.
   forallInPlace([ ] PROTO_LAMBDA
                 (Var<T,1,MEM>& a_linfluxcoef,
                  const Var<T,NUMCOMPS>& a_wface,
                  const Var<T,DIM,MEM>& a_ntrow,
                  const Var<T,DIM,MEM,DIM>& a_Amatrix,
-                 const T a_gamma,
-                 const int a_d)
+                 const Var<T,1,MEM>& a_deta,
+                 T a_gamma,
+                 int a_d)
                 {        
                   double rho = a_wface(iRHO);
                   double w_d = a_wface(iVX+a_d);
@@ -285,9 +320,16 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                   double b = abs(B_n)*ce/sqrt(M_PI*rho);
                   double af = 0.5*(sqrt(a + b) + sqrt(a - b));
                   double A_d_mag = sqrt(a_Amatrix(0,a_d)*a_Amatrix(0,a_d) + a_Amatrix(1,a_d)*a_Amatrix(1,a_d) + a_Amatrix(2,a_d)*a_Amatrix(2,a_d));
-                  
-                  a_linfluxcoef(0) = (abs(w_d) + af*A_d_mag);
-                },a_LNViscCoef,a_WFace,a_ntrow,a_A,m_gamma,a_dir);
+                  double adjA_d_mag = 0.;
+                  for (int dir =0; dir < DIM; dir++)
+                    {
+                      adjA_d_mag += a_ntrow(dir)*a_ntrow(dir);
+                    }
+                  adjA_d_mag = sqrt(adjA_d_mag);
+                  a_linfluxcoef(0) = abs(w_d) + af*adjA_d_mag/a_deta(0);
+                  //a_linfluxcoef(0) = abs(w_d) + af*A_d_mag;
+                    
+                },a_LNViscCoef,a_WFace,a_ntrow,a_A,a_detA,m_gamma,a_dir);
 }
 template<
   typename T,
