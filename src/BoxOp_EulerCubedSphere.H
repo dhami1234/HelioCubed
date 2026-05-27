@@ -92,7 +92,32 @@ f_thresholdF(
   if (a_U(0) > thresh) {a_tags(0) = 1;}
   else {a_tags(0) = 0;};
 }
+
 PROTO_KERNEL_END(f_thresholdF, f_threshold);
+template<typename T,MemType MEM>
+PROTO_KERNEL_START
+void f_dx_F
+(
+ Var<T,1,MEM>& a_dx,
+ const Var<T,DIM,MEM>& a_adjA,
+ const Var<T,1,MEM>& a_adjDrDir,
+ const Var<T,1,MEM>& a_detA,
+ const Var<T,1,MEM>& a_dVolr,
+ const Var<T,DIM,MEM>& a_Dr,
+ const T a_dxiPerp,
+ const T a_dxiR,
+ const int a_d)
+{ 
+  double dx_d;
+  if (a_d > 0){
+    T adjA_mag = sqrt(a_adjA(0)*a_adjA(0) + a_adjA(1)*a_adjA(1) + a_adjA(2)*a_adjA(2));
+    dx_d = a_dVolr(0) * a_detA(0) * a_dxiPerp / a_adjDrDir(0) / adjA_mag;
+  } 
+  if (a_d == 0){
+    dx_d = a_Dr(0) * a_dxiR;
+  }   
+}
+PROTO_KERNEL_END(f_dx_F, f_dx);
 template<typename T,MemType MEM>
 PROTO_KERNEL_START
 void f_speedmax_F

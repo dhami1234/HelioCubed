@@ -76,37 +76,7 @@ viscFlux(
       BoxData<T,NUMCOMPS,MEM> NLViscFlux;
       BoxData<T,NUMCOMPS,MEM> rhsIncr(bxface);
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
-#if 0      
-      BoxData<T,1,MEM> dxdtlocal =
-        forall<T,1,MEM>([ ] PROTO_LAMBDA
-        (Var<T,1,MEM>& a_dxdtlocal,
-         const Var<T,DIM,MEM>& a_ntrow,
-         const Var<T,1,MEM>& a_deta,
-         const Var<T,1,MEM>& a_dvolr,
-         const Var<T,DIM,MEM>& a_dr,
-         const Var<T,1,MEM>& a_adjdrdir,
-         T a_dt,
-         T a_dxi,
-         int a_d)
-        {
-          T lambda = 0.;
-          if (a_d == 0)
-            {
-              lambda = a_dr(0);
-            }
-          else
-            {
-              for (int dir = 0;dir < DIM; dir++)
-                {
-                  lambda += a_ntrow(dir)*a_ntrow(dir);
-                }
-              lambda = a_deta(0)*a_dvolr(0)/sqrt(lambda);
-              lambda /= a_adjdrdir(0);
-            }
-          T coef = 
-          a_dxdtlocal(0) = lambda*a_dxi/a_dt;
-        },ntrow,deta,dVolr,Dr,adjDrDir,a_dt,dxi[dir],dir);
-#endif
+
       T D_rScale;
       double r0 = CUBED_SPHERE_SHELL_R0;
       double r1 = CUBED_SPHERE_SHELL_R1;
@@ -141,6 +111,7 @@ viscFlux(
                 linvisccoef *= radius;
                 linvisccoef /= D_rScale;
               }
+            //cout << "block = " << block << ", dir = " << dir << ", index ="<< this->index().global() <<  ", viscspeed = " << linvisccoef.absMax() << endl;
             // cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", max linvisccoef = " << linvisccoef.absMax();
             if (dir == 0)
               {
@@ -167,6 +138,17 @@ viscFlux(
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> nlvisccoef(bxface);
           NonLinearViscCoef(nlvisccoef,W,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
+          if (dir == 0)
+              {
+                auto Drslice = slice(Dr,0);
+                nlvisccoef *= Drslice;
+                nlvisccoef /= D_rScale;
+              }
+            else
+              {
+                nlvisccoef *= radius;
+                nlvisccoef /= D_rScale;
+              }
           for (int comp = 0 ; comp < NUMCOMPS; comp++)
             {
               auto fluxtempcomp = slice(fluxtemp,comp);
@@ -353,6 +335,7 @@ NonLinearViscCoef(
   // Nonlinear artificial viscosity.
   PR_TIMERS("BoxOp_EulerCubedSphere::NonLinearViscCoef()");
   HDF5Handler h5;
+  a_NLViscCoef.setToZero();
   // Compute divergence of the velocity.
   BoxData<T,DIM,MEM> volflow(a_W.box());
   BoxData<T,1,MEM> jac(a_deta.box());
@@ -410,7 +393,7 @@ NonLinearViscCoef(
                       /(a_deta0(0)*a_dvolr(0));
                     },dvoldn[a_dir],dvft1dtan1,dvft1dtan2,deta0,a_dVolr);
   
-  
+  // cout << "divu = " << divu.absMax() << endl; 
     T alpha = .3;
     T beta = .3;
     BoxData<T,1,MEM> csq = forall<T,1,MEM>(f_csq,a_W,a_A,m_gamma);
@@ -458,5 +441,5 @@ NonLinearViscCoef(
                   },a_NLViscCoef,a_ntrow,
                   jac,DrDir,adjDrDir,divu,csq,csqshiftr,csqshiftl,csqshiftr2,
                   a_dxi[a_dir],a_dir,alpha,beta);
-  
+    //cout << "a_NLViscCoef = " << a_NLViscCoef.absMax() << endl; 
 }

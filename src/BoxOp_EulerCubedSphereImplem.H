@@ -649,6 +649,7 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
   Box bx= this->box();  
   T dxiR = this->dx()[0];
   T dxiPerp = this->dx()[1];
+  T viscspeed = 0.;
   int block = this->block();
   Box bxRadius = bx;
   BoxData<T,DIM,MEM> Dr(bxRadius);
@@ -659,6 +660,12 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
   speedMax.setToZero();
   radialMetrics(radius,Dr,adjDr,dVolr,bxRadius);
   T half = .5;
+  BoxData<T,1,MEM> visccoef(bx.grow(2));
+  visccoef.setToZero();
+  BoxData<T,1,MEM> nlvisccoefout(bx.grow(2));
+  nlvisccoefout.setToZero();
+  BoxData<T,1,MEM> linvisccoefout(bx.grow(2));
+  linvisccoefout.setToZero();
   for (int dir = 0 ; dir < DIM; dir++)
     {
       Box bxface = bx;
@@ -686,8 +693,101 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
                     ntrow,adjDrDir,deta,
                     dVolr,Dr,dxiPerp,
                     dxiR,dir,m_gamma);
+
+      auto domainBox = this->layout().domain().getBlock(block).box();
+      auto dxi = this->dx();
+      // Transform to primitive variables, spherical velocities.
+      Box bx = this->box();
+      // Compute Fluxes, rhs.  
+      Box outputbox = bx;
+      T one = 1.0;
+      T half = 0.5;
+      T dxiPerp = this->dx()[1];
+      bool viscl = true;
+      bool viscnl = true;
+
+      // high order linear viscosity.
+      State WFace = Stencil<T>::CellToFace(dir)(a_W);
+      // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
+      BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,block,dir);
+      Box bxdir = bx.extrude(Point::Basis(dir));
+      T D_rScale;
+      double r0 = CUBED_SPHERE_SHELL_R0;
+      double r1 = CUBED_SPHERE_SHELL_R1;
+      double C_rad = CUBED_SPHERE_RADIAL_STRETCH;
+      T R_t = (r1 - r0) / (exp(C_rad) - 1.0);
+      if (dir == 0)
+        {
+          D_rScale = R_t*(exp(C_rad*dxi[dir]) - 1.0)/dxi[dir];
+        }
+      else
+        {
+          D_rScale = r0;
+        }
+      
+      BoxData<T,1,MEM> dx(bxface);
+      dx.setVal(D_rScale);
+      forallInPlace(f_dx,dx,ntrow,adjDrDir,deta,
+                    dVolr,Dr,dxiPerp,dxiR,dir);
+        {
+          BoxData<T,1,MEM> linvisccoef(bxface);
+          linvisccoef.setToZero();
+          LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
+          if (dir == 0)
+            {
+              auto Drslice = slice(Dr,0);
+              linvisccoef *= Drslice;
+              linvisccoef /= D_rScale;
+              linvisccoef /= dx;
+              linvisccoef.copyTo(visccoef);
+            }
+          else
+            {
+              linvisccoef *= radius;
+              linvisccoef /= r0;
+              linvisccoef /= dx;
+              visccoef += linvisccoef;
+            }
+          
+          //cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", min lin dt = " << 1./linvisccoef.absMax() << endl;
+          if (dir == 0)
+            {
+              // cout << ", maxratio = "<< Dr.absMax()/D_rScale << endl;
+            }
+          else
+            {
+              //cout << ", maxratio = "<< radius.absMax()/D_rScale << endl;
+            }
+        }
+      
+        {
+          BoxData<T,1,MEM> nlvisccoef(bxface);
+          nlvisccoef.setToZero();
+          NonLinearViscCoef(nlvisccoef,WFace,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
+          if (dir == 0)
+            {
+              auto Drslice = slice(Dr,0);
+              nlvisccoef *= Drslice;
+              nlvisccoef /= dx;
+              nlvisccoef /= D_rScale;
+              visccoef += nlvisccoef;
+            }
+          else
+            {
+              nlvisccoef *= radius;
+              nlvisccoef /= r0;
+              nlvisccoef /= dx;
+              visccoef += nlvisccoef;
+            }
+          //cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", min nl dt = " << 1./nlvisccoef.absMax() << endl;
+        }      
     }
   speedMax.reduce(a_dtInv);
+  visccoef.reduce(a_dtInv);
+  if (speedMax.absMax() < visccoef.absMax())
+    {
+      cout << "block = " << block << ", box = " << bx << ", hyperbolic speedmax = " << speedMax.absMax() << ", viscous speedmax = " << visccoef.absMax() << endl;
+    }
 }
 
 // ====================================================================================
