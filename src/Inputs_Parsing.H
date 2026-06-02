@@ -46,6 +46,9 @@ private:
     int max_iter; 
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
+    int spatial_operator = 1; // 0: Existing Euler operator, 1: Berta WENOZ operator
+    double Berta_eta_d = 0.02; // Berta Jameson detector threshold
+    int Berta_fallback_type = 0; // 0: WENO3 fallback, 1: PLM fallback
     double strength; // Strength of perturbation for test problems.
     int write_cadence = 10000000000; 
     int slice_cadence = 10000000000;
@@ -134,6 +137,9 @@ public:
     static int get_max_iter() {return getInstance().max_iter;}
     static double get_CFL() {return getInstance().CFL;}
     static int get_limiter() {return getInstance().limiter;}
+    static int get_spatial_operator() {return getInstance().spatial_operator;}
+    static double get_Berta_eta_d() {return getInstance().Berta_eta_d;}
+    static int get_Berta_fallback_type() {return getInstance().Berta_fallback_type;}
     static double get_strength() {return getInstance().strength;}
     static int get_write_cadence() {return getInstance().write_cadence;}
     static int get_slice_cadence() {return getInstance().slice_cadence;}
@@ -197,6 +203,9 @@ public:
         args.add("max_iter", max_iter);
         args.add("CFL", CFL);
         args.add("limiter", limiter);
+        args.add("spatial_operator", spatial_operator);
+        args.add("Berta_eta_d", Berta_eta_d);
+        args.add("Berta_fallback_type", Berta_fallback_type);
         args.add("strength", strength);
         args.add("write_cadence", write_cadence);
         args.add("slice_cadence", slice_cadence);
@@ -280,6 +289,9 @@ public:
         pout(0) << "max_iter: " << max_iter << endl;
         pout(0) << "CFL: " << CFL << endl;
         pout(0) << "limiter: " << limiter << endl;
+        pout(0) << "spatial_operator: " << spatial_operator << endl;
+        pout(0) << "Berta_eta_d: " << Berta_eta_d << endl;
+        pout(0) << "Berta_fallback_type: " << Berta_fallback_type << endl;
         pout(0) << "strength: " << strength << endl;
         pout(0) << "write_cadence: " << write_cadence << endl;
         pout(0) << "slice_cadence: " << slice_cadence << endl;
@@ -342,4 +354,3 @@ public:
 
     // Additional getters and setters as needed
 };
-

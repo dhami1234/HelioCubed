@@ -8,6 +8,9 @@
 -max_iter                        3
 -CFL                             0.5
 -limiter                         1
+-spatial_operator                1
+-Berta_eta_d                     0.02
+-Berta_fallback_type             0
 -write_cadence                   1
 -checkpoint_cadence              50
 -P_floor_cadence                 50

@@ -16,6 +16,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
    int                             a_counter) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::operator()");
+  if (ParseInputs::get_spatial_operator() == 2)
+  {
+    BertaOperator(a_Rhs,a_fluxes,a_USph,a_dt,a_scale,a_counter);
+    return;
+  }
   int a_block = this->block();
   HDF5Handler h5;
   Box bxRad = a_USph.box().grow(Point::Basis(0,2));

@@ -8,27 +8,30 @@
 -max_iter                        1000
 -CFL                             0.5
 -limiter                         1
+-spatial_operator                1
+-Berta_eta_d                     0.02
+-Berta_fallback_type             0
 -strength                        100.
--write_cadence                   10
--slice_cadence                   20
+-write_cadence                   1000
+-slice_cadence                   2000
 -write_time_cadence              1800
--slice_time_cadence              1200
+-slice_time_cadence              1800
 -checkpoint_cadence              100
 -P_floor_cadence                 5000000
 -data_file_prefix                data
 -checkpoint_file_prefix          checkpoint
--slices                          X Y Z R
+#-slices                          X Y Z R
 -scale_data_with_r               1
 -max_checkpoint_files            3
 #-restart_file                    checkpoint_1000.hdf5
 -gamma                           1.6666666666666666666667
--temporal_order                  1
+-temporal_order                  3
 -divergence_cleaning             1
 -linear_viscosity                1
 -boundary_reflux                 1
 -radial_refinement               0
 -MBInterp_define                 1
--BC_file                         ../scripts/psi_eclipse24_swig_wsa2_smth5_bc_r21_5_corotating_Bp.h5
+-BC_file                         ../scripts/psi_eclipse24_swig_wsa2_smth5_bc_r21_5_corotating_Bp_two_frames.h5
 -num_probes                      3
 -probe0.filename                 Earth.dat
 -probe0.coords                   trajEarth
@@ -41,7 +44,7 @@
 -BC_cadence                      1.0
 -BC_frame_rotate                 0
 -BC_force_single_frame           0
--Sun_gravity                     0
+-Sun_gravity                     1
 # CME properties
 -CME_type                        0
 -CME_Enter_Time                  2021.015

@@ -8,6 +8,9 @@
 -max_iter                        1000
 -CFL                             0.5
 -limiter                         1
+-spatial_operator                1
+-Berta_eta_d                     0.02
+-Berta_fallback_type             0
 -strength                        100.
 -write_cadence                   10
 -slice_cadence                   20

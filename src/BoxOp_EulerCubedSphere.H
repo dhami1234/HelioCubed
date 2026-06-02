@@ -314,6 +314,79 @@ public:
    T                               a_dt,
    T                               a_scale = 1.0,
    int                             a_counter = -1) const;
+
+  inline void BertaOperator
+  (
+   State&                          a_Rhs,
+   Array<State, DIM>&              a_fluxes,
+   const State&                    a_USph,
+   T                               a_dt,
+   T                               a_scale = 1.0,
+   int                             a_counter = -1) const;
+
+  inline void sphPointToPrim(
+                         State& a_WPoint,
+                         const State& a_UPoint,
+                         uint a_block) const;
+
+  inline void sphAvgToPrim(
+                         State& a_WAvg,
+                         const State& a_UAvg,
+                         uint a_block) const;
+
+  inline void BertaComputeThetaJameson(
+                         BoxData<T,1,MEM>& a_theta,
+                         const State& a_WAvgForDetector,
+                         T a_eta_d) const;
+
+  inline void BertaAverageToPoint(
+                         State& a_UPoint,
+                         const State& a_UAvg,
+                         const BoxData<T,1,MEM>& a_theta) const;
+
+  inline void BertaReconstructWithFallback(
+                         State& a_WFace_L,
+                         State& a_WFace_R,
+                         BoxData<T,1,MEM>& a_thetaFluxFace,
+                         BoxData<T,1,MEM>& a_thetaReconFace,
+                         const State& a_WPoint,
+                         const BoxData<T,1,MEM>& a_thetaCell,
+                         uint a_dir,
+                         int a_fallback_type) const;
+
+  inline void BertaPrimPointToFluxAverage(
+                         State& a_physFlux,
+                         const State& a_WFacePoint,
+                         const BoxData<T,1,MEM>& a_thetaFluxFace,
+                         const BoxData<T,1,MEM>& a_adjDdir,
+                         uint a_block,
+                         uint a_dir) const;
+
+  inline void BertaPrimPointToMappedFlux(
+                         State& a_fluxdir,
+                         const State& a_physFluxAvg,
+                         const State& a_WFacePoint,
+                         const BoxData<T,1,MEM>& a_thetaFluxFace,
+                         const BoxData<T,1,MEM>& a_adjDrDir,
+                         const BoxData<T,DIM,MEM,DIM>& a_deta_a,
+                         const BoxData<T,1,MEM>& a_deta,
+                         const BoxData<T,DIM,MEM>& a_ntrow,
+                         uint a_block,
+                         uint a_dir) const;
+
+  inline void BertaPrimPointToMappedRusanovFlux(
+                         State& a_fluxdir,
+                         const State& a_WFacePoint_L,
+                         const State& a_WFacePoint_R,
+                         const BoxData<T,1,MEM>& a_thetaFluxFace,
+                         const BoxData<T,1,MEM>& a_adjDdir,
+                         const BoxData<T,DIM,MEM,DIM>& a_deta_a,
+                         const BoxData<T,1,MEM>& a_deta,
+                         const BoxData<T,DIM,MEM,DIM>& a_A,
+                         const BoxData<T,DIM,MEM>& a_ntrow,
+                         uint a_block,
+                         uint a_dir) const;
+
   inline void primToFlux(
                          State& a_physFlux,
                          const State& a_WFace,
@@ -580,6 +653,7 @@ private:
 #include "BoxOp_Limiters.H"
 #include "BoxOp_PreStage.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
+#include "BoxOp_BertaCubedSphereImplem.H"
 #include "BoxOp_Initialize.H"
 
 #ifdef PR_AMR
