@@ -46,7 +46,7 @@ private:
     int max_iter; 
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
-    int spatial_operator = 1; // 0: Existing Euler operator, 1: Berta WENOZ operator
+    int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
     double Berta_eta_d = 0.02; // Berta Jameson detector threshold
     int Berta_fallback_type = 0; // 0: WENO3 fallback, 1: PLM fallback
     double strength; // Strength of perturbation for test problems.
