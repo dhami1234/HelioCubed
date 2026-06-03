@@ -339,6 +339,11 @@ public:
                          const State& a_WAvgForDetector,
                          T a_eta_d) const;
 
+  inline void BertaComputeThetaDerivativeRatio(
+                         BoxData<T,1,MEM>& a_theta,
+                         const State& a_WAvgForDetector,
+                         T a_eta_d) const;
+
   inline void BertaAverageToPoint(
                          State& a_UPoint,
                          const State& a_UAvg,

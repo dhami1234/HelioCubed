@@ -10,6 +10,7 @@
 -limiter                         1
 -spatial_operator                1
 -Berta_eta_d                     0.02
+-Berta_detector_type             0
 -Berta_fallback_type             0
 -strength                        100.
 -write_cadence                   10

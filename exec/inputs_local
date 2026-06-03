@@ -9,7 +9,8 @@
 -CFL                             1.5
 -limiter                         1
 -spatial_operator                1
--Berta_eta_d                     0.02
+-Berta_eta_d                     0.1
+-Berta_detector_type             1
 -Berta_fallback_type             0
 -strength                        100.
 -write_cadence                   100

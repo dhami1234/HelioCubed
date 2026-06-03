@@ -47,7 +47,8 @@ private:
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
-    double Berta_eta_d = 0.02; // Berta Jameson detector threshold
+    double Berta_eta_d = 0.02; // Berta detector threshold
+    int Berta_detector_type = 0; // 0: Jameson detector, 1: Berta derivative-ratio detector
     int Berta_fallback_type = 0; // 0: WENO3 fallback, 1: PLM fallback
     double strength; // Strength of perturbation for test problems.
     int write_cadence = 10000000000; 
@@ -139,6 +140,7 @@ public:
     static int get_limiter() {return getInstance().limiter;}
     static int get_spatial_operator() {return getInstance().spatial_operator;}
     static double get_Berta_eta_d() {return getInstance().Berta_eta_d;}
+    static int get_Berta_detector_type() {return getInstance().Berta_detector_type;}
     static int get_Berta_fallback_type() {return getInstance().Berta_fallback_type;}
     static double get_strength() {return getInstance().strength;}
     static int get_write_cadence() {return getInstance().write_cadence;}
@@ -205,6 +207,7 @@ public:
         args.add("limiter", limiter);
         args.add("spatial_operator", spatial_operator);
         args.add("Berta_eta_d", Berta_eta_d);
+        args.add("Berta_detector_type", Berta_detector_type);
         args.add("Berta_fallback_type", Berta_fallback_type);
         args.add("strength", strength);
         args.add("write_cadence", write_cadence);
@@ -291,6 +294,7 @@ public:
         pout(0) << "limiter: " << limiter << endl;
         pout(0) << "spatial_operator: " << spatial_operator << endl;
         pout(0) << "Berta_eta_d: " << Berta_eta_d << endl;
+        pout(0) << "Berta_detector_type: " << Berta_detector_type << endl;
         pout(0) << "Berta_fallback_type: " << Berta_fallback_type << endl;
         pout(0) << "strength: " << strength << endl;
         pout(0) << "write_cadence: " << write_cadence << endl;

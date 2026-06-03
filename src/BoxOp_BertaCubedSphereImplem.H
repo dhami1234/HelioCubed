@@ -259,7 +259,189 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaJameson(
 
 
 // ====================================================================================
-// 3. Theta-aware average-to-point recovery.
+// 3. Berta derivative-ratio discontinuity detector.
+// ====================================================================================
+
+template<typename T, MemType MEM>
+PROTO_KERNEL_START
+void f_berta_derivative_ratio_theta_rawF(
+    Var<T,1,MEM>&              a_theta,
+    const Var<T,NUMCOMPS,MEM>& a_Wmm_x,
+    const Var<T,NUMCOMPS,MEM>& a_Wm_x,
+    const Var<T,NUMCOMPS,MEM>& a_W0,
+    const Var<T,NUMCOMPS,MEM>& a_Wp_x,
+    const Var<T,NUMCOMPS,MEM>& a_Wpp_x,
+    const Var<T,NUMCOMPS,MEM>& a_Wmm_y,
+    const Var<T,NUMCOMPS,MEM>& a_Wm_y,
+    const Var<T,NUMCOMPS,MEM>& a_Wp_y,
+    const Var<T,NUMCOMPS,MEM>& a_Wpp_y,
+    const Var<T,NUMCOMPS,MEM>& a_Wmm_z,
+    const Var<T,NUMCOMPS,MEM>& a_Wm_z,
+    const Var<T,NUMCOMPS,MEM>& a_Wp_z,
+    const Var<T,NUMCOMPS,MEM>& a_Wpp_z,
+    const T                    a_eta_d,
+    const T                    a_gamma,
+    const T                    a_eps)
+{
+  auto mag = [&] PROTO_LAMBDA
+    (
+      const Var<T,NUMCOMPS,MEM>& W)
+    {
+      T bx = W(iBX);
+      T by = W(iBY);
+      T bz = W(iBZ);
+      return sqrt(bx*bx + by*by + bz*bz);
+    };
+
+  auto ref_value = [&] PROTO_LAMBDA
+    (
+      const int comp)
+    {
+      if (comp == iRHO || comp == iP)
+      {
+        return abs(a_W0(comp));
+      }
+      if (comp == iVX || comp == iVY || comp == iVZ)
+      {
+        T rho = max(abs(a_W0(iRHO)),a_eps);
+        T p   = max(abs(a_W0(iP)),a_eps);
+        return sqrt(abs(a_gamma)*p/rho);
+      }
+      return mag(a_W0);
+    };
+
+  auto eta_comp = [&] PROTO_LAMBDA
+    (
+      const T qmm,
+      const T qm,
+      const T q0,
+      const T qp,
+      const T qpp,
+      const T qref)
+    {
+      T d1 = 0.5*(qp - qm);
+      T d2 = qp - 2.0*q0 + qm;
+      T d3 = 0.5*(qpp - 2.0*qp + 2.0*qm - qmm);
+      T d4 = qpp - 4.0*qp + 6.0*q0 - 4.0*qm + qmm;
+
+      T eta_odd  = abs(d3)/(abs(qref) + abs(d1) + abs(d3) + a_eps);
+      T eta_even = abs(d4)/(abs(qref) + abs(d2) + abs(d4) + a_eps);
+      return max(eta_odd,eta_even);
+    };
+
+  auto eta_dir = [&] PROTO_LAMBDA
+    (
+      const Var<T,NUMCOMPS,MEM>& Wmm,
+      const Var<T,NUMCOMPS,MEM>& Wm,
+      const Var<T,NUMCOMPS,MEM>& Wp,
+      const Var<T,NUMCOMPS,MEM>& Wpp)
+    {
+      T eta = 0.0;
+      for (int comp = 0; comp < NUMCOMPS; comp++)
+      {
+        eta = max(eta,eta_comp(Wmm(comp),Wm(comp),a_W0(comp),Wp(comp),Wpp(comp),ref_value(comp)));
+      }
+      return eta;
+    };
+
+  T etax = eta_dir(a_Wmm_x,a_Wm_x,a_Wp_x,a_Wpp_x);
+  T etay = eta_dir(a_Wmm_y,a_Wm_y,a_Wp_y,a_Wpp_y);
+  T etaz = eta_dir(a_Wmm_z,a_Wm_z,a_Wp_z,a_Wpp_z);
+  T eta  = sqrt(etax*etax + etay*etay + etaz*etaz);
+
+  a_theta(0) = (eta < a_eta_d) ? 1.0 : 0.0;
+}
+PROTO_KERNEL_END(f_berta_derivative_ratio_theta_rawF, f_berta_derivative_ratio_theta_raw)
+
+
+template<
+    typename T,
+    template<MemType> typename MAP,
+    MemType MEM>
+inline void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaDerivativeRatio(
+    BoxData<T,1,MEM>& a_theta,
+    const State&      a_WAvgForDetector,
+    T                 a_eta_d) const
+{
+  PR_TIMERS("BoxOp_EulerCubedSphere::BertaComputeThetaDerivativeRatio()");
+
+  Point ex = Point::Basis(0);
+  Point ey = Point::Basis(1);
+  Point ez = Point::Basis(2);
+
+  Box bxRaw = a_WAvgForDetector.box().grow(-2);
+  BoxData<T,1,MEM> thetaRaw(bxRaw);
+
+  const T eps = 1.0e-40;
+
+  State Wmm_x = (1.0*Shift(-2*ex))(a_WAvgForDetector);
+  State Wm_x  = (1.0*Shift(-ex))(a_WAvgForDetector);
+  State W0    = (1.0*Shift(Point::Zeros()))(a_WAvgForDetector);
+  State Wp_x  = (1.0*Shift( ex))(a_WAvgForDetector);
+  State Wpp_x = (1.0*Shift( 2*ex))(a_WAvgForDetector);
+
+  State Wmm_y = (1.0*Shift(-2*ey))(a_WAvgForDetector);
+  State Wm_y  = (1.0*Shift(-ey))(a_WAvgForDetector);
+  State Wp_y  = (1.0*Shift( ey))(a_WAvgForDetector);
+  State Wpp_y = (1.0*Shift( 2*ey))(a_WAvgForDetector);
+
+  State Wmm_z = (1.0*Shift(-2*ez))(a_WAvgForDetector);
+  State Wm_z  = (1.0*Shift(-ez))(a_WAvgForDetector);
+  State Wp_z  = (1.0*Shift( ez))(a_WAvgForDetector);
+  State Wpp_z = (1.0*Shift( 2*ez))(a_WAvgForDetector);
+
+  forallInPlace(
+      f_berta_derivative_ratio_theta_raw,
+      thetaRaw,
+      Wmm_x,
+      Wm_x,
+      W0,
+      Wp_x,
+      Wpp_x,
+      Wmm_y,
+      Wm_y,
+      Wp_y,
+      Wpp_y,
+      Wmm_z,
+      Wm_z,
+      Wp_z,
+      Wpp_z,
+      a_eta_d,
+      m_gamma,
+      eps);
+
+  // Flag the first neighbors too, as in the paper's troubled-cell propagation.
+  Box bxInterior = thetaRaw.box().grow(-1);
+  BoxData<T,1,MEM> thetaInterior(bxInterior);
+
+  BoxData<T,1,MEM> theta0   = (1.0*Shift(Point::Zeros()))(thetaRaw);
+  BoxData<T,1,MEM> thetam_x = (1.0*Shift(-ex))(thetaRaw);
+  BoxData<T,1,MEM> thetap_x = (1.0*Shift( ex))(thetaRaw);
+  BoxData<T,1,MEM> thetam_y = (1.0*Shift(-ey))(thetaRaw);
+  BoxData<T,1,MEM> thetap_y = (1.0*Shift( ey))(thetaRaw);
+  BoxData<T,1,MEM> thetam_z = (1.0*Shift(-ez))(thetaRaw);
+  BoxData<T,1,MEM> thetap_z = (1.0*Shift( ez))(thetaRaw);
+
+  forallInPlace(
+      f_berta_dilate_theta,
+      thetaInterior,
+      theta0,
+      thetam_x,
+      thetap_x,
+      thetam_y,
+      thetap_y,
+      thetam_z,
+      thetap_z);
+
+  a_theta.define(a_WAvgForDetector.box());
+  a_theta.setVal(0.0);
+  thetaInterior.copyTo(a_theta);
+}
+
+
+// ====================================================================================
+// 4. Theta-aware average-to-point recovery.
 // ====================================================================================
 
 template<typename T, MemType MEM>
@@ -272,7 +454,14 @@ void f_berta_avg_to_point_thetaF(
 {
   for (int comp = 0; comp < NUMCOMPS; comp++)
   {
-    a_UPoint(comp) = a_UAvg(comp) - a_theta(0)*a_LapUAvg(comp)/24.0;
+    if (a_theta(0) > 0.5)
+    {
+      a_UPoint(comp) = a_UAvg(comp) - a_LapUAvg(comp)/24.0;
+    }
+    else
+    {
+      a_UPoint(comp) = a_UAvg(comp);
+    }
   }
 }
 PROTO_KERNEL_END(f_berta_avg_to_point_thetaF, f_berta_avg_to_point_theta)
@@ -557,10 +746,21 @@ void f_select_reconstructionF(
 {
   T th = a_thetaReconFace(0);
 
-  for (int comp = 0; comp < NUMCOMPS; comp++)
+  if (th > 0.5)
   {
-    a_WL(comp) = th*a_WL4(comp) + (1.0 - th)*a_WLF(comp);
-    a_WR(comp) = th*a_WR4(comp) + (1.0 - th)*a_WRF(comp);
+    for (int comp = 0; comp < NUMCOMPS; comp++)
+    {
+      a_WL(comp) = a_WL4(comp);
+      a_WR(comp) = a_WR4(comp);
+    }
+  }
+  else
+  {
+    for (int comp = 0; comp < NUMCOMPS; comp++)
+    {
+      a_WL(comp) = a_WLF(comp);
+      a_WR(comp) = a_WRF(comp);
+    }
   }
 
   // Positivity safety.
@@ -707,8 +907,14 @@ void f_flux_point_to_avg_thetaF(
 {
   for (int comp = 0; comp < NUMCOMPS; comp++)
   {
-    a_fluxAvg(comp) =
-        a_fluxPoint(comp) + a_thetaFluxFace(0)*a_lapFluxPoint(comp)/24.0;
+    if (a_thetaFluxFace(0) > 0.5)
+    {
+      a_fluxAvg(comp) = a_fluxPoint(comp) + a_lapFluxPoint(comp)/24.0;
+    }
+    else
+    {
+      a_fluxAvg(comp) = a_fluxPoint(comp);
+    }
   }
 }
 PROTO_KERNEL_END(f_flux_point_to_avg_thetaF, f_flux_point_to_avg_theta)
@@ -867,7 +1073,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedFlux(
         const Var<T,1,MEM>& a_lapP,
         const Var<T,1,MEM>& a_theta)
       {
-        a_pAvg(0) = a_pPoint(0) + a_theta(0)*a_lapP(0)/24.0;
+        if (a_theta(0) > 0.5)
+        {
+          a_pAvg(0) = a_pPoint(0) + a_lapP(0)/24.0;
+        }
+        else
+        {
+          a_pAvg(0) = a_pPoint(0);
+        }
       },
       pTotAvg,
       pTotPoint,
@@ -1167,6 +1380,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   // Detector/fallback settings.
   // Increase eta_d for less fallback. Decrease eta_d for more fallback.
   const T eta_d = ParseInputs::get_Berta_eta_d();
+  const int detector_type = ParseInputs::get_Berta_detector_type(); // 0 = Jameson, 1 = derivative ratio.
   const int fallback_type = ParseInputs::get_Berta_fallback_type(); // 0 = WENO3, 1 = PLM.
 
   // Detector uses V(<U>), not V(UPoint).
@@ -1174,7 +1388,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   sphAvgToPrim(WAvgForDetector,a_USph,a_block);
 
   BoxData<T,1,MEM> thetaCell;
-  BertaComputeThetaJameson(thetaCell,WAvgForDetector,eta_d);
+  if (detector_type == 1)
+  {
+    BertaComputeThetaDerivativeRatio(thetaCell,WAvgForDetector,eta_d);
+  }
+  else
+  {
+    BertaComputeThetaJameson(thetaCell,WAvgForDetector,eta_d);
+  }
 
   // Berta average-to-point recovery.
   State UPoint;
