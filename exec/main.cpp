@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
   int boxSize_nonrad = ParseInputs::get_boxSize_nonrad();
   int boxSize_rad = ParseInputs::get_boxSize_rad();
   int max_iter = ParseInputs::get_max_iter();
+  double max_time = ParseInputs::get_max_time();
   int temporal_order = ParseInputs::get_temporal_order();
   double gamma = ParseInputs::get_gamma();
   double dt = 0.0;
@@ -170,6 +171,7 @@ int main(int argc, char *argv[])
       }
     if (convTestType > 2) max_iter = 1;
     
+    bool time_exceeded = false;
     for (int iter = restart_step + 1; iter <= max_iter; iter++)
     {
       auto start = chrono::steady_clock::now();
@@ -178,6 +180,10 @@ int main(int argc, char *argv[])
         {
           double dtcfl1 = OP::dtCFL(JU,iop,dVolrLev);
           dt = dtcfl1*ParseInputs::get_CFL();
+          if (time + dt > max_time) {
+            dt = max_time - time;
+            time_exceeded = true;
+          }
         }
       if (convTestType < 3)
         {
@@ -237,6 +243,10 @@ int main(int argc, char *argv[])
       }
       std::string out_string(outStr);
       pout(0) << out_string << endl;
+      if (time_exceeded) {
+        pout(0) << "Maximum simulation time reached. Ending simulation." << endl;
+        break;
+      }
     }
 
       if ((convTestType > 0) && (convTestType != 4)) {

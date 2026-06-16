@@ -6,6 +6,7 @@
 -boxSize_nonrad                  30
 -boxSize_rad                     45
 -max_iter                        3
+-max_time                        3600000.0
 -CFL                             0.5
 -limiter                         1
 -spatial_operator                1

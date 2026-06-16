@@ -44,6 +44,7 @@ private:
     int boxSize_nonrad; // Size of the box for domain decomposition
     int boxSize_rad; // Size of the box for domain decomposition
     int max_iter; 
+    double max_time; // Maximum simulation time in seconds
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
@@ -136,6 +137,7 @@ public:
     static int get_boxSize_nonrad() {return getInstance().boxSize_nonrad;}
     static int get_boxSize_rad() {return getInstance().boxSize_rad;}
     static int get_max_iter() {return getInstance().max_iter;}
+    static double get_max_time() {return getInstance().max_time;}
     static double get_CFL() {return getInstance().CFL;}
     static int get_limiter() {return getInstance().limiter;}
     static int get_spatial_operator() {return getInstance().spatial_operator;}
@@ -203,6 +205,7 @@ public:
         args.add("boxSize_nonrad", boxSize_nonrad);
         args.add("boxSize_rad", boxSize_rad);
         args.add("max_iter", max_iter);
+        args.add("max_time", max_time);
         args.add("CFL", CFL);
         args.add("limiter", limiter);
         args.add("spatial_operator", spatial_operator);
@@ -290,6 +293,7 @@ public:
         pout(0) << "boxSize_nonrad: " << boxSize_nonrad << endl;
         pout(0) << "boxSize_rad: " << boxSize_rad << endl;
         pout(0) << "max_iter: " << max_iter << endl;
+        pout(0) << "max_time: " << max_time << endl;
         pout(0) << "CFL: " << CFL << endl;
         pout(0) << "limiter: " << limiter << endl;
         pout(0) << "spatial_operator: " << spatial_operator << endl;
