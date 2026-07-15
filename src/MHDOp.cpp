@@ -17,6 +17,7 @@
 #include "MHD_Input_Parsing.H"
 #include "MHD_Constants.H"
 #include "MHD_CFL.H"
+#include "MHD_Gravity.H"
 #include "MHDLevelDataRK4.H"
 #include "MHD_Turbulence.H"
 #include "PolarExchangeCopier.H"
@@ -666,6 +667,12 @@ namespace MHDOp {
 				// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz","Z2","Sigma","Lambda"}, 1, STM, "STM");
 				forallInPlace_p(Add_Sources_calc, a_Rhs[dit], STM);
 			#endif
+			if (inputs.Sun_gravity == 1)
+			{
+				MHD_Gravity::add_gravity_source(
+				        a_Rhs[dit], W_sph, a_State.m_x_sph_cc[dit],
+				        inputs.velocity_scale);
+			}
 			if (!a_State.m_divB_calculated && inputs.takedivBstep == 1) forallInPlace_p(Powell_Sph_2O,a_State.m_divB[dit],W_cart,RhsV_divB,a_State.m_cell_volume[dit]);		
 			// Vector RHS(dbx1);
 			// a_State.m_divB[dit].copyTo(RHS);
@@ -845,6 +852,13 @@ namespace MHDOp {
 				        Add_Sources_calc, predictorRhs, turbulenceSource);
 			#endif
 
+			if (inputs.Sun_gravity == 1)
+			{
+				MHD_Gravity::add_gravity_source(
+				        predictorRhs, WSph, a_State.m_x_sph_cc[dit],
+				        inputs.velocity_scale);
+			}
+
 			if (inputs.takedivBstep == 1)
 			{
 				Vector powellSource(ghostBox);
@@ -1004,6 +1018,13 @@ namespace MHDOp {
 				forallInPlace_p(
 				        Add_Sources_calc, correctorRhs, turbulenceSource);
 			#endif
+
+			if (inputs.Sun_gravity == 1)
+			{
+				MHD_Gravity::add_gravity_source(
+				        correctorRhs, WPredictorSph,
+				        a_State.m_x_sph_cc[dit], inputs.velocity_scale);
+			}
 
 			if (inputs.takedivBstep == 1)
 			{

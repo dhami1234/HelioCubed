@@ -22,6 +22,7 @@ class Parsefrominputs {
     int sph_inner_BC_hdf5; // 1 is h5 file is used to provide inner BCs
     int limiter_apply;
     int takedivBstep;
+    int Sun_gravity = 1; // 1: Include solar gravity as an explicit source term
     int timeIntegratorType; // 1: Euler, 2: RK2, 3: Hancock, 4: RK4
     int Riemann_solver_type;  //1: Rusanov Solver, 2: Roe Solver
     double entropy_fix_coeff;
@@ -84,6 +85,7 @@ class Parsefrominputs {
 		args.add("sph_inner_BC_hdf5",  sph_inner_BC_hdf5);
 		args.add("limiter_apply",  limiter_apply);
 		args.add("takedivBstep",  takedivBstep);
+		args.add("Sun_gravity",  Sun_gravity);
 		args.add("timeIntegratorType",  timeIntegratorType);
 		args.add("Riemann_solver_type",  Riemann_solver_type);
 		args.add("entropy_fix_coeff",  entropy_fix_coeff);
@@ -151,6 +153,7 @@ class Parsefrominputs {
 			cout << "sph_inner_BC_hdf5: "    << sph_inner_BC_hdf5 << endl;
 			cout << "limiter_apply: "    << limiter_apply << endl;
 			cout << "takedivBstep: "    << takedivBstep << endl;
+			cout << "Sun_gravity: "    << Sun_gravity << endl;
 			cout << "timeIntegratorType: "    << timeIntegratorType << endl;
 			cout << "Riemann_solver_type: "    << Riemann_solver_type << endl;
 			cout << "entropy_fix_coeff: "    << entropy_fix_coeff << endl;

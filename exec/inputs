@@ -39,6 +39,9 @@
 # Is divergence cleaning applied using Powell's method?
 -takedivBstep                    1
 
+# Include solar gravity as an explicit source term?
+-Sun_gravity                     1
+
 # Time integrator: 1 = Euler, 2 = RK2, 3 = Hancock, 4 = RK4
 -timeIntegratorType              3
 
