@@ -210,8 +210,22 @@ namespace MHD_Set_Boundary_Values {
 						const std::vector<BoxData<double,NUMCOMPS>>& BC_data,
 						const double time)
 	{
+		PROTO_ASSERT(!BC_data.empty(),
+				"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: no BC frames available");
 
-		if (BC_data.size() == 1){
+		double h5_cadence = inputs.BC_cadence; // hrs
+		int low_frame_now = 0;
+		if (BC_data.size() > 1){
+			PROTO_ASSERT(h5_cadence > 0.0,
+					"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: BC_cadence must be positive");
+			low_frame_now = static_cast<int>(time/(h5_cadence*3600.0));
+		}
+
+		// Once the final frame time is reached, keep that frame and rotate it
+		// continuously, just as for a single-frame boundary file.
+		if ((BC_data.size() == 1) ||
+			(low_frame_now >= static_cast<int>(BC_data.size())-1)){
+			int frame_to_rotate = (BC_data.size() == 1) ? 0 : static_cast<int>(BC_data.size())-1;
 			BoxData<double, NUMCOMPS> BC_data_rotated;
 			double carr_rot_time = 25.38*24*60*60; // Seconds
 			// We should use sidereal time for this. 25.38 days. That's the rotation time from a fixed location.
@@ -223,10 +237,10 @@ namespace MHD_Set_Boundary_Values {
 			cells_to_rotate = inputs.domainSizez - cells_to_rotate;
 			static Stencil<double> m_right_shift;
 			m_right_shift = (1.0-needed_fraction)*Shift(Point::Zeros()) + (needed_fraction)*Shift(-Point::Basis(2));
-			Box dbx0 = BC_data[0].box();
+			Box dbx0 = BC_data[frame_to_rotate].box();
 			for (auto dit : state.m_U)
 			{	
-				BC_data[0].copyTo(state.m_BC[ dit],dbx0,Point::Basis(2)*(-cells_to_rotate));
+				BC_data[frame_to_rotate].copyTo(state.m_BC[ dit],dbx0,Point::Basis(2)*(-cells_to_rotate));
 				BC_data_rotated = m_right_shift(state.m_BC[ dit]);
 				BC_data_rotated.copyTo(state.m_BC[ dit]);
 			}
@@ -237,13 +251,14 @@ namespace MHD_Set_Boundary_Values {
 			BC2.define(state.m_dbl,Point::Zero());
 			
 			
-			double h5_cadence = inputs.BC_cadence; //hrs
-
 			double time_temp = time+0*h5_cadence*3600;
 
 			int low_frame = time_temp/(h5_cadence*3600);
-			PROTO_ASSERT(low_frame < BC_data.size(),
-                "MHD_Set_Boundary_Values::interpolate_h5_BC | Error: next BC frame not available");
+			int next_frame = low_frame+1;
+			PROTO_ASSERT((low_frame >= 0) &&
+					(next_frame < static_cast<int>(BC_data.size())),
+					"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: BC frames %i and %i not available (num_frames = %i)",
+					low_frame, next_frame, static_cast<int>(BC_data.size()));
 
 			double needed_fraction = (time_temp - (low_frame*h5_cadence*3600))/(h5_cadence*3600);
 			
@@ -252,7 +267,7 @@ namespace MHD_Set_Boundary_Values {
 			double carr_rot_time = 25.38*24*60*60; // Seconds
 
 			double effective_time1 = 360*(time_temp+low_frame*h5_cadence*3600)/carr_rot_time;
-			double effective_time2 = 360*(time_temp+(low_frame+1)*h5_cadence*3600)/carr_rot_time;
+			double effective_time2 = 360*(time_temp+next_frame*h5_cadence*3600)/carr_rot_time;
 
 			if (inputs.BC_frame_rotate == 0){
 				effective_time1 = 360*(time_temp)/carr_rot_time;
@@ -281,7 +296,7 @@ namespace MHD_Set_Boundary_Values {
 			{	
 				BC_data[low_frame].copyTo(state.m_BC[ dit],dbx0,Point::Basis(2)*(-cells_to_rotate1));
 				BC1[ dit] = m_right_shift1(state.m_BC[ dit]);
-				BC_data[low_frame+1].copyTo(state.m_BC[ dit],dbx0,Point::Basis(2)*(-cells_to_rotate2));
+				BC_data[next_frame].copyTo(state.m_BC[ dit],dbx0,Point::Basis(2)*(-cells_to_rotate2));
 				BC2[ dit] = m_right_shift2(state.m_BC[ dit]);
 
 				forallInPlace_p(InterpolateFrames, state.m_BC[ dit], BC1[ dit], BC2[ dit], needed_fraction);
