@@ -64,10 +64,10 @@
 -C_rad                           1.0
 
 # BC start time
--BC_start_time                   2022.0000
+-BC_start_time                   2024.206170309654
 
 # BC cadence in hours
--BC_cadence                      6.0
+-BC_cadence                      1.0
 
 # Do BC frames rotate?
 -BC_frame_rotate                 0
