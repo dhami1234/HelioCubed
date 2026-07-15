@@ -8,12 +8,12 @@
 -gamma                           1.6666666666666666666667
 
 # Cells in r, theta, phi directions
--domainSizex                     45
--domainSizey                     45
+-domainSizex                     90
+-domainSizey                     90
 -domainSizez                     90
 
 # Maximum steps
--maxStep                         5000
+-maxStep                         3000
 
 # If restart is needed, set restartStep to the step number. Checkpoint file needed
 -restartStep                     0
@@ -28,7 +28,7 @@
 -MaxCheckpointFiles              3
 
 # Box size used in domain decomposition
--BoxSize                         15
+-BoxSize                         45
 
 # Is inner BC set using hdf5 file?
 -sph_inner_BC_hdf5               1
@@ -39,8 +39,8 @@
 # Is divergence cleaning applied using Powell's method?
 -takedivBstep                    1
 
-# Temporal order of accuracy
--timeIntegratorType              1
+# Time integrator: 1 = Euler, 2 = RK2, 3 = Hancock, 4 = RK4
+-timeIntegratorType              3
 
 # Riemann solver type
 -Riemann_solver_type             2
@@ -76,7 +76,7 @@
 -probe_cadence                   3600  # Seconds
 
 # BC hdf5 file
--BC_file                         ../scripts/SWQU_Tutorial_SWiG.h5
+-BC_file                         SWQU_Tutorial_SWiG_first_frame.h5
 
 # Prefixes for output and Checkpoint files
 -Data_file_Prefix                Data_
@@ -92,7 +92,7 @@
 -CME_get_checkpoint_before       3600
 
 # CME properties
--CME_Enter_Time                  2022.015
+-CME_Enter_Time                  20220.015
 -CME_r1                          46.67
 -CME_r0                          23.33
 -CME_halfangle                   48.00
@@ -111,4 +111,27 @@
 
 # Scaling factors. MHD variables can be scaled using these factors
 -density_scale                   700.0
--velocity_scale                  30000000.0    
+-velocity_scale                  30000000.0
+
+# Turbulence model parameters (used when HelioCubed is compiled with TURB=1)
+# Inner-boundary turbulent energy per unit mass, Z^2 [cm^2/s^2]
+-Sun_Z2                          3.0e13
+
+# Inner-boundary normalized cross helicity, sigma_c
+-Sun_SigmaC                     0.6
+
+# Inner-boundary turbulence correlation length [cm]
+-Sun_Lambda                     1.2e9
+
+# Time over which inner-boundary Z^2 ramps to Sun_Z2 [days]
+-Scaling_time                   20.0
+
+# Normalized residual energy, sigma_D
+-SigmaD                         -0.33333333333333333333
+
+# von Karman--Taylor turbulence constants
+-alphaTM                        0.8
+-betaTM                         0.4
+
+# Small positive floor used by the turbulence model
+-smallTM                        1.0e-8

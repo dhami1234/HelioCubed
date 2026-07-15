@@ -22,7 +22,7 @@ class Parsefrominputs {
     int sph_inner_BC_hdf5; // 1 is h5 file is used to provide inner BCs
     int limiter_apply;
     int takedivBstep;
-    int timeIntegratorType; // 1: Euler Step    4: RK4 
+    int timeIntegratorType; // 1: Euler, 2: RK2, 3: Hancock, 4: RK4
     int Riemann_solver_type;  //1: Rusanov Solver, 2: Roe Solver
     double entropy_fix_coeff;
     int initialize_in_spherical_coords;
@@ -44,7 +44,14 @@ class Parsefrominputs {
 	double CME_r1, CME_r0, CME_halfangle, CME_pol_flux_control, CME_FRiED_n, CME_lat, CME_lon, CME_tilt, CME_Vandas_R0, CME_apex_speed, CME_energy_control, CME_density, CME_helicity_sign, CME_a1, CME_shift;
 	//MHD equations can be written in dimensionless variables. We use scaling for this.
 	double density_scale, velocity_scale;
-	double Sun_Z2, Sun_SigmaC, Sun_Lambda, SigmaD, Scaling_time; // Turbulence parameters for the Sun. Scaling time is the time it takes for Z2 to reach the given value in the inner boundary.
+	double Sun_Z2 = 3.0e13;
+	double Sun_SigmaC = 0.6;
+	double Sun_Lambda = 1.2e9;
+	double Scaling_time = 20.0; // Days used to ramp Z2 to Sun_Z2 at the inner boundary.
+	double SigmaD = -1.0/3.0;
+	double alphaTM = 0.8;
+	double betaTM = 0.4;
+	double smallTM = 1.0e-8;
   public:
 
 	string removeSpaces(string str)
@@ -117,6 +124,9 @@ class Parsefrominputs {
 		args.add("Sun_SigmaC",  Sun_SigmaC);
 		args.add("Sun_Lambda",  Sun_Lambda);
 		args.add("SigmaD",  SigmaD);
+		args.add("alphaTM",  alphaTM);
+		args.add("betaTM",  betaTM);
+		args.add("smallTM",  smallTM);
 		args.add("Scaling_time",  Scaling_time);
 		args.parse(argc,argv);
 		// args.print(); //It prints, but not in the order I want.
@@ -141,7 +151,7 @@ class Parsefrominputs {
 			cout << "sph_inner_BC_hdf5: "    << sph_inner_BC_hdf5 << endl;
 			cout << "limiter_apply: "    << limiter_apply << endl;
 			cout << "takedivBstep: "    << takedivBstep << endl;
-			cout << "timeIntegratorType: "    << takedivBstep << endl;
+			cout << "timeIntegratorType: "    << timeIntegratorType << endl;
 			cout << "Riemann_solver_type: "    << Riemann_solver_type << endl;
 			cout << "entropy_fix_coeff: "    << entropy_fix_coeff << endl;
 			cout << "initialize_in_spherical_coords: "    << initialize_in_spherical_coords << endl;
@@ -181,6 +191,9 @@ class Parsefrominputs {
 			cout << "Sun_SigmaC: "    << Sun_SigmaC << endl;
 			cout << "Sun_Lambda: "    << Sun_Lambda << endl;
 			cout << "SigmaD: "    << SigmaD << endl;
+			cout << "alphaTM: "    << alphaTM << endl;
+			cout << "betaTM: "    << betaTM << endl;
+			cout << "smallTM: "    << smallTM << endl;
 			cout << "Scaling_time: "    << Scaling_time << endl;
 			cout << setw(75) << setfill('-') << "-" << endl;
 		}

@@ -846,6 +846,14 @@ namespace MHD_Riemann_Solvers {
 	}
 	PROTO_KERNEL_END(rusanovStateF, rusanovState)
 
+	void Physical_Flux(BoxData<double,NUMCOMPS>& a_F,
+	                   const BoxData<double,NUMCOMPS>& a_W,
+	                   const int a_d,
+	                   const double a_gamma)
+	{
+		a_F = forall<double,NUMCOMPS>(getFlux, a_W, a_d, a_gamma);
+	}
+
 
 	void Rusanov_Solver(BoxData<double,NUMCOMPS>& a_F_f,
 	                    const BoxData<double,NUMCOMPS>& a_W_low,

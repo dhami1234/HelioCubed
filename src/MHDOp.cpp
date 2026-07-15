@@ -13,11 +13,13 @@
 #include "MHD_Mapping.H"
 #include "MHD_Riemann_Solvers.H"
 #include "MHD_Output_Writer.H"
+#include "MHD_Set_Boundary_Values.H"
 #include "MHD_Input_Parsing.H"
 #include "MHD_Constants.H"
 #include "MHD_CFL.H"
 #include "MHDLevelDataRK4.H"
 #include "MHD_Turbulence.H"
+#include "PolarExchangeCopier.H"
 
 extern Parsefrominputs inputs;
 
@@ -670,5 +672,356 @@ namespace MHDOp {
 			// a_Rhs[dit].copyTo(RHS);
 			// if (procID() == 0) h5.writePatch({"density","Vx","Vy","Vz", "p","Bx","By","Bz"}, 1, RHS, "RHS_2");
 		}
+	}
+
+	/**
+	 * @brief Advance one step with the MUSCL--Hancock scheme used by MS-FLUKSS.
+	 *
+	 * The predictor evolves each cell from its own reconstructed left and right
+	 * physical fluxes. The corrector shifts those same reconstructed face states
+	 * by the primitive-variable predictor, solves the Riemann problems once, and
+	 * updates the original conserved state with the resulting midpoint fluxes.
+	 */
+	void step_spherical_2O_hancock(MHDLevelDataState& a_State,
+	                              double a_time,
+	                              double a_dt)
+	{
+		PR_TIME("MHDOp::step_spherical_2O_hancock");
+
+		const double half_dt = 0.5*a_dt;
+		const double gamma = a_State.m_gamma;
+
+		static Stencil<double> divergence[DIM];
+		static bool initialized = false;
+		if (!initialized)
+		{
+			for (int dir = 0; dir < DIM; dir++)
+			{
+				divergence[dir] = Stencil<double>::FluxDivergence(dir);
+			}
+			initialized = true;
+		}
+
+		// A ghosted copy of U^n is needed by both reconstruction passes. LevelBoxData
+		// copyTo does not copy ghosts, so exchange and physical BC filling are explicit.
+		LevelBoxData<double,NUMCOMPS> UOld(a_State.m_dbl, Point::Ones(NGHOST));
+		for (auto dit : UOld)
+		{
+			a_State.m_U[dit].copyTo(UOld[dit]);
+		}
+		UOld.defineExchange<PolarExchangeCopier>(2,1);
+		UOld.exchange();
+		MHD_Set_Boundary_Values::Set_Boundary_Values_Spherical_2O(UOld, a_State);
+
+		LevelBoxData<double,NUMCOMPS> UPredictor(a_State.m_dbl, Point::Ones(NGHOST));
+		for (auto dit : UPredictor)
+		{
+			UOld[dit].copyTo(UPredictor[dit]);
+		}
+
+		double min_dt_local = 1.0e10*inputs.velocity_scale;
+
+		// Predictor: evolve each cell by dt/2 using the physical flux from that
+		// cell's own extrapolated state on each of its faces (no Riemann solve).
+		for (auto dit : UOld)
+		{
+			Box ghostBox = UOld[dit].box();
+			Box validBox = a_State.m_U[dit].box();
+			Vector predictorRhs(ghostBox);
+			Vector fluxRhs(ghostBox);
+			Scalar divBRhs(ghostBox);
+			predictorRhs.setVal(0.0);
+			fluxRhs.setVal(0.0);
+			divBRhs.setVal(0.0);
+
+			#if TURB == 1
+				Scalar divVRhs(ghostBox);
+				divVRhs.setVal(0.0);
+			#endif
+
+			MHDOp::Fix_negative_P(UOld[dit], gamma);
+			Vector WCart = forall<double,NUMCOMPS>(consToPrim, UOld[dit], gamma);
+			Vector WSph(ghostBox);
+			MHD_Mapping::Cartesian_to_Spherical(WSph, WCart, a_State.m_x_sph_cc[dit]);
+			MHD_Mapping::Correct_V_theta_phi_at_poles(
+			        WSph, a_State.m_dx, a_State.m_dy, a_State.m_dz);
+
+			double patch_dt;
+			MHD_CFL::Min_dt_calc_func(
+			        patch_dt, WSph, validBox,
+			        a_State.m_dx, a_State.m_dy, a_State.m_dz, gamma);
+			min_dt_local = std::min(min_dt_local, patch_dt);
+
+			for (int dir = 0; dir < DIM; dir++)
+			{
+				Vector WLow(ghostBox), WHigh(ghostBox);
+				MHD_Limiters::MHD_Limiters_minmod(
+				        WLow, WHigh, WSph, a_State.m_x_sph_cc[dit],
+				        a_State.m_dx_sph[dit], dir);
+
+				Vector FPlusSph, FMinusSph;
+				MHD_Riemann_Solvers::Physical_Flux(FPlusSph, WLow, dir, gamma);
+				MHD_Riemann_Solvers::Physical_Flux(FMinusSph, WHigh, dir, gamma);
+				#if TURB == 1
+					MHD_Turbulence::Turb_Flux_Hancock(FPlusSph, WLow, dir);
+					MHD_Turbulence::Turb_Flux_Hancock(FMinusSph, WHigh, dir);
+				#endif
+
+				Vector FPlus(ghostBox), FMinus(ghostBox);
+				if (dir == 0)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FPlus, FPlusSph, a_State.m_x_sph_fc_1[dit]);
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FMinus, FMinusSph, a_State.m_x_sph_fc_1[dit]);
+				}
+				if (dir == 1)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FPlus, FPlusSph, a_State.m_x_sph_fc_2[dit]);
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FMinus, FMinusSph, a_State.m_x_sph_fc_2[dit]);
+				}
+				if (dir == 2)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FPlus, FPlusSph, a_State.m_x_sph_fc_3[dit]);
+					MHD_Mapping::Spherical_to_Cartesian(
+					        FMinus, FMinusSph, a_State.m_x_sph_fc_3[dit]);
+				}
+
+				Vector FPlusScaled(ghostBox), FMinusScaled(ghostBox);
+				forallInPlace_p(
+				        Scale_with_A_Ff_calc, FPlusScaled, FPlus,
+				        a_State.m_face_area[dit], dir);
+				forallInPlace_p(
+				        Scale_with_A_Ff_calc, FMinusScaled, FMinus,
+				        a_State.m_face_area[dit], dir);
+
+				// WLow at face i+1 belongs to cell i; WHigh at face i belongs
+				// to cell i. The same indexing applies to their physical fluxes.
+				Vector FPlusAtCell = alias(
+				        FPlusScaled, -Point::Basis(dir));
+				Vector directionalRhs = FPlusAtCell - FMinusScaled;
+				fluxRhs += directionalRhs;
+
+				if (inputs.takedivBstep == 1)
+				{
+					Scalar BFaceScaled(ghostBox);
+					forallInPlace_p(
+					        Scale_with_A_Bf_calc, BFaceScaled, WLow, WHigh,
+					        a_State.m_face_area[dit], dir);
+					Scalar directionalDivB = divergence[dir](BFaceScaled);
+					divBRhs += directionalDivB;
+				}
+
+				#if TURB == 1
+					Scalar VPlusScaled(ghostBox), VMinusScaled(ghostBox);
+					forallInPlace_p(
+					        Scale_with_A_Vf_calc, VPlusScaled, WLow, WLow,
+					        a_State.m_face_area[dit], dir);
+					forallInPlace_p(
+					        Scale_with_A_Vf_calc, VMinusScaled, WHigh, WHigh,
+					        a_State.m_face_area[dit], dir);
+					Scalar VPlusAtCell = alias(
+					        VPlusScaled, -Point::Basis(dir));
+					Scalar directionalDivV = VPlusAtCell - VMinusScaled;
+					divVRhs += directionalDivV;
+				#endif
+			}
+
+			forallInPlace_p(
+			        Scale_with_V_calc, predictorRhs, fluxRhs,
+			        a_State.m_cell_volume[dit]);
+
+			#if TURB == 1
+				Scalar divV(ghostBox);
+				Vector turbulenceSource(ghostBox);
+				forallInPlace_p(
+				        Scale_with_V3_calc, divV, divVRhs,
+				        a_State.m_cell_volume[dit]);
+				MHD_Turbulence::Turb_Source(turbulenceSource, WSph, divV);
+				forallInPlace_p(
+				        Add_Sources_calc, predictorRhs, turbulenceSource);
+			#endif
+
+			if (inputs.takedivBstep == 1)
+			{
+				Vector powellSource(ghostBox);
+				forallInPlace_p(
+				        Powell_Sph_2O, powellSource, WCart, divBRhs,
+				        a_State.m_cell_volume[dit]);
+				forallInPlace_p(Add_Sources_calc, predictorRhs, powellSource);
+			}
+
+			Vector predictorIncrement(validBox);
+			predictorRhs.copyTo(predictorIncrement, validBox);
+			predictorIncrement *= half_dt;
+			UPredictor[dit] += predictorIncrement;
+			MHDOp::Fix_negative_P(UPredictor[dit], gamma);
+		}
+
+		double min_dt = min_dt_local;
+		#ifdef PR_MPI
+			MPI_Allreduce(
+			        &min_dt_local, &min_dt, 1, MPI_DOUBLE, MPI_MIN,
+			        MPI_COMM_WORLD);
+		#endif
+		a_State.m_min_dt = min_dt;
+
+		// The corrector needs a globally consistent midpoint state, including
+		// inter-patch, polar, and radial physical ghost cells.
+		UPredictor.defineExchange<PolarExchangeCopier>(2,1);
+		UPredictor.exchange();
+		double saved_time = a_State.m_time;
+		a_State.m_time = a_time + half_dt;
+		MHD_Set_Boundary_Values::Set_Boundary_Values_Spherical_2O(
+		        UPredictor, a_State);
+		a_State.m_time = saved_time;
+
+		MHDLevelDataDX finalUpdate;
+		finalUpdate.init(a_State);
+
+		// Corrector: update the original reconstruction with W^(n+1/2)-W^n,
+		// solve the Riemann problem on those predicted faces, and form the full step.
+		for (auto dit : UOld)
+		{
+			Box ghostBox = UOld[dit].box();
+			Vector fluxRhs(ghostBox);
+			Vector correctorRhs(ghostBox);
+			Scalar divBRhs(ghostBox);
+			fluxRhs.setVal(0.0);
+			correctorRhs.setVal(0.0);
+			divBRhs.setVal(0.0);
+
+			#if TURB == 1
+				Scalar divVRhs(ghostBox);
+				divVRhs.setVal(0.0);
+			#endif
+
+			Vector WOldCart = forall<double,NUMCOMPS>(
+			        consToPrim, UOld[dit], gamma);
+			Vector WPredictorCart = forall<double,NUMCOMPS>(
+			        consToPrim, UPredictor[dit], gamma);
+			Vector WOldSph(ghostBox), WPredictorSph(ghostBox);
+			MHD_Mapping::Cartesian_to_Spherical(
+			        WOldSph, WOldCart, a_State.m_x_sph_cc[dit]);
+			MHD_Mapping::Cartesian_to_Spherical(
+			        WPredictorSph, WPredictorCart, a_State.m_x_sph_cc[dit]);
+			MHD_Mapping::Correct_V_theta_phi_at_poles(
+			        WOldSph, a_State.m_dx, a_State.m_dy, a_State.m_dz);
+			MHD_Mapping::Correct_V_theta_phi_at_poles(
+			        WPredictorSph, a_State.m_dx, a_State.m_dy, a_State.m_dz);
+			Vector deltaW = WPredictorSph - WOldSph;
+
+			for (int dir = 0; dir < DIM; dir++)
+			{
+				Vector WLow(ghostBox), WHigh(ghostBox);
+				MHD_Limiters::MHD_Limiters_minmod(
+				        WLow, WHigh, WOldSph, a_State.m_x_sph_cc[dit],
+				        a_State.m_dx_sph[dit], dir);
+
+				// WLow(face i) is extrapolated from cell i-1, whereas
+				// WHigh(face i) is extrapolated from cell i.
+				Vector deltaWLow = alias(deltaW, Point::Basis(dir));
+				WLow += deltaWLow;
+				WHigh += deltaW;
+
+				Vector faceFluxSph(ghostBox);
+				if (inputs.Riemann_solver_type == 1)
+				{
+					MHD_Riemann_Solvers::Rusanov_Solver(
+					        faceFluxSph, WLow, WHigh, dir, gamma);
+				}
+				else if (inputs.Riemann_solver_type == 2)
+				{
+					MHD_Riemann_Solvers::Roe8Wave_Solver(
+					        faceFluxSph, WLow, WHigh, dir, gamma);
+				}
+				else
+				{
+					PROTO_ASSERT(false,
+					        "Riemann_solver_type must be 1 (Rusanov) or 2 (Roe 8-wave).");
+				}
+				#if TURB == 1
+					MHD_Turbulence::Turb_Flux(faceFluxSph, WLow, WHigh, dir);
+				#endif
+
+				Vector faceFlux(ghostBox), faceFluxScaled(ghostBox);
+				if (dir == 0)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        faceFlux, faceFluxSph, a_State.m_x_sph_fc_1[dit]);
+				}
+				if (dir == 1)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        faceFlux, faceFluxSph, a_State.m_x_sph_fc_2[dit]);
+				}
+				if (dir == 2)
+				{
+					MHD_Mapping::Spherical_to_Cartesian(
+					        faceFlux, faceFluxSph, a_State.m_x_sph_fc_3[dit]);
+				}
+				forallInPlace_p(
+				        Scale_with_A_Ff_calc, faceFluxScaled, faceFlux,
+				        a_State.m_face_area[dit], dir);
+				Vector directionalRhs = divergence[dir](faceFluxScaled);
+				fluxRhs += directionalRhs;
+
+				if (inputs.takedivBstep == 1)
+				{
+					Scalar BFaceScaled(ghostBox);
+					forallInPlace_p(
+					        Scale_with_A_Bf_calc, BFaceScaled, WLow, WHigh,
+					        a_State.m_face_area[dit], dir);
+					Scalar directionalDivB = divergence[dir](BFaceScaled);
+					divBRhs += directionalDivB;
+				}
+
+				#if TURB == 1
+					Scalar VFaceScaled(ghostBox);
+					forallInPlace_p(
+					        Scale_with_A_Vf_calc, VFaceScaled, WLow, WHigh,
+					        a_State.m_face_area[dit], dir);
+					Scalar directionalDivV = divergence[dir](VFaceScaled);
+					divVRhs += directionalDivV;
+				#endif
+			}
+
+			forallInPlace_p(
+			        Scale_with_V_calc, correctorRhs, fluxRhs,
+			        a_State.m_cell_volume[dit]);
+
+			#if TURB == 1
+				Scalar divV(ghostBox);
+				Vector turbulenceSource(ghostBox);
+				forallInPlace_p(
+				        Scale_with_V3_calc, divV, divVRhs,
+				        a_State.m_cell_volume[dit]);
+				MHD_Turbulence::Turb_Source(
+				        turbulenceSource, WPredictorSph, divV);
+				forallInPlace_p(
+				        Add_Sources_calc, correctorRhs, turbulenceSource);
+			#endif
+
+			if (inputs.takedivBstep == 1)
+			{
+				Vector powellSource(ghostBox);
+				forallInPlace_p(
+				        Powell_Sph_2O, powellSource, WPredictorCart, divBRhs,
+				        a_State.m_cell_volume[dit]);
+				forallInPlace_p(Add_Sources_calc, correctorRhs, powellSource);
+				powellSource.copyTo(a_State.m_divB[dit]);
+			}
+
+			correctorRhs.copyTo(finalUpdate.m_DU[dit]);
+		}
+
+		finalUpdate *= a_dt;
+		a_State.increment(finalUpdate);
+		a_State.m_divB_calculated = true;
+		a_State.m_divV_calculated = true;
+		a_State.m_min_dt_calculated = true;
 	}
 }

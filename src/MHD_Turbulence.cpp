@@ -13,6 +13,33 @@ typedef BoxData<double,NUMCOMPS,HOST> Vector;
 /// @brief MHD_Turbulence namespace
 namespace MHD_Turbulence {
 
+	PROTO_KERNEL_START
+	void Turb_Flux_Hancock_calcF(const Point &a_pt,
+	                            Var<double, NUMCOMPS> &a_F,
+	                            Var<double, NUMCOMPS> &a_W,
+	                            const int a_dir)
+	{
+		double rhoU = a_W(iRHO)*a_W(iVX + a_dir);
+		double Z2 = a_W(iZ2);
+		double sigmaC = a_W(iSIGMA);
+		double lambda = a_W(iLAMBDA);
+
+		// MS-FLUKSS TMBreechEtAl2008::primToFlux only supplies the
+		// advective turbulence-variable fluxes during Hancock prediction.
+		a_F(iRHOZ2) = rhoU*Z2;
+		a_F(iRHOZ2SIGMA) = rhoU*Z2*sigmaC;
+		a_F(iRHOLAMBDA) = rhoU*lambda;
+	}
+	PROTO_KERNEL_END(Turb_Flux_Hancock_calcF, Turb_Flux_Hancock_calc)
+
+
+	void Turb_Flux_Hancock(BoxData<double,NUMCOMPS>& a_F,
+	                       BoxData<double,NUMCOMPS>& a_W,
+	                       const int a_dir)
+	{
+		forallInPlace_p(Turb_Flux_Hancock_calc, a_F, a_W, a_dir);
+	}
+
 
     PROTO_KERNEL_START
 	void Turb_Flux_calcF(const Point &a_pt,
@@ -109,9 +136,9 @@ namespace MHD_Turbulence {
                          Var<double, NUMCOMPS> &a_W,
                          Var<double, 1> &a_divV)
     {
-        double smallTM = 1.0e-8;
-        double alphaTM = 0.8;
-        double betaTM  = 0.4;
+        double smallTM = inputs.smallTM;
+        double alphaTM = inputs.alphaTM;
+        double betaTM  = inputs.betaTM;
         double sigmaDTM    = inputs.SigmaD;
 
         double M = 0.5*a_divV(0);// In Tae's old version

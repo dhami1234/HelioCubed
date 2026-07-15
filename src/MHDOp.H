@@ -54,6 +54,10 @@ namespace MHDOp
 			  MHDLevelDataState& a_State,
 			  double& a_min_dt);
 
+	void step_spherical_2O_hancock(MHDLevelDataState& a_State,
+			  double a_time,
+			  double a_dt);
+
 
 	void consToPrimcalc(BoxData<double,NUMCOMPS>& a_W,
 	                    const BoxData<double,NUMCOMPS>& a_U,

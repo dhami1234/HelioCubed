@@ -2,6 +2,8 @@
 #include "MHDLevelDataRK4.H"
 #include "MHD_Initialize.H"
 #include "MHD_EulerStep.H"
+#include "MHD_RK2.H"
+#include "MHD_Hancock.H"
 #include "MHDOp.H"
 #include "MHD_Mapping.H"
 #include "MHD_Output_Writer.H"
@@ -16,6 +18,8 @@
 using namespace std;
 using namespace Proto;
 using namespace MHD_EulerStep;
+using namespace MHD_RK2;
+using namespace MHD_Hancock;
 
 Parsefrominputs inputs;
 
@@ -117,6 +121,11 @@ int main(int argc, char* argv[])
 
 	} else {
 		std::string filename_Checkpoint=inputs.Checkpoint_file_Prefix+std::to_string(inputs.restartStep);
+		std::string checkpoint_path = filename_Checkpoint;
+		if (checkpoint_path.substr(checkpoint_path.find_last_of(".") + 1) != "hdf5") {
+			checkpoint_path += ".hdf5";
+		}
+		MHDReader::requireFileExists(checkpoint_path);
 		LevelBoxData<double,NUMCOMPS> readData(state.m_dbl,Point::Zero()); 
 		h5.readLevel(readData, filename_Checkpoint);
 		for (auto dit : state.m_U){	
@@ -165,6 +174,10 @@ int main(int argc, char* argv[])
 			RK4<MHDLevelDataState,MHDLevelDataRK4Op,MHDLevelDataDX> rk4;
 			// This will be used to take Euler step (Primarily used in convergence tests and debugging)
 			EulerStep<MHDLevelDataState,MHDLevelDataRK4Op,MHDLevelDataDX> eulerstep;
+			// Second-order explicit midpoint Runge--Kutta step
+			RK2<MHDLevelDataState,MHDLevelDataRK4Op,MHDLevelDataDX> rk2;
+			// MUSCL--Hancock predictor-corrector step
+			Hancock hancock;
 			// Both Powell divergence cleaning and viscosity implementation need Euler steps at each state update
 			EulerStep<MHDLevelDataState, MHDLevelDatadivBOp, MHDLevelDataDX> divBstep;
 
@@ -172,15 +185,25 @@ int main(int argc, char* argv[])
 
 			
 			MHD_Pre_Time_Step::Insert_CME(state, k, time/inputs.velocity_scale, dt/inputs.velocity_scale);
-			if (inputs.timeIntegratorType == 1) {
-				eulerstep.advance(time,dt,state);
-			} else {
-				if (inputs.timeIntegratorType == 4){
+			switch (inputs.timeIntegratorType) {
+				case 1:
+					eulerstep.advance(time,dt,state);
+					break;
+				case 2:
+					rk2.advance(time,dt,state);
+					break;
+				case 3:
+					hancock.advance(time,dt,state);
+					break;
+				case 4:
 					rk4.advance(time,dt,state);
-				}
+					break;
+				default:
+					PROTO_ASSERT(false,
+					             "timeIntegratorType must be 1 (Euler), 2 (RK2), 3 (Hancock), or 4 (RK4).");
 			}
 
-			if (inputs.takedivBstep == 1) {
+			if ((inputs.takedivBstep == 1) && (inputs.timeIntegratorType != 3)) {
 				// Take step for divB term
 				PR_TIME("divBstep");
 				divBstep.advance(time,dt,state);

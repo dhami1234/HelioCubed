@@ -26,6 +26,7 @@ num_components = 8
 time = toYearFraction(dt(2022, 1, 1, 0, 0, 0))
 phys_domain = [0.1, 0, 0, 0.1, 6.28319, 3.14159]
 Out_file = "SWQU_Tutorial_SWiG.h5"
+First_frame_out_file = os.path.splitext(Out_file)[0] + "_first_frame.h5"
 step_const = [0, 1, 0]
 
 # Get the directory containing the current Python file
@@ -147,6 +148,25 @@ for i in range(len(files)):
             grp.create_dataset("dtheta", data=dtheta,dtype='float64')
             grp.create_dataset("theta", data=theta,dtype='float64')
             grp.create_dataset("phi", data=phi,dtype='float64')
+
+        # Also write a standalone boundary file containing only the first frame.
+        with h5py.File(First_frame_out_file, "w") as data_file:
+            data_file.create_dataset("data0", data=data_final,dtype='float64')
+            data_file["data0"].attrs["time"] = 0
+            data_file.attrs['domain'] = [dim_siz1,dim_siz2]
+            data_file.attrs['num_components'] = num_components
+            data_file.attrs['num_datasets'] = 1
+            data_file.attrs['time'] = time
+            data_file.attrs['r0'] = r0
+            data_file.attrs['datasets_time'] = [0]
+            grp = data_file.create_group("geometry")
+            grp.attrs['phys_domain'] = phys_domain
+            grp.attrs['step_const'] = step_const
+            grp.create_dataset("dtheta", data=dtheta,dtype='float64')
+            grp.create_dataset("theta", data=theta,dtype='float64')
+            grp.create_dataset("phi", data=phi,dtype='float64')
+
+        print("Wrote first-frame file:", First_frame_out_file)
     if (i!=0):
         with h5py.File(Out_file, "a") as data_file:
             data_file.create_dataset("data"+str(i), data=data_final,dtype='float64')

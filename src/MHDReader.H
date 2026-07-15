@@ -1,6 +1,10 @@
 #include "Proto.H"
 #include "hdf5.h"
 #include "MHD_Input_Parsing.H"
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <sstream>
 extern Parsefrominputs inputs;
 
 using namespace Proto;
@@ -9,6 +13,58 @@ class MHDReader
 {
     public:
     inline MHDReader(){}
+
+    inline static std::string resolvedPath(const std::string& a_filename)
+    {
+        std::error_code error;
+        auto absolutePath = std::filesystem::absolute(a_filename, error);
+        return error ? a_filename : absolutePath.lexically_normal().string();
+    }
+
+    inline static void abortFileError(
+            const std::string& a_filename,
+            const std::string& a_reason)
+    {
+        int rank = 0;
+#ifdef PR_MPI
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#endif
+        std::ostringstream message;
+        message << "\nHelioCubed ERROR [MPI rank " << rank << "]: "
+                << a_reason << "\n"
+                << "  Requested HDF5 file: " << a_filename << "\n"
+                << "  Resolved HDF5 path:  " << resolvedPath(a_filename)
+                << "\n";
+        std::fputs(message.str().c_str(), stderr);
+        std::fflush(stderr);
+#ifdef PR_MPI
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+        std::abort();
+    }
+
+    inline static void requireFileExists(const std::string& a_filename)
+    {
+        std::error_code error;
+        bool exists = std::filesystem::exists(a_filename, error);
+        if (error || !exists)
+        {
+            std::string reason = "HDF5 input file does not exist or is inaccessible.";
+            if (error)
+            {
+                reason += " Filesystem error: " + error.message();
+            }
+            abortFileError(a_filename, reason);
+        }
+    }
+
+    inline static void requireFileOpened(hid_t a_file, const std::string& a_filename)
+    {
+        if (a_file < 0)
+        {
+            abortFileError(a_filename, "HDF5 was unable to open the input file.");
+        }
+    }
    
      
     template<typename... Args>
@@ -22,6 +78,8 @@ class MHDReader
         sprintf(fname, a_filename.c_str(), a_params...);
 #pragma GCC diagnostic pop
 
+        requireFileExists(fname);
+
 #ifdef PR_MPI
         auto mpi_comm = MPI_COMM_WORLD;
         auto mpi_info = MPI_INFO_NULL;
@@ -33,6 +91,7 @@ class MHDReader
 #else
         *a_file = H5Fopen(fname, H5F_ACC_RDONLY, H5P_DEFAULT);
 #endif
+        requireFileOpened(*a_file, fname);
     }
    
     template<unsigned int C>
@@ -97,6 +156,8 @@ class MHDReader
         sprintf(fname, a_filename.c_str(), a_params...);
 #pragma GCC diagnostic pop
 
+        requireFileExists(fname);
+
 #ifdef PR_MPI
         auto mpi_comm = MPI_COMM_WORLD;
         auto mpi_info = MPI_INFO_NULL;
@@ -108,6 +169,7 @@ class MHDReader
 #else
         auto file = H5Fopen(fname, H5F_ACC_RDONLY, H5P_DEFAULT);
 #endif
+        requireFileOpened(file, fname);
         hid_t H5T_T;
         HDF5Handler::getH5DataType<T>(&H5T_T);
 
@@ -127,7 +189,20 @@ class MHDReader
                 "MHDReader::readLevel | Error: Incorrect number of components. %i != %i",
                 C, numComps);
 
-        int coarse_ratio = domainSize[0]/inputs.domainSizez;
+        PROTO_ASSERT(inputs.domainSizez > 0 && inputs.domainSizey > 0,
+                "MHDReader::readData | Error: theta and phi domain sizes must be positive.");
+        PROTO_ASSERT(domainSize[0] % inputs.domainSizez == 0,
+                "MHDReader::readData | Error: HDF5 phi size (%i) is not divisible by domainSizez (%i).",
+                domainSize[0], inputs.domainSizez);
+        PROTO_ASSERT(domainSize[1] % inputs.domainSizey == 0,
+                "MHDReader::readData | Error: HDF5 theta size (%i) is not divisible by domainSizey (%i).",
+                domainSize[1], inputs.domainSizey);
+
+        int coarse_ratio_phi = domainSize[0]/inputs.domainSizez;
+        int coarse_ratio_theta = domainSize[1]/inputs.domainSizey;
+        int coarse_phi_size = domainSize[0]/coarse_ratio_phi;
+        int coarse_theta_size = domainSize[1]/coarse_ratio_theta;
+        int coarse_frame_size = coarse_phi_size*coarse_theta_size;
 
         int numDatasets;
         att_domain = H5Aopen(file, "num_datasets", H5P_DEFAULT);
@@ -145,7 +220,7 @@ class MHDReader
         {
             ds_data = H5Dopen2(file, ("/data" + std::to_string(ii)).c_str(), H5P_DEFAULT);
             // DEFINE BOX DATA
-            Box domainBox(Point::Zeros(),Point(0, domainSize[1]/coarse_ratio-1, 2*domainSize[0]/coarse_ratio-1));
+            Box domainBox(Point::Zeros(),Point(0, coarse_theta_size-1, 2*coarse_phi_size-1));
             a_data[ii].define(domainBox);
             
             Box domainBox2(Point::Zeros(),Point(0, domainSize[0]-1, domainSize[1]-1));
@@ -157,18 +232,19 @@ class MHDReader
             //     assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data.data()) >= 0);
                 assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data2.data()) >= 0);
                 // This is needed to make transpose. h5 file is (phi, theta). We need (theta, phi).
-                BoxData<double,C> a_data3 = Stencil<double>::AvgDown(Point(1, coarse_ratio, coarse_ratio))(a_data2);
+                BoxData<double,C> a_data3 = Stencil<double>::AvgDown(
+                        Point(1, coarse_ratio_phi, coarse_ratio_theta))(a_data2);
                 for (int c = 0; c < numComps; c++){  
-                    for (int i = 0; i < domainSize[0]/coarse_ratio; i++ )
+                    for (int i = 0; i < coarse_phi_size; i++ )
                     {
-                        for (int j = 0; j < domainSize[1]/coarse_ratio; j++ )
+                        for (int j = 0; j < coarse_theta_size; j++ )
                         {
                             // Index in the final matrix.
-                            int index1 = 2*c*domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio + i*domainSize[1]/coarse_ratio+j;
+                            int index1 = 2*c*coarse_frame_size + i*coarse_theta_size+j;
                             // Index in the original matrix.
-                            int index2 = c*domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio + (j*domainSize[0]/coarse_ratio+i);
+                            int index2 = c*coarse_frame_size + (j*coarse_phi_size+i);
                             a_data[ii].data()[index1] = a_data3.data()[index2];
-                            a_data[ii].data()[index1+domainSize[0]/coarse_ratio*domainSize[1]/coarse_ratio] = a_data[ii].data()[index1];
+                            a_data[ii].data()[index1+coarse_frame_size] = a_data[ii].data()[index1];
                         }
                     }
                 }
