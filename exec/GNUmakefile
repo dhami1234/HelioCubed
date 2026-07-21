@@ -3,10 +3,6 @@ VARS_OLD := $(.VARIABLES)
 #CXX=clang++
 DEPXX=mpicxx
 CXX=mpicxx
-ifeq ($(shell command -v g++-14 >/dev/null 2>&1 && echo yes),yes)
-OMPI_CXX ?= g++-14
-export OMPI_CXX
-endif
 DIM=3
 TURB=0
 USE_HDF5=TRUE
