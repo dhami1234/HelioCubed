@@ -27,7 +27,7 @@ def read_maps(path):
         br = f["br"][:] if "br" in f else None
         phi = f["phi"][:]
         theta = f["theta"][:]
-        r = f["r"][:]
+        r = f["r"][:] if "r" in f else None
 
     return vr, rho, p, br, phi, theta, r
 
@@ -38,7 +38,7 @@ def code_units_to_cgs(vr, rho, p, br, r):
     physical_p = p * 0.3875717           # dyn / cm^2
     physical_p = physical_p * 1e12       # convert to picodyn / cm^2
     physical_br = br * 1e6 if br is not None else None  # G -> microG
-    physical_r = r * 6.96 * 1e10         # cm
+    physical_r = r * 6.96 * 1e10 if r is not None else None  # cm
     return physical_vr, physical_rho, physical_p, physical_br, physical_r
 
 def R_omega_cms(r0_au, rotation_period_days=25.38):
@@ -220,7 +220,8 @@ def save_frame_png(png_output_dir, data_rho, data_Vr, data_P, data_Br, data_Bp):
     plt.close()
 
 def convert_tree(root_directory, save_png=True):
-    files = sorted(glob(os.path.join(root_directory, "**", "vr_rho_p_br_r0.h5"), recursive=True))
+    # files = sorted(glob(os.path.join(root_directory, "**", "vr_rho_p_br_r0.h5"), recursive=True))
+    files = sorted(glob(os.path.join(root_directory, "**", "bc_*_mas_mas_std_0101.h5"), recursive=True))
     print("Number of br boundary files:", len(files))
     results = []
 
@@ -234,7 +235,7 @@ def convert_tree(root_directory, save_png=True):
 
 if __name__ == "__main__":
     save_png = True
-    batch_root = '/Users/talwindersingh/Library/CloudStorage/Dropbox-GSUDropbox/Talwinder Singh/Reza_project'
+    batch_root = '/Users/talwindersingh/Library/CloudStorage/Dropbox-GSUDropbox/Talwinder Singh/Reza_project/Sukirti'
     results = convert_tree(batch_root, save_png=save_png)
     if results:
         last = results[-1]
