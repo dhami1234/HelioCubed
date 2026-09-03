@@ -18,6 +18,7 @@
 -P_floor_cadence                 50
 -data_file_prefix                data
 -checkpoint_file_prefix          checkpoint
+-output_divB                     0
 -gamma                           1.6666666666666666666667
 -temporal_order                  1
 -divergence_cleaning             1

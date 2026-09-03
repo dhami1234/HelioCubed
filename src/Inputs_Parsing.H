@@ -77,6 +77,7 @@ private:
         }
     }
     int scale_data_with_r = 0; // 0: No scaling, 1: Scale with r
+    int output_divB = 0; // 0: Do not write div(B), 1: Append div(B) to data output
     int max_checkpoint_files = 1;
     string restart_file;
     double gamma = 1.66667; // Ratio of specific heats
@@ -158,6 +159,7 @@ public:
     static bool get_slice_Z() { return getInstance().slice_Z; }
     static bool get_slice_R() { return getInstance().slice_R; }
     static int get_scale_data_with_r() {return getInstance().scale_data_with_r;}
+    static int get_output_divB() {return getInstance().output_divB;}
     static int get_max_checkpoint_files() {return getInstance().max_checkpoint_files;}
     static string get_restart_file() {return getInstance().restart_file;}
     static double get_gamma() {return getInstance().gamma;}
@@ -223,6 +225,7 @@ public:
         args.add("checkpoint_file_prefix", checkpoint_file_prefix);
         args.add("slices", slices_raw);
         args.add("scale_data_with_r", scale_data_with_r);
+        args.add("output_divB", output_divB);
         args.add("max_checkpoint_files", max_checkpoint_files);
         args.add("restart_file", restart_file);
         args.add("gamma", gamma);
@@ -311,6 +314,7 @@ public:
         pout(0) << "checkpoint_file_prefix: " << checkpoint_file_prefix << endl;
         pout(0) << "Slices: " << slices_raw << endl;
         pout(0) << "scale_data_with_r: " << scale_data_with_r << endl;
+        pout(0) << "output_divB: " << output_divB << endl;
         pout(0) << "max_checkpoint_files: " << max_checkpoint_files << endl;
         pout(0) << "restart_file: " << restart_file << endl;
         pout(0) << "gamma: " << gamma << endl;

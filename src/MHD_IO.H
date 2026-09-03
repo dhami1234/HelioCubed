@@ -1158,7 +1158,63 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 #endif
   }
   
-  if (write_data){
+  if (write_data && ParseInputs::get_output_divB() == 1){
+    // Reconstruct the current spherical conserved state, including the same
+    // inter-block and radial ghost-cell treatment used by the evolution
+    // operator, before evaluating its discrete div(B).
+    MBLevelBoxData<double, NUMCOMPS, HOST> USphDivB(layout, OP::ghost());
+    a_JU.copyTo(USphDivB);
+    CubedSphereShell::consToSphInterpEuler(USphDivB,a_iop,dVolrLev,4);
+
+    int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
+    int thetaCoord = (rCoord + 1) % DIM;
+    int phiCoord = (rCoord + 2) % DIM;
+    MBLevelBoxData<double, NUMCOMPS, HOST> dstData(
+        layout,
+        Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
+                             + NGHOST*Point::Basis(phiCoord));
+    dstData.setVal(0.0);
+    if (ParseInputs::get_init_condition_type() == 3)
+    {
+      BC_global.BoxData_to_BC<double,HOST>(dstData,map,time);
+    }
+
+    MBLevelBoxData<double, 1, HOST> divB(layout, Point::Zeros());
+    for (auto dit : layout)
+    {
+      unsigned int block = layout.block(dit);
+      Box blockBox = layout.getBlock(block).domain().box();
+      eulerOp[dit].PreStagePatch(
+          USphDivB[dit],dstData[dit],dVolrLev[dit],blockBox,time);
+      eulerOp[dit].computeDivB(divB[dit],USphDivB[dit]);
+    }
+
+    // Keep div(B) in physical cgs units (G/cm); scale_data_with_r only
+    // changes the presentation units of the primitive MHD fields.
+    MBLevelBoxData<double, NUMCOMPS+1, HOST> W_sph_divB_out(
+        layout,Point::Zeros());
+    for (auto dit : layout)
+    {
+      forallInPlace([ ] PROTO_LAMBDA
+          (Var<double,NUMCOMPS+1,HOST>& a_output,
+           const Var<double,NUMCOMPS,HOST>& a_W,
+           const Var<double,1,HOST>& a_divB)
+          {
+            for (int comp = 0; comp < NUMCOMPS; comp++)
+            {
+              a_output(comp) = a_W(comp);
+            }
+            a_output(NUMCOMPS) = a_divB(0);
+          },W_sph_divB_out[dit],W_sph_out[dit],divB[dit]);
+    }
+
+    std::string output_file = ParseInputs::get_data_file_prefix() + "." + std::to_string(iter);
+    h5.writeMBLevel(
+        {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp", "divB"},
+        map,W_sph_divB_out,output_file);
+    pout(0) << "Data file with divB written at iteration " << iter << endl;
+  }
+  else if (write_data){
     std::string output_file = ParseInputs::get_data_file_prefix() + "." + std::to_string(iter); 
     h5.writeMBLevel({"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, map, W_sph_out, output_file);
     pout(0) << "Data file written at iteration " << iter << endl;

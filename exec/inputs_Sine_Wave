@@ -24,6 +24,7 @@
 -checkpoint_file_prefix          checkpoint
 -slices                          X Y Z R
 -scale_data_with_r               1
+-output_divB                     0
 -max_checkpoint_files            3
 #-restart_file                    checkpoint_1000.hdf5
 -gamma                           1.6666666666666666666667

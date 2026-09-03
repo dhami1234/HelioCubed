@@ -541,8 +541,8 @@ public:
   // End Viscosity.
 
   // DivB cleaning starts here.
-  // Calculate -div(B) here.
-  inline void DivBPowell1(State& a_Rhs,
+  // Accumulate -J*div(B), where J is the cell mapping Jacobian.
+  inline void DivBPowell1(BoxData<T,1,MEM>& a_minusJDivB,
                         const State& a_WFace,
                         const BoxData<T,1,MEM>& a_deta,
                         const BoxData<T,1,MEM>& a_adjDrDir,
@@ -551,9 +551,13 @@ public:
   
   // Multiply other Powell terms to get final RHS.
   inline void DivBPowell2(State& a_Rhs,
-                          State& a_Brhs,
+                        const BoxData<T,1,MEM>& a_minusJDivB,
                         const State& a_W,
                         const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const;
+
+  // Compute physical div(B) from the same discrete operator used by Powell cleaning.
+  inline void computeDivB(BoxData<T,1,MEM>& a_divB,
+                          const State& a_USph) const;
 
   // End DivB cleaning.
 

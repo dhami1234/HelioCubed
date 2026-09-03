@@ -5,8 +5,8 @@
 -thickness                       45
 -boxSize_nonrad                  15
 -boxSize_rad                     45
--max_iter                        1000
--max_time                        3600.0
+-max_iter                        100000
+-max_time                        360000.0
 -CFL                             0.5
 -limiter                         1
 -spatial_operator                1
@@ -14,16 +14,17 @@
 -Berta_detector_type             0
 -Berta_fallback_type             0
 -strength                        100.
--write_cadence                   1000
--slice_cadence                   2000
--write_time_cadence              1800
--slice_time_cadence              1800
+-write_cadence                   100000
+-slice_cadence                   200000
+-write_time_cadence              10800
+-slice_time_cadence              10800
 -checkpoint_cadence              100
 -P_floor_cadence                 5000000
 -data_file_prefix                data
 -checkpoint_file_prefix          checkpoint
 #-slices                          X Y Z R
 -scale_data_with_r               1
+-output_divB                     1
 -max_checkpoint_files            3
 #-restart_file                    checkpoint_1000.hdf5
 -gamma                           1.6666666666666666666667
