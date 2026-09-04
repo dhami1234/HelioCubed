@@ -81,6 +81,7 @@ private:
     int temporal_order = 4; // Temporal order of accuracy
     int divergence_cleaning = 1; // 0: No divergence cleaning, 1: Divergence cleaning
     int linear_viscosity = 1; // 0: No linear viscosity, 1: Linear viscosity
+    int scale_viscosity_with_r = 1; // 0: historical scaling, 1: radius-scaled viscosity
     int boundary_reflux = 1; // 0: don't reflux at block boundaries, 1: reflux
     int radial_refinement = 0; // 0: refine in all directions by 2 for convergence studies;
                            // 1 refine only in radial direction.
@@ -163,6 +164,7 @@ public:
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
     static int get_linear_viscosity() {return getInstance().linear_viscosity;}
+    static int get_scale_viscosity_with_r() {return getInstance().scale_viscosity_with_r;}
     static int get_boundary_reflux() {return getInstance().boundary_reflux;}
     static int get_radial_refinement() {return getInstance().radial_refinement;}
     static int get_MBInterp_define() {return getInstance().MBInterp_define;}
@@ -229,6 +231,7 @@ public:
         args.add("temporal_order", temporal_order);
         args.add("divergence_cleaning", divergence_cleaning);
         args.add("linear_viscosity", linear_viscosity);
+        args.add("scale_viscosity_with_r", scale_viscosity_with_r);
         args.add("boundary_reflux", boundary_reflux);
         args.add("radial_refinement", radial_refinement);
         args.add("MBInterp_define", MBInterp_define);
@@ -318,6 +321,7 @@ public:
         pout(0) << "temporal_order: " << temporal_order << endl;
         pout(0) << "divergence_cleaning: " << divergence_cleaning << endl;
         pout(0) << "linear_viscosity: " << linear_viscosity << endl;
+        pout(0) << "scale_viscosity_with_r: " << scale_viscosity_with_r << endl;
         pout(0) << "boundary_reflux: " << boundary_reflux << endl;
         pout(0) << "radial_refinement: " << radial_refinement << endl;
         pout(0) << "MBInterp_define: " << MBInterp_define << endl;

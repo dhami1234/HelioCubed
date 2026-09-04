@@ -8,7 +8,7 @@
 -domainSize                      30
 -thickness                       60
 -boxSize_nonrad                  30
--boxSize_rad                     60
+-boxSize_rad                     20
 -max_iter                        100
 -max_time                        3600000.0
 -CFL                             0.5
@@ -34,6 +34,9 @@
 -temporal_order                  4
 -divergence_cleaning             1
 -linear_viscosity                1
+# 0 uses the historical radius-independent viscosity scaling, which is
+# recommended for radial-symmetry tests; 1 enables radius-scaled viscosity.
+-scale_viscosity_with_r          0
 -boundary_reflux                 1
 -radial_refinement               0
 -MBInterp_define                 1

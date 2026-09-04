@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
 
-# Run the four idealized HelioCubed test problems and plot their z=0 slices.
+# Run selected idealized HelioCubed test problems and plot their z=0 slices.
 #
 # Usage:
 #   ./scripts/run_test_problems.sh [results_directory]
 #
-# Defaults:
+# Defaults (set in USER CONFIGURATION below):
 #   - Runs init_condition_type 0, 1, 5, and 6 sequentially.
-#   - Uses 6 MPI processes, 100 iterations, and writes z=0 slices every
+#   - Uses 18 MPI processes, 100 iterations, and writes z=0 slices every
 #     10 iterations (including the initial and final states).
 #   - Writes each case into its own directory under ./Test_results.
+#   - Deletes an existing result directory for each selected case before
+#     starting it, so stale files cannot be mixed into the new run.
 #   - Plots density, velocity, pressure, magnetic field, and derived
 #     temperature in raw solver/CGS units under each case's plots_z0_raw/.
 #
 # Resolution:
-#   The script does not set the mesh resolution. Every case inherits these
-#   values from exec/inputs_Test_Problems:
-#
-#     domainSize       cells in each angular direction on every cubed-sphere face
-#     thickness        cells in the radial direction
-#     boxSize_nonrad   angular cells per computational/MPI box
-#     boxSize_rad      radial cells per computational/MPI box
-#
 #   The approximate cell count is:
 #
 #     6 * domainSize * domainSize * thickness
@@ -31,17 +25,47 @@
 #   NPROCS changes parallelism only; it does not change the mesh resolution.
 #
 # Useful overrides:
-#   NPROCS=8 PLOT_WORKERS=4 ./scripts/run_test_problems.sh
 #   PYTHON_BIN=/path/to/python ./scripts/run_test_problems.sh
 #   HELIOCUBED_EXE=/path/to/exe ./scripts/run_test_problems.sh /path/to/results
 #   HELIOCUBED_TEST_INPUT=/path/to/inputs ./scripts/run_test_problems.sh
 #
-# The selected Python must provide NumPy and Matplotlib. Existing result
-# directories are reused: generated inputs, logs, and matching output files
-# are overwritten, but unrelated or stale files are not deleted automatically.
-# The script stops immediately if a simulation or plotting step fails.
+# The selected Python must provide NumPy and Matplotlib. For every selected
+# test, its entire old result directory (including data, logs, and plots) is
+# permanently removed immediately before the new run. Unselected test folders
+# are left untouched. The script stops if a simulation or plotting step fails.
 
 set -Eeuo pipefail
+
+# =============================================================================
+# USER CONFIGURATION -- edit these values before running the script
+# =============================================================================
+
+# Tests to run. Use one or more IDs, for example TEST_CASES=(5) or (0 6).
+#   0 = smooth spherically symmetric wave
+#   1 = non-radial spherical wave
+#   5 = symmetric strong shock
+#   6 = symmetric strong shock with constant Cartesian magnetic field
+TEST_CASES=(1)
+
+# Mesh resolution. DOMAIN_SIZE is the angular resolution on each face;
+# THICKNESS is the radial resolution.
+DOMAIN_SIZE=60
+THICKNESS=120
+
+# Computational/MPI box dimensions. These must divide the corresponding mesh
+# dimensions exactly.
+BOX_SIZE_NONRAD=60
+BOX_SIZE_RAD=40
+
+# Runtime and output settings.
+NPROCS=18
+MAX_ITER=1000
+SLICE_CADENCE=100
+PLOT_WORKERS=8
+
+# =============================================================================
+# END USER CONFIGURATION
+# =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -49,15 +73,79 @@ EXECUTABLE="${HELIOCUBED_EXE:-${ROOT_DIR}/exec/cubedSphereTest.exe}"
 BASE_INPUT="${HELIOCUBED_TEST_INPUT:-${ROOT_DIR}/exec/inputs_Test_Problems}"
 RESULTS_DIR="${1:-${ROOT_DIR}/Test_results}"
 MPIEXEC="${MPIEXEC:-mpirun}"
-NPROCS="${NPROCS:-6}"
-PLOT_WORKERS="${PLOT_WORKERS:-8}"
 PLOTTER="${SCRIPT_DIR}/Plot_Test_Slices.py"
 
-if [[ -n "${PYTHON_BIN:-}" ]]; then
-    PYTHON_BIN="${PYTHON_BIN}"
-else
+case_name_for_id() {
+    case "$1" in
+        0) printf '%s\n' "smooth_spherical_wave" ;;
+        1) printf '%s\n' "non_radial_spherical_wave" ;;
+        5) printf '%s\n' "symmetric_strong_shock" ;;
+        6) printf '%s\n' "strong_shock_constant_B" ;;
+        *) return 1 ;;
+    esac
+}
+
+require_positive_integer() {
+    local variable_name="$1"
+    local value="$2"
+
+    if ! [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: ${variable_name} must be a positive integer (got '${value}')." >&2
+        exit 1
+    fi
+}
+
+if [[ "${#TEST_CASES[@]}" -eq 0 ]]; then
+    echo "Error: TEST_CASES must contain at least one test ID." >&2
+    exit 1
+fi
+
+CASE_IDS=("${TEST_CASES[@]}")
+CASE_NAMES=()
+for case_id in "${CASE_IDS[@]}"; do
+    if ! case_name="$(case_name_for_id "${case_id}")"; then
+        echo "Error: unsupported test ID '${case_id}' in TEST_CASES; choose from 0, 1, 5, and 6." >&2
+        exit 1
+    fi
+    CASE_NAMES+=("${case_name}")
+done
+TOTAL_CASES="${#CASE_IDS[@]}"
+
+require_positive_integer "DOMAIN_SIZE" "${DOMAIN_SIZE}"
+require_positive_integer "THICKNESS" "${THICKNESS}"
+require_positive_integer "BOX_SIZE_NONRAD" "${BOX_SIZE_NONRAD}"
+require_positive_integer "BOX_SIZE_RAD" "${BOX_SIZE_RAD}"
+require_positive_integer "NPROCS" "${NPROCS}"
+require_positive_integer "MAX_ITER" "${MAX_ITER}"
+require_positive_integer "SLICE_CADENCE" "${SLICE_CADENCE}"
+require_positive_integer "PLOT_WORKERS" "${PLOT_WORKERS}"
+
+if (( DOMAIN_SIZE % BOX_SIZE_NONRAD != 0 )); then
+    echo "Error: BOX_SIZE_NONRAD (${BOX_SIZE_NONRAD}) must divide DOMAIN_SIZE (${DOMAIN_SIZE})." >&2
+    exit 1
+fi
+if (( THICKNESS % BOX_SIZE_RAD != 0 )); then
+    echo "Error: BOX_SIZE_RAD (${BOX_SIZE_RAD}) must divide THICKNESS (${THICKNESS})." >&2
+    exit 1
+fi
+
+if [[ -z "${PYTHON_BIN:-}" ]]; then
     PYTHON_BIN=""
-    for python_candidate in python3 /usr/local/bin/python3.10; do
+    python_candidates=(
+        "${ROOT_DIR}/.venv/bin/python"
+        python3
+        python
+        /opt/homebrew/bin/python3
+        /usr/local/bin/python3
+    )
+    if [[ -n "${CONDA_PREFIX:-}" ]]; then
+        python_candidates=("${CONDA_PREFIX}/bin/python" "${python_candidates[@]}")
+    fi
+    if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+        python_candidates=("${VIRTUAL_ENV}/bin/python" "${python_candidates[@]}")
+    fi
+
+    for python_candidate in "${python_candidates[@]}"; do
         if command -v "${python_candidate}" >/dev/null 2>&1 \
             && "${python_candidate}" -c 'import matplotlib, numpy' >/dev/null 2>&1; then
             PYTHON_BIN="${python_candidate}"
@@ -85,33 +173,24 @@ if ! command -v "${MPIEXEC}" >/dev/null 2>&1; then
 fi
 if [[ -z "${PYTHON_BIN}" ]] || ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
     echo "Error: no Python interpreter with NumPy and Matplotlib was found." >&2
-    echo "Set PYTHON_BIN to the interpreter used for scripts/Plot_Slices.py." >&2
+    echo "Create the project plotting environment with:" >&2
+    echo "  python3 -m venv \"${ROOT_DIR}/.venv\"" >&2
+    echo "  \"${ROOT_DIR}/.venv/bin/python\" -m pip install -r \"${SCRIPT_DIR}/requirements-plotting.txt\"" >&2
+    echo "Or set PYTHON_BIN to an interpreter that provides those packages." >&2
     exit 1
 fi
 if ! "${PYTHON_BIN}" -c 'import matplotlib, numpy' >/dev/null 2>&1; then
     echo "Error: ${PYTHON_BIN} does not provide NumPy and Matplotlib." >&2
-    echo "Set PYTHON_BIN to the interpreter used for scripts/Plot_Slices.py." >&2
+    echo "Install them with:" >&2
+    echo "  \"${PYTHON_BIN}\" -m pip install -r \"${SCRIPT_DIR}/requirements-plotting.txt\"" >&2
     exit 1
 fi
-if ! [[ "${NPROCS}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: NPROCS must be a positive integer (got '${NPROCS}')." >&2
-    exit 1
-fi
-if ! [[ "${PLOT_WORKERS}" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Error: PLOT_WORKERS must be a positive integer (got '${PLOT_WORKERS}')." >&2
-    exit 1
-fi
-
 mkdir -p "${RESULTS_DIR}"
 
-CASE_IDS=(0 1 5 6)
-CASE_NAMES=(
-    smooth_spherical_wave
-    non_radial_spherical_wave
-    symmetric_strong_shock
-    strong_shock_constant_B
-)
-TOTAL_CASES="${#CASE_IDS[@]}"
+echo "Selected tests: ${TEST_CASES[*]}"
+echo "Mesh: domainSize=${DOMAIN_SIZE}, thickness=${THICKNESS}"
+echo "Boxes: boxSize_nonrad=${BOX_SIZE_NONRAD}, boxSize_rad=${BOX_SIZE_RAD}"
+echo "MPI processes: ${NPROCS}"
 
 stream_simulation_progress() {
     local case_number="$1"
@@ -126,10 +205,13 @@ stream_simulation_progress() {
         if [[ "${line}" =~ iter[[:space:]]*=[[:space:]]*([0-9]+) ]]; then
             iteration="${BASH_REMATCH[1]}"
             if [[ "${iteration}" != "${last_iteration}" ]]; then
-                percent=$((iteration * 100 / 100))
-                printf '[case %d/%d: %s] simulation %d/100 (%d%%)\n' \
+                percent=$((iteration * 100 / MAX_ITER))
+                if (( percent > 100 )); then
+                    percent=100
+                fi
+                printf '[case %d/%d: %s] simulation %d/%d (%d%%)\n' \
                     "${case_number}" "${TOTAL_CASES}" "${case_name}" \
-                    "${iteration}" "${percent}"
+                    "${iteration}" "${MAX_ITER}" "${percent}"
                 last_iteration="${iteration}"
             fi
         fi
@@ -145,16 +227,26 @@ make_case_input() {
         -v case_id="${case_id}" \
         -v data_prefix="${case_name}" \
         -v checkpoint_prefix="${case_name}_checkpoint" \
+        -v domain_size="${DOMAIN_SIZE}" \
+        -v thickness="${THICKNESS}" \
+        -v box_size_nonrad="${BOX_SIZE_NONRAD}" \
+        -v box_size_rad="${BOX_SIZE_RAD}" \
+        -v max_iter="${MAX_ITER}" \
+        -v slice_cadence="${SLICE_CADENCE}" \
         '
         BEGIN { found_slices = 0 }
         $1 == "-init_condition_type"  { $2 = case_id }
-        $1 == "-max_iter"             { $2 = 100 }
-        $1 == "-slice_cadence"        { $2 = 10 }
+        $1 == "-domainSize"           { $2 = domain_size }
+        $1 == "-thickness"            { $2 = thickness }
+        $1 == "-boxSize_nonrad"       { $2 = box_size_nonrad }
+        $1 == "-boxSize_rad"          { $2 = box_size_rad }
+        $1 == "-max_iter"             { $2 = max_iter }
+        $1 == "-slice_cadence"        { $2 = slice_cadence }
         $1 == "-slice_time_cadence"   { $2 = "1.0e30" }
         $1 == "-slices"               { $2 = "Z"; found_slices = 1 }
-        $1 == "-write_cadence"        { $2 = 100 }
+        $1 == "-write_cadence"        { $2 = max_iter }
         $1 == "-write_time_cadence"   { $2 = "1.0e30" }
-        $1 == "-checkpoint_cadence"   { $2 = 100 }
+        $1 == "-checkpoint_cadence"   { $2 = max_iter }
         $1 == "-data_file_prefix"     { $2 = data_prefix }
         $1 == "-checkpoint_file_prefix" { $2 = checkpoint_prefix }
         { print }
@@ -162,6 +254,27 @@ make_case_input() {
             if (!found_slices) print "-slices Z"
         }
         ' "${BASE_INPUT}" > "${output_file}"
+}
+
+clean_case_directory() {
+    local case_dir="$1"
+    local case_name="$2"
+    local expected_case_dir="${RESULTS_DIR}/${case_name}"
+
+    # case_name comes from the fixed mapping above. Keep this guard close to
+    # the recursive deletion so a future path change cannot broaden its scope.
+    if [[ -z "${case_dir}" || "${case_dir}" == "/" \
+        || "${case_dir}" == "${RESULTS_DIR}" \
+        || "${case_dir}" != "${expected_case_dir}" ]]; then
+        echo "Error: refusing to clean unsafe case directory: '${case_dir}'." >&2
+        exit 1
+    fi
+
+    if [[ -e "${case_dir}" || -L "${case_dir}" ]]; then
+        echo "Cleaning previous results: ${case_dir}"
+        rm -rf -- "${case_dir}"
+    fi
+    mkdir -p "${case_dir}"
 }
 
 for index in "${!CASE_IDS[@]}"; do
@@ -172,7 +285,7 @@ for index in "${!CASE_IDS[@]}"; do
     case_input="${case_dir}/inputs"
     plot_dir="${case_dir}/plots_z0_raw"
 
-    mkdir -p "${case_dir}"
+    clean_case_directory "${case_dir}" "${case_name}"
     make_case_input "${case_id}" "${case_name}" "${case_input}"
 
     echo
@@ -196,5 +309,5 @@ for index in "${!CASE_IDS[@]}"; do
 done
 
 echo
-echo "All four test problems completed."
+echo "All ${TOTAL_CASES} selected test problem(s) completed."
 echo "Results and raw z=0 plots are under: ${RESULTS_DIR}"

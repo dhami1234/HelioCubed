@@ -789,10 +789,10 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
     }
   speedMax.reduce(a_dtInv);
   visccoef.reduce(a_dtInv);
-  if (speedMax.absMax() < visccoef.absMax())
-    {
-      cout << "block = " << block << ", box = " << bx << ", hyperbolic speedmax = " << speedMax.absMax() << ", viscous speedmax = " << visccoef.absMax() << endl;
-    }
+  // if (speedMax.absMax() < visccoef.absMax())
+  //   {
+  //     cout << "block = " << block << ", box = " << bx << ", hyperbolic speedmax = " << speedMax.absMax() << ", viscous speedmax = " << visccoef.absMax() << endl;
+  //   }
 }
 
 // ====================================================================================

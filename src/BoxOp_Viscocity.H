@@ -77,6 +77,8 @@ viscFlux(
       BoxData<T,NUMCOMPS,MEM> NLViscFlux;
       BoxData<T,NUMCOMPS,MEM> rhsIncr(bxface);
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
+      const bool scaleViscosityWithR =
+        (ParseInputs::get_scale_viscosity_with_r() == 1);
 
       T D_rScale;
       double r0 = CUBED_SPHERE_SHELL_R0;
@@ -102,13 +104,13 @@ viscFlux(
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> linvisccoef(bxface);
             LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
-            if (dir == 0)
+            if (scaleViscosityWithR && dir == 0)
               {
                 auto Drslice = slice(Dr,0);
                 linvisccoef *= Drslice;
                 linvisccoef /= D_rScale;
               }
-            else
+            else if (scaleViscosityWithR)
               {
                 linvisccoef *= radius;
                 linvisccoef /= D_rScale;
@@ -140,13 +142,13 @@ viscFlux(
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> nlvisccoef(bxface);
           NonLinearViscCoef(nlvisccoef,W,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
-          if (dir == 0)
+          if (scaleViscosityWithR && dir == 0)
               {
                 auto Drslice = slice(Dr,0);
                 nlvisccoef *= Drslice;
                 nlvisccoef /= D_rScale;
               }
-            else
+            else if (scaleViscosityWithR)
               {
                 nlvisccoef *= radius;
                 nlvisccoef /= D_rScale;
@@ -260,6 +262,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                                                   uint a_dir) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::LinearViscCoef()");
+  const int scaleViscosityWithR =
+    ParseInputs::get_scale_viscosity_with_r();
   forallInPlace([ ] PROTO_LAMBDA
                 (Var<T,1,MEM>& a_linfluxcoef,
                  const Var<T,NUMCOMPS>& a_wface,
@@ -267,7 +271,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                  const Var<T,DIM,MEM,DIM>& a_Amatrix,
                  const Var<T,1,MEM>& a_deta,
                  T a_gamma,
-                 int a_d)
+                 int a_d,
+                 int a_scaleViscosityWithR)
                 {        
                   double rho = a_wface(iRHO);
                   double w_d = a_wface(iVX+a_d);
@@ -310,10 +315,25 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                       adjA_d_mag += a_ntrow(dir)*a_ntrow(dir);
                     }
                   adjA_d_mag = sqrt(adjA_d_mag);
-                  a_linfluxcoef(0) = abs(w_d) + af*adjA_d_mag/a_deta(0);
-                  //a_linfluxcoef(0) = abs(w_d) + af*A_d_mag;
+                  if (a_scaleViscosityWithR == 1)
+                    {
+                      // adjA and detA are independently averaged geometric
+                      // quantities. Their ratio is not exactly angle-independent
+                      // on radial cubed-sphere faces, so this radius-scaled form
+                      // can seed small non-radial velocities in a radial flow.
+                      a_linfluxcoef(0) =
+                        abs(w_d) + af*adjA_d_mag/a_deta(0);
+                    }
+                  else
+                    {
+                      // Historical formulation. In the radial direction,
+                      // |A(:,0)| = 1, which preserves a spherical viscosity
+                      // coefficient to roundoff.
+                      a_linfluxcoef(0) = abs(w_d) + af*A_d_mag;
+                    }
                     
-                },a_LNViscCoef,a_WFace,a_ntrow,a_A,a_detA,m_gamma,a_dir);
+                },a_LNViscCoef,a_WFace,a_ntrow,a_A,a_detA,m_gamma,a_dir,
+                scaleViscosityWithR);
 }
 template<
   typename T,

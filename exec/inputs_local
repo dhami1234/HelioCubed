@@ -31,6 +31,7 @@
 -temporal_order                  4
 -divergence_cleaning             1
 -linear_viscosity                1
+-scale_viscosity_with_r          1
 -boundary_reflux                 1
 -radial_refinement               0
 -MBInterp_define                 1
