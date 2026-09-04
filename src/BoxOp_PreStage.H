@@ -4,36 +4,6 @@
 extern MHDReader BC_global;
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
-void f_radialBCs_F(
-    Point a_pt,
-    Var<T, NUMCOMPS, MEM> &a_USph,
-    Var<T> &a_radius,
-    T a_dxradius,
-    T a_gamma,
-    int a_nradius)
-{
-  // Compute spherical BCs.
-  T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
-  T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
-
-  T rho = rho0;
-  T p = p0;
-  a_USph(iRHO) = rho0;
-  a_USph(iMOMX) = 0.0;
-  a_USph(iMOMY) = 0.0;
-  a_USph(iMOMZ) = 0.0;
-  a_USph(iBX) = 0.0;
-  a_USph(iBY) = 0.0;
-  a_USph(iBZ) = 0.0;
-  T umag = sqrt(a_USph(iMOMX) * a_USph(iMOMX) + a_USph(iMOMY) * a_USph(iMOMY) + a_USph(iMOMZ) * a_USph(iMOMZ)) / a_USph(iRHO);
-  T Bmag = sqrt(a_USph(iBX) * a_USph(iBX) + a_USph(iBY) * a_USph(iBY) + a_USph(iBZ) * a_USph(iBZ));
-  a_USph(iE) = p / (a_gamma - 1.0) + 0.5 * a_USph(iRHO) * umag * umag + Bmag * Bmag/8.0/M_PI;
-}
-PROTO_KERNEL_END(f_radialBCs_F, f_radialBCs)
-
-
-template <typename T, MemType MEM>
-PROTO_KERNEL_START
 void f_radialoutflowIBCs_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM> &a_USph,
@@ -112,12 +82,26 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   Point high = bxGhosted.high();
   high[0] = a_blockBox.low()[0] - 1;
   Box bdryBoxLow(bxGhosted.low(), high);
+
+  // The analytic test problems are at their uniform background state at both
+  // radial boundaries. Build the inverse basis on all ghosts once so type 6
+  // gets the same Cartesian magnetic field at initialization and boundaries.
+  BoxData<T,DIM,MEM,DIM> testProblemAinv;
+  if (init_condition_type == 6)
+  {
+    testProblemAinv.define(bxGhosted);
+    testProblemBasisInverse(testProblemAinv, bxGhosted, a_h, a_block);
+  }
   
   // Outer BCs
   if (a_blockBox.high()[0] < bxGhosted.high()[0])
   {
     if (init_condition_type == 0 || init_condition_type == 1 || init_condition_type == 4 || init_condition_type == 5){
-      forallInPlace_p(f_radialBCs, bdryBoxHigh, a_USphStage, radius, dxradius, m_gamma, thickness);
+      forallInPlace_p(
+          f_testProblemHydroBoundary,
+          bdryBoxHigh,
+          a_USphStage,
+          m_gamma);
     } 
     if (init_condition_type == 2 || init_condition_type == 3)
       {
@@ -158,51 +142,12 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
     }
 
     if (init_condition_type == 6){
-      forallInPlace_p(f_radialBCs, bdryBoxHigh, a_USphStage, radius, dxradius, m_gamma, thickness);
-      
-      // Calculate A_matrix
-      double half = 0.5;
-      double dxiPerp = a_h;
-      Array<Array<uint,DIM>,6> permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
-      Array<Array<int,DIM>,6> sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}}; 
-      Point high = bdryBoxHigh.high();
-      Point low = bdryBoxHigh.low();
-      high[0] = low[0];
-      Box bx0(low,high);
-      BoxData<T,DIM,MEM,DIM> A_matrix(bdryBoxHigh);
-      T offseta = half;
-      T offsetb = half;
-      forallInPlace_p(f_Amatrix,bx0,A_matrix,permute[a_block],sign[a_block],
-                      dxiPerp,offseta,offsetb);
-      spreadSlice(A_matrix);
-
-      BoxData<T,DIM,MEM,DIM> A_matrix_inv(bdryBoxHigh);
-      A_matrix_inv.setToZero();
-      forallInPlace(f_matinv3by3,A_matrix_inv,A_matrix);
-
-      // A constant U_cart
-      BoxData<double, DIM> U_cart(bdryBoxHigh);
-      BoxData<double, DIM> W_sph(bdryBoxHigh);
-      forallInPlace_p([ ] PROTO_LAMBDA
-      (Point a_pt,
-      Var<double, DIM, HOST> &a_U_cart)
-      {  
-        a_U_cart(0) = 0.0001;
-        a_U_cart(1) = 0.0;
-        a_U_cart(2) = 0.0;
-      }, U_cart);
-
-      T one = 1.0;  
-      forallInPlace(f_matVecProd,W_sph,A_matrix_inv,U_cart,one);
-
-      forallInPlace([ ] PROTO_LAMBDA
-      (Var<double, NUMCOMPS, HOST> &a_a_W,
-      Var<double, DIM, HOST> &a_W_sph)
-      {  
-        a_a_W(iBX) += a_W_sph(0);
-        a_a_W(iBY) += a_W_sph(1);
-        a_a_W(iBZ) += a_W_sph(2);
-      },bdryBoxHigh, a_USphStage, W_sph);
+      forallInPlace_p(
+          f_testProblemMagneticBoundary,
+          bdryBoxHigh,
+          a_USphStage,
+          testProblemAinv,
+          m_gamma);
     } 
   }
   // Inner BCs
@@ -233,7 +178,11 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
     (f_cubedSphereMap3,radius.box(),radius,dx,half,half,a_block);
 
     if (init_condition_type == 0 || init_condition_type == 1 || init_condition_type == 4 || init_condition_type == 5){
-      forallInPlace_p(f_radialBCs, bdryBoxLow, a_USphStage, radius, dxradius, m_gamma, thickness);
+      forallInPlace_p(
+          f_testProblemHydroBoundary,
+          bdryBoxLow,
+          a_USphStage,
+          m_gamma);
     }
     if (init_condition_type == 2){ 
       forallInPlace_p(f_radialoutflowIBCs, bdryBoxLow, a_USphStage, radius, XCart, m_gamma, thickness, a_time);
@@ -335,31 +284,12 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
     }
 
     if (init_condition_type == 6){
-      forallInPlace_p(f_radialBCs, bdryBoxLow, a_USphStage, radius, dxradius, m_gamma, thickness);
-
-      // A constant U_cart
-      BoxData<double, DIM> U_cart(bdryBoxLow);
-      BoxData<double, DIM> W_sph(bdryBoxLow);
-      forallInPlace_p([ ] PROTO_LAMBDA
-      (Point a_pt,
-      Var<double, DIM, HOST> &a_U_cart)
-      {  
-        a_U_cart(0) = 0.0001;
-        a_U_cart(1) = 0.0;
-        a_U_cart(2) = 0.0;
-      }, U_cart);
-
-      T one = 1.0;  
-      forallInPlace(f_matVecProd,W_sph,A_matrix_inv,U_cart,one);
-
-      forallInPlace([ ] PROTO_LAMBDA
-      (Var<double, NUMCOMPS, HOST> &a_a_W,
-      Var<double, DIM, HOST> &a_W_sph)
-      {  
-        a_a_W(iBX) += a_W_sph(0);
-        a_a_W(iBY) += a_W_sph(1);
-        a_a_W(iBZ) += a_W_sph(2);
-      },bdryBoxLow, a_USphStage, W_sph);
+      forallInPlace_p(
+          f_testProblemMagneticBoundary,
+          bdryBoxLow,
+          a_USphStage,
+          testProblemAinv,
+          m_gamma);
     }
   }
   // if (procID() == 0) h5.writePatch(1,a_USphStage,"a_USphStage_withBC");

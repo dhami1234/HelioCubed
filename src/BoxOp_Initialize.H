@@ -1,131 +1,4 @@
 #include "MHD_Constants.H"
-template <typename T, MemType MEM>
-PROTO_KERNEL_START
-void f_radialShockInit_F(
-    Point a_pt,
-    Var<T, NUMCOMPS, MEM> &a_W,
-    Var<T> &a_radius,
-    T a_gamma,
-    T a_strength,
-    int a_nradius)
-{
-  // Compute spherical initial data.
-  T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
-  T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
-  //T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
-  T amplitude;
-  T arg = (1.0 * a_pt[0] + .5 - 1.0 * a_nradius / 2) / a_nradius / 2.;
-  if (arg < 0)
-  {
-    amplitude = a_strength * pow(cos(2 * M_PI * arg), 6);
-  }
-  else
-  {
-    amplitude = 0.;
-  }
-  T p = p0 + amplitude * p0;
-  T W = sqrt(a_gamma*p0*rho0*(1.0 + ((a_gamma + 1.0)/(2.0*a_gamma))*(p-p0)/p0));
-  T rho = 1.0/(1./rho0 - (p - p0)/(W*W));
-  T ur = (p-p0)/W;
-  a_W(iRHO) = rho;
-  a_W(iVX) = ur;
-  a_W(iVY) = 0.0;
-  a_W(iVZ) = 0.0;
-  a_W(iP) = p;
-  a_W(iBX) = 0.0;
-  a_W(iBY) = 0.0;
-  a_W(iBZ) = 0.0;
-}
-PROTO_KERNEL_END(f_radialShockInit_F, f_radialShockInit)
-
-
-template <typename T, MemType MEM>
-PROTO_KERNEL_START
-void f_radialShellInit_F(
-    Point a_pt,
-    Var<T, NUMCOMPS, MEM> &a_W,
-    Var<T> &a_radius,
-    T a_gamma,
-    int a_nradius)
-{
-  // Compute spherical initial data.
-  T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
-  T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
-  //T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
-  T eps = 0.1;
-  T amplitude;
-  T arg = (1.0 * a_pt[0] + .5 - 1.0 * a_nradius / 2) / a_nradius / 2.;
-  if (abs(arg) < .25)
-  {
-    amplitude = eps * pow(cos(2 * M_PI * arg), 6);
-  }
-  else
-  {
-    amplitude = 0.;
-  }
-  T rho = rho0 + amplitude * rho0;
-  T p = p0 * pow(rho / rho0, a_gamma);
-  T ur = amplitude * sqrt(a_gamma * p0 / rho0);
-  a_W(iRHO) = rho;
-  a_W(iVX) = 00.;//ur;
-  a_W(iVY) = 0.0;
-  a_W(iVZ) = 0.0;
-  a_W(iP) = p;
-  a_W(iBX) = 0.0;
-  a_W(iBY) = 0.0;
-  a_W(iBZ) = 0.0;
-}
-
-PROTO_KERNEL_END(f_radialShellInit_F, f_radialShellInit)
-
-
-template <typename T, MemType MEM>
-PROTO_KERNEL_START
-void f_nonradialInit_F(
-    Point a_pt,
-    Var<T, NUMCOMPS, MEM> &a_W,
-    Var<T, DIM> &a_X_cart,
-    T a_gamma,
-    int a_nradius)
-{
-  // Compute spherical initial data.
-  T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
-  T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
-  T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
-  T eps = 0.1;
-  T amplitude;
-  T arg = sqrt((a_X_cart(0)+0.9) * (a_X_cart(0)+0.9) + a_X_cart(2) * a_X_cart(2) + (a_X_cart(1)+0.4) * (a_X_cart(1)+0.4));
-  // T arg = (1.0 * a_pt[0] + .5 - 1.0 * a_nradius / 2) / a_nradius / 2.;
-  if (abs(arg) < .25)
-  {
-    amplitude = eps * pow(cos(2 * M_PI * arg), 6);
-  }
-  else
-  {
-    amplitude = 0.;
-  }
-  // arg = sqrt((a_X_cart(1)+1.0) * (a_X_cart(1)+1.0) + a_X_cart(2) * a_X_cart(2) + a_X_cart(0) * a_X_cart(0));
-  // if (abs(arg) < .25)
-  // {
-  //   amplitude += eps * pow(cos(2 * M_PI * arg), 6);
-  // }
-  // else
-  // {
-  //   amplitude += 0.;
-  // }
-  T rho = rho0 + amplitude * rho0;
-  T p = p0 * pow(rho / rho0, a_gamma);
-  T ur = amplitude * sqrt(a_gamma * p0 / rho0);
-  a_W(iRHO) = rho;
-  a_W(iVX) = 0.0;
-  a_W(iVY) = 0.0;
-  a_W(iVZ) = 0.0;
-  a_W(iP) = p;
-  a_W(iBX) = 0.0;
-  a_W(iBY) = 0.0;
-  a_W(iBZ) = 0.0;
-}
-PROTO_KERNEL_END(f_nonradialInit_F, f_nonradialInit)
 
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
@@ -199,11 +72,19 @@ initialize(State& a_W,
 
 
   T strength = ParseInputs::get_strength();
-  if (init_condition_type == 0) forallInPlace_p(f_radialShellInit, a_W, a_radius, a_gamma, a_nradius);
+  if (init_condition_type == 0)
+  {
+    forallInPlace_p(f_smoothSphericalWaveInit, a_W, a_gamma, a_nradius);
+  }
   if (init_condition_type == 1)
-    {
-      forallInPlace_p(f_nonradialInit, a_W, a_Xcart, a_gamma, a_nradius);
-    }
+  {
+    forallInPlace_p(
+        f_nonRadialSphericalWaveInit,
+        a_W,
+        a_Xcart,
+        A_matrix_inv,
+        a_gamma);
+  }
   if (init_condition_type == 2) forallInPlace_p(f_radialoutflowInit, a_W, a_radius, a_Xcart, a_gamma, a_nradius);
 
   if (init_condition_type == 3) {
@@ -284,7 +165,13 @@ initialize(State& a_W,
 
   // Adding small constant cartesian velocity to the radial velocity
   if (init_condition_type == 4){
-    forallInPlace_p(f_radialShellInit, a_W, a_radius, a_gamma, a_nradius);
+    forallInPlace_p(f_smoothSphericalWaveInit, a_W, a_gamma, a_nradius);
+    forallInPlace([] PROTO_LAMBDA(Var<T, NUMCOMPS, MEM>& a_state)
+    {
+      // Preserve the legacy type-4 state: the spherical-wave velocity is
+      // replaced by the small Cartesian perturbation constructed below.
+      a_state(iVX) = 0.0;
+    }, a_W);
 
     // Calculate A_matrix
     Box bx = a_W.box();
@@ -347,58 +234,26 @@ initialize(State& a_W,
     },a_W, W_sph);
   }
 
-  if (init_condition_type == 5) forallInPlace_p(f_radialShockInit, a_W, a_radius, a_gamma, strength, a_nradius);
+  if (init_condition_type == 5)
+  {
+    forallInPlace_p(
+        f_symmetricStrongShockInit, a_W, a_gamma, strength, a_nradius);
+  }
 
-  // Adding constant cartesian B field to radial shell problem
+  // Symmetric strong shock with a uniform Cartesian magnetic field.
   if (init_condition_type == 6){
-    forallInPlace_p(f_radialShellInit, a_W, a_radius, a_gamma, a_nradius);
-
-    // Calculate A_matrix
-    Box bx = a_W.box();
-    double half = 0.5;
-    double dxiPerp = a_h;
-    Array<Array<uint,DIM>,6> permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
-    Array<Array<int,DIM>,6> sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}}; 
-    Point high = bx.high();
-    Point low = bx.low();
-    high[0] = low[0];
-    Box bx0(low,high);
-    BoxData<T,DIM,MEM,DIM> A_matrix(bx);
-    T offseta = half;
-    T offsetb = half;
-    forallInPlace_p(f_Amatrix,bx0,A_matrix,permute[a_block],sign[a_block],
-                    dxiPerp,offseta,offsetb);
-    spreadSlice(A_matrix);
-
-    BoxData<T,DIM,MEM,DIM> A_matrix_inv(bx);
-    A_matrix_inv.setToZero();
-    forallInPlace(f_matinv3by3,A_matrix_inv,A_matrix);
-
-    // A constant U_cart
-    BoxData<double, DIM> U_cart(bx);
-    BoxData<double, DIM> W_sph(bx);
-    forallInPlace_p([ ] PROTO_LAMBDA
-    (Point a_pt,
-     Var<double, DIM, HOST> &a_U_cart,
-     double a_a_gamma,
-     int a_a_nradius)
-    {  
-      a_U_cart(0) = 0.0001;
-      a_U_cart(1) = 0.0;
-      a_U_cart(2) = 0.0;
-    },U_cart, a_gamma, a_nradius);
-
-    T one = 1.0;  
-    forallInPlace(f_matVecProd,W_sph,A_matrix_inv,U_cart,one);
-
-    forallInPlace([ ] PROTO_LAMBDA
-    (Var<double, NUMCOMPS, HOST> &a_a_W,
-     Var<double, DIM, HOST> &a_W_sph)
-    {  
-      a_a_W(iBX) += a_W_sph(0);
-      a_a_W(iBY) += a_W_sph(1);
-      a_a_W(iBZ) += a_W_sph(2);
-    },a_W, W_sph);
+    forallInPlace_p(
+        f_symmetricStrongShockInit, a_W, a_gamma, strength, a_nradius);
+    T Bx = 1.0e-2;
+    T By = 0.0;
+    T Bz = 0.0;
+    forallInPlace_p(
+        f_setConstantCartesianBPrimitive,
+        a_W,
+        A_matrix_inv,
+        Bx,
+        By,
+        Bz);
   }
   
 }

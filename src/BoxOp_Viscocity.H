@@ -45,8 +45,8 @@ viscFlux(
       Stencil<double> D2 = 1.0*Shift(Point::Basis(dir)) + (-2.0)*Shift(Point::Zeros())
         + 1.0*Shift(Point::Basis(dir,-1));
       Stencil<double> D1 = (1.0)*Shift(Point::Zeros()) + (-1.0)*Shift(Point::Basis(dir,-1));
-      // Stencil<double> D5 =  D1 * D2 * D2;
-      Stencil<double> D3 =  D1 * D2;
+      Stencil<double> D5 =  D1 * D2 * D2;
+      // Stencil<double> D3 =  D1 * D2;
       Box bxface = a_Rhs.box().extrude(Point::Basis(dir));
       State physFlux(bxface);
       physFlux.setToZero();
@@ -96,8 +96,8 @@ viscFlux(
           State fluxtemp(bxface);
           fluxtemp.setToZero();
           // linearViscFlux = D5(a_USph, 1.0/128);
-          // linearViscFlux = D5(a_USph, 1.0/384); // more stable at short wavelengths
-          linearViscFlux = D3(a_USph, -1.0/96); 
+          linearViscFlux = D5(a_USph, 1.0/384); // more stable at short wavelengths
+          // linearViscFlux = D3(a_USph, -1.0/96); 
           primToMappedViscFlux(fluxtemp,linearViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> linvisccoef(bxface);

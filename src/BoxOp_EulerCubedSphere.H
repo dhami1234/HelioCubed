@@ -660,6 +660,7 @@ private:
 #include "BoxOp_DivBcleaning.H"
 #include "BoxOp_Gravity.H"
 #include "BoxOp_Limiters.H"
+#include "BoxOp_TestProblems.H"
 #include "BoxOp_PreStage.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
 #include "BoxOp_BertaCubedSphereImplem.H"

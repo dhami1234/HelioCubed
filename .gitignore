@@ -14,6 +14,8 @@ blt
 *.err
 *.out
 *.sh
+!scripts/run_test_problems.sh
+/Test_results/
 *.jpeg
 *.png
 *.mpg

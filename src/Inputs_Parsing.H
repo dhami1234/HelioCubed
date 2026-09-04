@@ -31,14 +31,11 @@ using namespace std;
 class ParseInputs {
 private:
     int convTestType = 0; // 0: No convergence test, 1: Space Convergence test, 2: Space and Time Convergence test
-    int init_condition_type = 3; 
-    // 0 for radial shell, 
-    // 1 for nonradial pulse, 
-    // 2 for radial outflow
-    // 3 for H5 BCs
-    // 4 for radial shell with small constant cartesian velocity
-    // 5 for radial Shock
-    // 6 for radial shell with small constant cartesian magnetic field
+    // 0: smooth spherical wave; 1: non-radial spherical wave;
+    // 2: analytic solar wind; 3: file-driven solar wind;
+    // 4: legacy velocity test; 5: symmetric strong shock;
+    // 6: symmetric strong shock with constant Cartesian B.
+    int init_condition_type = 3;
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction
     int boxSize_nonrad; // Size of the box for domain decomposition
