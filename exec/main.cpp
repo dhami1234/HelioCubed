@@ -188,6 +188,35 @@ int main(int argc, char *argv[])
             eulerOp[dit].initialize(WPoint_i, dstData[dit], radius, XCart, gamma, thickness, dx[2], block);
             eulerOp[dit].dtInv(dtinv,WPoint_i);
             eulerOp[dit].primToCons(JUTemp, WPoint_i, dVolrLev[dit], gamma, dx[2], block);
+            if (init_condition_type == 6)
+            {
+              // Test 6 evolves perturbations about its uniform low-beta MHD
+              // background. Subtract its mapped energy and magnetic field so
+              // primitive recovery does not lose pressure to cancellation.
+              BoxData<double,NUMCOMPS,HOST> WBackground(WPoint_i.box());
+              WPoint_i.copyTo(WBackground);
+              forallInPlace([] PROTO_LAMBDA(
+                  Var<double,NUMCOMPS,HOST>& a_W)
+                {
+                  a_W(iRHO) = c_TEST_RHO0;
+                  a_W(iVX) = 0.0;
+                  a_W(iVY) = 0.0;
+                  a_W(iVZ) = 0.0;
+                  a_W(iP) = c_TEST_P0;
+                },WBackground);
+              BoxData<double,NUMCOMPS,HOST> JUBackground;
+              eulerOp[dit].primToCons(
+                  JUBackground,WBackground,dVolrLev[dit],gamma,dx[2],block);
+              forallInPlace([] PROTO_LAMBDA(
+                  Var<double,NUMCOMPS,HOST>& a_JU,
+                  const Var<double,NUMCOMPS,HOST>& a_background)
+                {
+                  a_JU(iE) -= a_background(iE);
+                  a_JU(iBX) -= a_background(iBX);
+                  a_JU(iBY) -= a_background(iBY);
+                  a_JU(iBZ) -= a_background(iBZ);
+                },JUTemp,JUBackground);
+            }
             WPoint_i.copyTo(Wout[dit]);
             JU_i.setVal(0.);
             JUTemp.copyTo(JU_i, layout[dit]);

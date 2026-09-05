@@ -592,6 +592,18 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
   BoxData<T,NUMCOMPS,MEM> UPoint = deconvolveStencil(a_USph);
   a_WBar = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
   a_W = forall<T,NUMCOMPS,MEM>(f_sphToPrim,UPoint);
+  const bool test6 = ParseInputs::get_init_condition_type() == 6;
+  BoxData<T,1,MEM> deltaMeBar(a_WBar.box());
+  BoxData<T,1,MEM> deltaMePoint(a_W.box());
+  deltaMeBar.setVal(0.0);
+  deltaMePoint.setVal(0.0);
+  if (test6)
+  {
+    testProblem6DeltaMagneticEnergy(deltaMeBar,a_WBar,a_block);
+    testProblem6DeltaMagneticEnergy(deltaMePoint,a_W,a_block);
+    addTestProblem6BackgroundB(a_WBar,a_block);
+    addTestProblem6BackgroundB(a_W,a_block);
+  }
   // Compute pressure.
   BoxData<T,1,MEM> keBar = kineticEnergyW(a_WBar,a_block,-1);
   BoxData<T,1,MEM> kePoint = kineticEnergyW(a_W,a_block,-1);
@@ -601,20 +613,40 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                 (Var<T,NUMCOMPS>& a_w,
                  const Var<T,1,MEM>& a_ke,
                  const Var<T,1,MEM>& a_me,
+                 const Var<T,1,MEM>& a_deltaMe,
+                 bool a_test6,
                                   T a_gamma)
                 {
-                  a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  if (a_test6)
+                  {
+                    a_w(iP) = c_TEST_P0 + (a_gamma - 1.0)*
+                        (a_w(iP) - a_ke(0) - a_deltaMe(0));
+                  }
+                  else
+                  {
+                    a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  }
                   if (a_w(iP) < 0) a_w(iP) = 0.0;
-                },a_W,kePoint,mePoint,m_gamma);
+                },a_W,kePoint,mePoint,deltaMePoint,test6,m_gamma);
   forallInPlace([ ] PROTO_LAMBDA
                 (Var<T,NUMCOMPS>& a_w,
                  const Var<T,1,MEM>& a_ke,
                  const Var<T,1,MEM>& a_me,
+                 const Var<T,1,MEM>& a_deltaMe,
+                 bool a_test6,
                  T a_gamma)
                 {
-                  a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  if (a_test6)
+                  {
+                    a_w(iP) = c_TEST_P0 + (a_gamma - 1.0)*
+                        (a_w(iP) - a_ke(0) - a_deltaMe(0));
+                  }
+                  else
+                  {
+                    a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  }
                   if (a_w(iP) < 0) a_w(iP) = 0.0;
-                },a_WBar,keBar,meBar,m_gamma);
+                },a_WBar,keBar,meBar,deltaMeBar,test6,m_gamma);
   T coef = 1.0/24.0;
   a_W += Stencil<T>::Laplacian()(a_WBar,coef);
   
@@ -634,6 +666,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim_2O()");
    
   a_W = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
+  const bool test6 = ParseInputs::get_init_condition_type() == 6;
+  BoxData<T,1,MEM> deltaMe(a_W.box());
+  deltaMe.setVal(0.0);
+  if (test6)
+  {
+    testProblem6DeltaMagneticEnergy(deltaMe,a_W,a_block);
+    addTestProblem6BackgroundB(a_W,a_block);
+  }
   // Compute pressure.
   BoxData<T,1,MEM> kePoint = kineticEnergyW(a_W,a_block,-1);
   BoxData<T,1,MEM> mePoint = magneticEnergyW(a_W,a_block,-1);
@@ -641,9 +681,19 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(
                 (Var<T,NUMCOMPS>& a_w,
                  const Var<T,1,MEM>& a_ke,
                  const Var<T,1,MEM>& a_me,
+                 const Var<T,1,MEM>& a_deltaMe,
+                 bool a_test6,
                                   T a_gamma)
                 {
-                  a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  if (a_test6)
+                  {
+                    a_w(iP) = c_TEST_P0 + (a_gamma - 1.0)*
+                        (a_w(iP) - a_ke(0) - a_deltaMe(0));
+                  }
+                  else
+                  {
+                    a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
+                  }
                   if (a_w(iP) < 0) a_w(iP) = 0.0;
-                },a_W,kePoint,mePoint,m_gamma);
+                },a_W,kePoint,mePoint,deltaMe,test6,m_gamma);
 }

@@ -22,10 +22,10 @@ from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.tri as tri
+from matplotlib.collections import PolyCollection
+from matplotlib.colors import Normalize
 from matplotlib.patches import Circle
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
 # --- physics conversion params (edit as needed) ---
@@ -177,7 +177,7 @@ def prepare_geometry(
     Read the slice once; compute:
       - cell centers x/y (combined across zones)
       - cell radii Rc (from node radii; smoother)
-      - triangulation + annulus mask
+      - each zone's native quadrilateral geometry
       - time/step + rotation angle used
     Return a dict 'geom' reused for all variables.
     """
@@ -197,6 +197,7 @@ def prepare_geometry(
 
     node_x_all, node_y_all = [], []
     xc_all, yc_all, rc_all = [], [], []
+    zone_geometry = []
 
     for z in zones:
         props = z.get('props', {})
@@ -219,6 +220,13 @@ def prepare_geometry(
             RC = 0.25*(Rn[:-1,:-1] + Rn[1:,:-1] + Rn[:-1,1:] + Rn[1:,1:])
 
             xc_all.append(XC.ravel()); yc_all.append(YC.ravel()); rc_all.append(RC.ravel())
+            zone_geometry.append({
+                "kind": "STRUCT",
+                "X": X,
+                "Y": Y,
+                "cell_shape": (J - 1, I - 1),
+                "cell_count": (J - 1)*(I - 1),
+            })
 
         # FEQUADRILATERAL
         elif zonetype == 'FEQUADRILATERAL' or ('conn' in z):
@@ -233,6 +241,13 @@ def prepare_geometry(
             RC = Rn[conn0].mean(axis=1)
 
             xc_all.append(Xc.ravel()); yc_all.append(Yc.ravel()); rc_all.append(RC.ravel())
+            zone_geometry.append({
+                "kind": "FE",
+                "X": Xn,
+                "Y": Yn,
+                "conn": conn0,
+                "cell_count": conn0.shape[0],
+            })
 
         else:
             raise KeyError("Unknown zone type (need I,J or FEQUADRILATERAL).")
@@ -245,23 +260,16 @@ def prepare_geometry(
     if inner_radius is None: inner_radius = float(node_r.min())
     if outer_radius is None: outer_radius = float(node_r.max())
 
-    # triangulate + annulus mask once
-    triang = tri.Triangulation(x_all, y_all)
-    r_vert = np.hypot(x_all, y_all)
-    tri_ix = triang.triangles
-    mask = (r_vert[tri_ix] < inner_radius).any(axis=1) | (r_vert[tri_ix] > outer_radius).any(axis=1)
-    triang.set_mask(mask)
-
     return {
         "filename": filename,
         "variables": variables,
         "x": x_all, "y": y_all, "rc": rc_all,
         "inner": inner_radius, "outer": outer_radius,
-        "tri": triang,
         "theta": theta_corotate,
         "step": step, "t_code": t_code, "phys_dt": phys_dt,
         # keep zones to fetch cell data later
         "zones": zones,
+        "zone_geometry": zone_geometry,
         "reshape_order": reshape_order,
     }
 
@@ -592,13 +600,12 @@ def plot_with_geometry(
     out_path: str = ".",
 ):
     """
-    Render one variable using precomputed geometry (no recomputation of centers/triangulation).
+    Render one variable using precomputed native-zone geometry.
     Requires: get_values_for_var(), UNIT_SCALE, RADIAL_SCALE, COLOR_SETTINGS, LABELS.
     Returns: path to saved PNG.
     """
     # Unpack geometry
     x_all = geom["x"]; y_all = geom["y"]; rc_all = geom["rc"]
-    triang = geom["tri"]
     inner_radius = geom["inner"]; outer_radius = geom["outer"]
     step = geom["step"]; t_code = geom["t_code"]; phys_dt = geom["phys_dt"]; theta = geom["theta"]
 
@@ -623,13 +630,42 @@ def plot_with_geometry(
     vmin = cs.get("vmin", vmin)
     vmax = cs.get("vmax", vmax)
 
-    # Plot
+    # Plot each Tecplot zone on its native mesh.  A single unconstrained
+    # Delaunay triangulation can connect unrelated blocks and is ambiguous in
+    # the presence of duplicate ghost-cell coordinates at multiblock seams.
     fig, ax = plt.subplots(figsize=figsize)
-    if vmin is not None and vmax is not None:
-        levels = np.linspace(vmin, vmax, 256)
-        tpc = ax.tricontourf(triang, v_all, levels=levels, cmap=cmap, extend='both')
-    else:
-        tpc = ax.tricontourf(triang, v_all, levels=256, cmap=cmap, extend='both')
+    finite = v_all[np.isfinite(v_all)]
+    if finite.size == 0:
+        raise ValueError(f"No finite values found for {varname!r}")
+    plot_min = float(np.min(finite)) if vmin is None else vmin
+    plot_max = float(np.max(finite)) if vmax is None else vmax
+    if plot_min == plot_max:
+        pad = max(abs(plot_min)*1.0e-12, 1.0e-30)
+        plot_min -= pad
+        plot_max += pad
+    norm = Normalize(vmin=plot_min, vmax=plot_max)
+
+    offset = 0
+    tpc = None
+    for zone in geom["zone_geometry"]:
+        count = zone["cell_count"]
+        zone_values = v_all[offset:offset + count]
+        offset += count
+        if zone["kind"] == "STRUCT":
+            zone_values = zone_values.reshape(zone["cell_shape"], order=cell_order)
+            tpc = ax.pcolormesh(
+                zone["X"], zone["Y"], zone_values,
+                shading="flat", cmap=cmap, norm=norm, rasterized=True)
+        else:
+            vertices = np.stack(
+                (zone["X"][zone["conn"]], zone["Y"][zone["conn"]]), axis=-1)
+            tpc = PolyCollection(vertices, array=zone_values, cmap=cmap, norm=norm)
+            ax.add_collection(tpc)
+            ax.update_datalim(np.column_stack((zone["X"], zone["Y"])))
+            ax.autoscale_view()
+    if offset != v_all.size:
+        raise ValueError(
+            f"Geometry/value size mismatch: consumed {offset}, have {v_all.size}")
 
     if colorbar:
         cbar = fig.colorbar(tpc, ax=ax)
@@ -754,4 +790,3 @@ if __name__ == "__main__":
             print(f"[{done}/{total}] {file_shown}: {len(file_results)} plots")
 
     print("[INFO] All plots complete.")
-            

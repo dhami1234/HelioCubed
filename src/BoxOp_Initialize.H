@@ -243,7 +243,7 @@ initialize(State& a_W,
   if (init_condition_type == 6){
     forallInPlace_p(
         f_symmetricStrongShockInit, a_W, a_gamma, strength, a_nradius);
-    T Bx = 1.0e-1;
+    T Bx = c_TEST6_BX0;
     T By = 0.0;
     T Bz = 0.0;
     forallInPlace_p(

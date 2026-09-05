@@ -231,8 +231,10 @@ void writeTecplotSlice_plane(
         const auto& dataPatch = a_data[it];      // cell-centered
         const auto& mapPatch  = a_map.map()[it]; // node-centered
 
-        // Cell interior box and sizes
-        const Box  cellBox = dataPatch.box();
+        // Only write valid cells.  a_data may carry interpolated angular
+        // ghosts so a plane can be located robustly, but emitting those
+        // ghosts creates overlapping Tecplot zones at cubed-sphere seams.
+        const Box  cellBox = a_data.layout()[it] & dataPatch.box();
         const auto lo = cellBox.low();
         const auto hi = cellBox.high();
         const int ni = hi[0]-lo[0]+1;  // cells in i
@@ -352,10 +354,16 @@ void writeTecplotSlice_plane(
 
             // Cell-center interpolation along k
             std::vector<std::vector<double>> VarsCell(C, std::vector<double>(ni*nj, NaN));
+            // The plotted footprint is valid-cell only, but use available
+            // ghosts in the marching direction. This is required when the
+            // requested plane coincides with a patch boundary: neither
+            // patch's valid cell centers alone straddle the plane.
+            const int kSampleLo = dataPatch.box().low()[2] - lo[2];
+            const int kSampleHi = dataPatch.box().high()[2] - lo[2];
             for (int j=0; j<nj; ++j) {
                 for (int i=0; i<ni; ++i) {
                     bool have=false;
-                    for (int k=0; k<nk-1; ++k) {
+                    for (int k=kSampleLo; k<kSampleHi; ++k) {
                         double c0 = avg8_at(i,j,k  , comp);
                         double c1 = avg8_at(i,j,k+1, comp);
                         const bool cross = ( (c0 - a_value)<=+tol && (c1 - a_value)>=-tol ) ||
@@ -447,10 +455,12 @@ void writeTecplotSlice_plane(
 
             // Cell-center interpolation along j
             std::vector<std::vector<double>> VarsCell(C, std::vector<double>(ni*nk, NaN));
+            const int jSampleLo = dataPatch.box().low()[1] - lo[1];
+            const int jSampleHi = dataPatch.box().high()[1] - lo[1];
             for (int k=0; k<nk; ++k) {
                 for (int i=0; i<ni; ++i) {
                     bool have=false;
-                    for (int j=0; j<nj-1; ++j) {
+                    for (int j=jSampleLo; j<jSampleHi; ++j) {
                         double c0 = avg8_at(i,j  ,k, comp);
                         double c1 = avg8_at(i,j+1,k, comp);
                         const bool cross = ( (c0 - a_value)<=+tol && (c1 - a_value)>=-tol ) ||
@@ -542,10 +552,12 @@ void writeTecplotSlice_plane(
 
             // Cell-center interpolation along i
             std::vector<std::vector<double>> VarsCell(C, std::vector<double>(nj*nk, NaN));
+            const int iSampleLo = dataPatch.box().low()[0] - lo[0];
+            const int iSampleHi = dataPatch.box().high()[0] - lo[0];
             for (int k=0; k<nk; ++k) {
                 for (int j=0; j<nj; ++j) {
                     bool have=false;
-                    for (int i=0; i<ni-1; ++i) {
+                    for (int i=iSampleLo; i<iSampleHi; ++i) {
                         double c0 = avg8_at(i  ,j,k, comp);
                         double c1 = avg8_at(i+1,j,k, comp);
                         const bool cross = ( (c0 - a_value)<=+tol && (c1 - a_value)>=-tol ) ||
@@ -749,7 +761,8 @@ void writeTecplotSlice_spherical(
         const auto& mapPatch  = a_map.map()[it]; // node-centered
 
         // Cell interior box and sizes
-        const Box  cellBox = dataPatch.box();
+        // Do not emit interpolated ghost cells as overlapping physical data.
+        const Box  cellBox = a_data.layout()[it] & dataPatch.box();
         const auto lo = cellBox.low();
         const auto hi = cellBox.high();
         const int ni = hi[0]-lo[0]+1;  // cells in i (radial march)
@@ -1006,6 +1019,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   
   bool infOrNan = false;
   int scale_data_with_r = ParseInputs::get_scale_data_with_r(); 
+  int init_condition_type = ParseInputs::get_init_condition_type();
   Array<std::string,NUMCOMPS+2> names = {"density", "VxPerp", "VyPerp", "VzPerp", "P", "BxPerp", "ByPerp", "BzPerp","Vr","Br*r^2"};//,"e^entropy"};
   if (scale_data_with_r == 1){
     names[0] = "density_scaled";
@@ -1041,7 +1055,8 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
      double a_gamma,
      const Var<double,1,HOST>& a_radius,
      const Var<double,DIM,HOST>& a_Xcart,
-     int a_scale_data_with_r)
+     int a_scale_data_with_r,
+     int a_init_condition_type)
     {
       // Primitive variables with vec_non_rad as vec_x_non, vec_y_non, vec_z_non
       a_Wout(0) = a_USemiSph(0);
@@ -1053,13 +1068,30 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
       a_Wout(7) = a_USemiSph(7);
       a_Wout(8) = a_USemiSph(8) / a_Wout(0);
       a_Wout(9) = a_USemiSph(9);
+      double totalEnergy = a_USemiSph(4);
+      if (a_init_condition_type == 6)
+      {
+        // Restore the uniform energy and magnetic background before
+        // primitive recovery and output conversion.
+        totalEnergy += c_TEST_P0/(a_gamma - 1.0)
+            + c_TEST6_BX0*c_TEST6_BX0/(8.0*M_PI);
+        const double x = a_Xcart(0);
+        const double y = a_Xcart(1);
+        const double z = a_Xcart(2);
+        const double r = sqrt(x*x + y*y + z*z);
+        const double Br0 = c_TEST6_BX0*x/r;
+        a_Wout(5) += c_TEST6_BX0 - Br0*x/r;
+        a_Wout(6) += -Br0*y/r;
+        a_Wout(7) += -Br0*z/r;
+        a_Wout(9) += Br0;
+      }
       double ke = a_Wout(0)*(a_Wout(1)*a_Wout(1)
                          + a_Wout(2)*a_Wout(2)
                          + a_Wout(3)*a_Wout(3) + a_Wout(8)*a_Wout(8))*.5;
       double me = (a_Wout(5)*a_Wout(5)
               + a_Wout(6)*a_Wout(6)
               + a_Wout(7)*a_Wout(7) + a_Wout(9)*a_Wout(9))/(8.0*M_PI);
-      a_Wout(4) = (a_USemiSph(4) - ke - me)*(a_gamma - 1.0);
+      a_Wout(4) = (totalEnergy - ke - me)*(a_gamma - 1.0);
 
 
       a_W_sph_out(iRHO) = a_Wout(0);
@@ -1093,7 +1125,8 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
         a_W_sph_out(iBZ) = a_W_sph_out(iBZ)*(a_radius(0)/c_AU)*1e6; // microGauss
       }
       
-    }, Wout[dit], W_sph_out[dit], USemiSph, gamma, radiusLev[dit], XCart, scale_data_with_r);
+    }, Wout[dit], W_sph_out[dit], USemiSph, gamma, radiusLev[dit], XCart,
+       scale_data_with_r, init_condition_type);
 
 #if 0    
     forallInPlace([ ] PROTO_LAMBDA
@@ -1157,36 +1190,61 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     }
 #endif
   }
+
+  // Recover density and pressure through the same fourth-order primitive
+  // path used by the spatial operator. The faster semi-spherical path above
+  // is retained for presentation-space vector conversion, but nonlinear
+  // pressure recovery from its cell averages is inaccurate in low-beta MHD.
+  MBLevelBoxData<double, NUMCOMPS, HOST> USphEvolution(layout, OP::ghost());
+  a_JU.copyTo(USphEvolution);
+  CubedSphereShell::consToSphInterpEuler(
+      USphEvolution,a_iop,dVolrLev,4);
+
+  int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
+  int thetaCoord = (rCoord + 1) % DIM;
+  int phiCoord = (rCoord + 2) % DIM;
+  MBLevelBoxData<double, NUMCOMPS, HOST> dstData(
+      layout,
+      Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
+                           + NGHOST*Point::Basis(phiCoord));
+  dstData.setVal(0.0);
+  if (init_condition_type == 3)
+  {
+    BC_global.BoxData_to_BC<double,HOST>(dstData,map,time);
+  }
+
+  for (auto dit : layout)
+  {
+    unsigned int block = layout.block(dit);
+    Box blockBox = layout.getBlock(block).domain().box();
+    eulerOp[dit].PreStagePatch(
+        USphEvolution[dit],dstData[dit],dVolrLev[dit],blockBox,time);
+    BoxData<double,NUMCOMPS,HOST> W;
+    BoxData<double,NUMCOMPS,HOST> WBar;
+    eulerOp[dit].sphToPrim(W,WBar,USphEvolution[dit],block);
+    forallInPlace([] PROTO_LAMBDA(
+        Var<double,NUMCOMPS,HOST>& a_output,
+        const Var<double,NUMCOMPS,HOST>& a_W,
+        const Var<double,1,HOST>& a_radius,
+        double a_gamma,
+        int a_scale_data_with_r)
+      {
+        a_output(iRHO) = a_W(iRHO);
+        a_output(iP) = a_W(iP);
+        if (a_scale_data_with_r == 1)
+        {
+          const double rOverAU = a_radius(0)/c_AU;
+          a_output(iRHO) *= rOverAU*rOverAU/c_MP;
+          a_output(iP) *= pow(rOverAU,2.0*a_gamma)*1.0e12;
+        }
+      },W_sph_out[dit],W,radiusLev[dit],gamma,scale_data_with_r);
+  }
   
   if (write_data && ParseInputs::get_output_divB() == 1){
-    // Reconstruct the current spherical conserved state, including the same
-    // inter-block and radial ghost-cell treatment used by the evolution
-    // operator, before evaluating its discrete div(B).
-    MBLevelBoxData<double, NUMCOMPS, HOST> USphDivB(layout, OP::ghost());
-    a_JU.copyTo(USphDivB);
-    CubedSphereShell::consToSphInterpEuler(USphDivB,a_iop,dVolrLev,4);
-
-    int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
-    int thetaCoord = (rCoord + 1) % DIM;
-    int phiCoord = (rCoord + 2) % DIM;
-    MBLevelBoxData<double, NUMCOMPS, HOST> dstData(
-        layout,
-        Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
-                             + NGHOST*Point::Basis(phiCoord));
-    dstData.setVal(0.0);
-    if (ParseInputs::get_init_condition_type() == 3)
-    {
-      BC_global.BoxData_to_BC<double,HOST>(dstData,map,time);
-    }
-
     MBLevelBoxData<double, 1, HOST> divB(layout, Point::Zeros());
     for (auto dit : layout)
     {
-      unsigned int block = layout.block(dit);
-      Box blockBox = layout.getBlock(block).domain().box();
-      eulerOp[dit].PreStagePatch(
-          USphDivB[dit],dstData[dit],dVolrLev[dit],blockBox,time);
-      eulerOp[dit].computeDivB(divB[dit],USphDivB[dit]);
+      eulerOp[dit].computeDivB(divB[dit],USphEvolution[dit]);
     }
 
     // Keep div(B) in physical cgs units (G/cm); scale_data_with_r only

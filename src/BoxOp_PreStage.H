@@ -83,16 +83,6 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   high[0] = a_blockBox.low()[0] - 1;
   Box bdryBoxLow(bxGhosted.low(), high);
 
-  // The analytic test problems are at their uniform background state at both
-  // radial boundaries. Build the inverse basis on all ghosts once so type 6
-  // gets the same Cartesian magnetic field at initialization and boundaries.
-  BoxData<T,DIM,MEM,DIM> testProblemAinv;
-  if (init_condition_type == 6)
-  {
-    testProblemAinv.define(bxGhosted);
-    testProblemBasisInverse(testProblemAinv, bxGhosted, a_h, a_block);
-  }
-  
   // Outer BCs
   if (a_blockBox.high()[0] < bxGhosted.high()[0])
   {
@@ -141,14 +131,23 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
                         },bdryBoxHigh,a_USphStage,radius,radius_ghost);
     }
 
-    if (init_condition_type == 6){
-      forallInPlace_p(
-          f_testProblemMagneticBoundary,
-          bdryBoxHigh,
-          a_USphStage,
-          testProblemAinv,
-          m_gamma);
-    } 
+    if (init_condition_type == 6)
+    {
+      // Preserve the cell-averaged multiblock state at radial/angular
+      // corners. Reconstructing an analytic point value here is inconsistent
+      // with the fourth-order averages in a_USphStage and seeds visible block
+      // seams in low-beta magnetic tests.
+      Point sourceLow = bxGhosted.low();
+      Point sourceHigh = bxGhosted.high();
+      sourceLow[0] = a_blockBox.high()[0];
+      sourceHigh[0] = a_blockBox.high()[0];
+      const Box sourceBox(sourceLow, sourceHigh);
+      for (int ii = 1; ii <= NGHOST; ++ii)
+      {
+        a_USphStage.copyTo(
+            a_USphStage, sourceBox, Point::Basis(0)*ii);
+      }
+    }
   }
   // Inner BCs
   if (a_blockBox.low()[0] > bxGhosted.low()[0])
@@ -283,13 +282,18 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       },bdryBoxLow,a_USphStage,V_cart,B_cart,radius,m_gamma);
     }
 
-    if (init_condition_type == 6){
-      forallInPlace_p(
-          f_testProblemMagneticBoundary,
-          bdryBoxLow,
-          a_USphStage,
-          testProblemAinv,
-          m_gamma);
+    if (init_condition_type == 6)
+    {
+      Point sourceLow = bxGhosted.low();
+      Point sourceHigh = bxGhosted.high();
+      sourceLow[0] = a_blockBox.low()[0];
+      sourceHigh[0] = a_blockBox.low()[0];
+      const Box sourceBox(sourceLow, sourceHigh);
+      for (int ii = 1; ii <= NGHOST; ++ii)
+      {
+        a_USphStage.copyTo(
+            a_USphStage, sourceBox, Point::Basis(0)*(-ii));
+      }
     }
   }
   // if (procID() == 0) h5.writePatch(1,a_USphStage,"a_USphStage_withBC");

@@ -412,6 +412,18 @@ public:
                          const State& a_USph,
                          uint a_block) const;
 
+  /// Restore the analytic Cartesian magnetic background used by test 6.
+  inline void addTestProblem6BackgroundB(
+                         State& a_W,
+                         uint a_block) const;
+
+  /// Compute (|B0 + deltaB|^2 - |B0|^2)/(8*pi) without subtracting
+  /// two low-beta magnetic energies of nearly equal magnitude.
+  inline void testProblem6DeltaMagneticEnergy(
+                         BoxData<T,1,MEM>& a_deltaMe,
+                         const State& a_WDelta,
+                         uint a_block) const;
+
   /// Compute conserved quantities only on valid cells, given point values
   /// of primitive variables. Typically used for initialization. 
   inline void primToCons(
@@ -653,6 +665,13 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
 
 private:
   int m_count = 0;
+  // The exact test-6 equilibrium and geometry are time-independent. Cache
+  // its discrete operator so well balancing adds only one operator evaluation
+  // per patch per run, rather than one evaluation at every RK stage.
+  mutable bool m_test6BackgroundReady = false;
+  mutable T m_test6BackgroundScale = 0.0;
+  mutable State m_test6BackgroundRhs;
+  mutable Array<State,DIM> m_test6BackgroundFluxes;
   
 };
 #include "BoxOp_Utilities.H"

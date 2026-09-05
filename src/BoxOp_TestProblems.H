@@ -45,8 +45,8 @@ void f_smoothSphericalWaveInit_F(
     T a_gamma,
     int a_nradius)
 {
-  const T p0 = 1.0e-7;
-  const T rho0 = 700*c_MP;
+  const T p0 = c_TEST_P0;
+  const T rho0 = c_TEST_RHO0;
   const T eps = 0.1;
   const T arg = (a_pt[0] + 0.5 - 0.5*a_nradius)/(2.0*a_nradius);
   T amplitude = 0.0;
@@ -77,8 +77,8 @@ void f_nonRadialSphericalWaveInit_F(
     const Var<T, DIM, MEM>& a_Xcart,
     T a_gamma)
 {
-  const T p0 = 1.0e-7;
-  const T rho0 = 700*c_MP;
+  const T p0 = c_TEST_P0;
+  const T rho0 = c_TEST_RHO0;
   const T eps = 0.1;
 
   // Put a compact spherical pulse halfway through the shell, in a direction
@@ -129,8 +129,8 @@ void f_symmetricStrongShockInit_F(
     T a_strength,
     int a_nradius)
 {
-  const T p0 = 1.0e-7;
-  const T rho0 = 700*c_MP;
+  const T p0 = c_TEST_P0;
+  const T rho0 = c_TEST_RHO0;
   const T arg = (a_pt[0] + 0.5 - 0.5*a_nradius)/(2.0*a_nradius);
   T amplitude = 0.0;
   if (arg < 0.0)
@@ -181,13 +181,111 @@ PROTO_KERNEL_END(
 
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
+void f_addTestProblem6BackgroundB_F(
+    Point a_pt,
+    Var<T, NUMCOMPS, MEM>& a_W,
+    const Var<T, DIM, MEM, DIM>& a_Ainv,
+    T a_Bx,
+    T a_By,
+    T a_Bz)
+{
+  const T Bcart[DIM] = {a_Bx, a_By, a_Bz};
+  for (int ii = 0; ii < DIM; ++ii)
+  {
+    for (int jj = 0; jj < DIM; ++jj)
+    {
+      a_W(iBX + ii) += a_Ainv(ii, jj)*Bcart[jj];
+    }
+  }
+}
+PROTO_KERNEL_END(
+    f_addTestProblem6BackgroundB_F,
+    f_addTestProblem6BackgroundB)
+
+template<
+    typename T,
+    template<MemType> typename MAP,
+    MemType MEM>
+inline void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblem6BackgroundB(
+    State& a_W,
+    uint a_block) const
+{
+  BoxData<T,DIM,MEM,DIM> Ainv(a_W.box());
+  testProblemBasisInverse(Ainv, a_W.box(), this->dx()[2], a_block);
+  T Bx = c_TEST6_BX0;
+  T By = 0.0;
+  T Bz = 0.0;
+  forallInPlace_p(
+      f_addTestProblem6BackgroundB,
+      a_W,
+      Ainv,
+      Bx,
+      By,
+      Bz);
+}
+
+template<
+    typename T,
+    template<MemType> typename MAP,
+    MemType MEM>
+inline void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblem6DeltaMagneticEnergy(
+    BoxData<T,1,MEM>& a_deltaMe,
+    const State& a_WDelta,
+    uint a_block) const
+{
+  Array<Array<uint,DIM>,6> permute =
+      {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+  Array<Array<int,DIM>,6> sign =
+      {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
+  const T dxiPerp = this->dx()[1];
+  Box bx = a_WDelta.box();
+  Point high = bx.high();
+  Point low = bx.low();
+  high[0] = low[0];
+  BoxData<T,DIM,MEM,DIM> A(bx);
+  forallInPlace_p(
+      f_Amatrix,
+      Box(low,high),
+      A,
+      permute[a_block],
+      sign[a_block],
+      dxiPerp,
+      T(0.5),
+      T(0.5));
+  spreadSlice(A);
+
+  a_deltaMe.define(bx);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,1,MEM>& a_me,
+      const Var<T,DIM,MEM,DIM>& a_A,
+      const Var<T,NUMCOMPS,MEM>& a_W)
+    {
+      T bCart[DIM];
+      for (int ii = 0; ii < DIM; ++ii)
+      {
+        bCart[ii] = 0.0;
+        for (int jj = 0; jj < DIM; ++jj)
+        {
+          bCart[ii] += a_A(ii,jj)*a_W(iBX + jj);
+        }
+      }
+      T b2 = 0.0;
+      for (int ii = 0; ii < DIM; ++ii) b2 += bCart[ii]*bCart[ii];
+      a_me(0) = (2.0*c_TEST6_BX0*bCart[0] + b2)/(8.0*M_PI);
+    },a_deltaMe,A,a_WDelta);
+}
+
+template <typename T, MemType MEM>
+PROTO_KERNEL_START
 void f_testProblemHydroBoundary_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_U,
     T a_gamma)
 {
-  const T p0 = 1.0e-7;
-  const T rho0 = 700*c_MP;
+  const T p0 = c_TEST_P0;
+  const T rho0 = c_TEST_RHO0;
   a_U(iRHO) = rho0;
   a_U(iMOMX) = 0.0;
   a_U(iMOMY) = 0.0;
@@ -207,9 +305,9 @@ void f_testProblemMagneticBoundary_F(
     const Var<T, DIM, MEM, DIM>& a_Ainv,
     T a_gamma)
 {
-  const T p0 = 1.0e-7;
-  const T rho0 = 700*c_MP;
-  const T Bcart[DIM] = {1.0e-1, 0.0, 0.0};
+  const T p0 = c_TEST_P0;
+  const T rho0 = c_TEST_RHO0;
+  const T Bcart[DIM] = {c_TEST6_BX0, 0.0, 0.0};
 
   a_U(iRHO) = rho0;
   a_U(iMOMX) = 0.0;
