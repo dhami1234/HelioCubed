@@ -32,13 +32,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
   // No deconvolution here.
   // No primitive-average correction here.
   a_WPoint = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_UPoint);
-  const bool test6 = ParseInputs::get_init_condition_type() == 6;
+  const bool magneticTest =
+      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
   BoxData<T,1,MEM> deltaMe(a_WPoint.box());
   deltaMe.setVal(0.0);
-  if (test6)
+  if (magneticTest)
   {
-    testProblem6DeltaMagneticEnergy(deltaMe,a_WPoint,a_block);
-    addTestProblem6BackgroundB(a_WPoint,a_block);
+    testProblemDeltaMagneticEnergy(deltaMe,a_WPoint,a_block);
+    addTestProblemBackgroundB(a_WPoint,a_block);
   }
 
   BoxData<T,1,MEM> kePoint = kineticEnergyW(a_WPoint,a_block,-1);
@@ -51,10 +52,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
         const Var<T,1,MEM>& a_ke,
         const Var<T,1,MEM>& a_me,
         const Var<T,1,MEM>& a_deltaMe,
-        bool a_test6,
+        bool a_magneticTest,
         T a_gamma)
       {
-        if (a_test6)
+        if (a_magneticTest)
         {
           a_w(iP) = c_TEST_P0 + (a_gamma - 1.0)*
               (a_w(iP) - a_ke(0) - a_deltaMe(0));
@@ -69,7 +70,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
       kePoint,
       mePoint,
       deltaMe,
-      test6,
+      magneticTest,
       m_gamma);
 }
 
@@ -89,13 +90,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
   // Direct V(<U>) conversion.
   // Used only for Berta detector, not for reconstruction.
   a_WAvg = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_UAvg);
-  const bool test6 = ParseInputs::get_init_condition_type() == 6;
+  const bool magneticTest =
+      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
   BoxData<T,1,MEM> deltaMe(a_WAvg.box());
   deltaMe.setVal(0.0);
-  if (test6)
+  if (magneticTest)
   {
-    testProblem6DeltaMagneticEnergy(deltaMe,a_WAvg,a_block);
-    addTestProblem6BackgroundB(a_WAvg,a_block);
+    testProblemDeltaMagneticEnergy(deltaMe,a_WAvg,a_block);
+    addTestProblemBackgroundB(a_WAvg,a_block);
   }
 
   BoxData<T,1,MEM> keAvg = kineticEnergyW(a_WAvg,a_block,-1);
@@ -108,10 +110,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
         const Var<T,1,MEM>& a_ke,
         const Var<T,1,MEM>& a_me,
         const Var<T,1,MEM>& a_deltaMe,
-        bool a_test6,
+        bool a_magneticTest,
         T a_gamma)
       {
-        if (a_test6)
+        if (a_magneticTest)
         {
           a_w(iP) = c_TEST_P0 + (a_gamma - 1.0)*
               (a_w(iP) - a_ke(0) - a_deltaMe(0));
@@ -126,7 +128,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
       keAvg,
       meAvg,
       deltaMe,
-      test6,
+      magneticTest,
       m_gamma);
 }
 

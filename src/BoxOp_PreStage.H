@@ -88,14 +88,16 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   // Outer BCs
   if (a_blockBox.high()[0] < bxGhosted.high()[0])
   {
-    if (init_condition_type == 0 || init_condition_type == 1 || init_condition_type == 4 || init_condition_type == 5){
+    if (init_condition_type == 2
+        || init_condition_type == 4
+        || init_condition_type == 6){
       forallInPlace_p(
           f_testProblemHydroBoundary,
           bdryBoxHigh,
           a_USphStage,
           m_gamma);
     } 
-    if (init_condition_type == 2 || init_condition_type == 3)
+    if (init_condition_type == 0 || init_condition_type == 1)
       {
         // Copy last layer to ghost cells and scale by radius.
         // Extrapolation can make -ve P in ghost cells.
@@ -133,7 +135,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
                         },bdryBoxHigh,a_USphStage,radius,radius_ghost);
     }
 
-    if (init_condition_type == 6)
+    if (isConstantMagneticFieldTest(init_condition_type))
     {
       // Preserve the cell-averaged multiblock state at radial/angular
       // corners. Reconstructing an analytic point value here is inconsistent
@@ -178,14 +180,16 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
     BoxData<double, DIM, HOST> XCart = forall_p<double,DIM,HOST>
     (f_cubedSphereMap3,radius.box(),radius,dx,half,half,a_block);
 
-    if (init_condition_type == 0 || init_condition_type == 1 || init_condition_type == 4 || init_condition_type == 5){
+    if (init_condition_type == 2
+        || init_condition_type == 4
+        || init_condition_type == 6){
       forallInPlace_p(
           f_testProblemHydroBoundary,
           bdryBoxLow,
           a_USphStage,
           m_gamma);
     }
-    if (init_condition_type == 2){ 
+    if (init_condition_type == 1){
       T strength = ParseInputs::get_strength();
       forallInPlace_p(
           f_radialoutflowIBCs,
@@ -198,7 +202,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
           a_time,
           strength);
     }
-    if (init_condition_type == 3){
+    if (init_condition_type == 0){
       Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
       Point source_hi = Point(a_BC.box().low()[0],a_BC.box().high()[1],a_BC.box().high()[2]);
       Box sourceBox(source_lo,source_hi);
@@ -294,7 +298,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       },bdryBoxLow,a_USphStage,V_cart,B_cart,radius,m_gamma);
     }
 
-    if (init_condition_type == 6)
+    if (isConstantMagneticFieldTest(init_condition_type))
     {
       Point sourceLow = bxGhosted.low();
       Point sourceHigh = bxGhosted.high();
@@ -363,7 +367,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   int thetaCoord = (rCoord + 1) % DIM;
   int phiCoord = (rCoord + 2) % DIM;
   MBLevelBoxData<double, 8, HOST> dstData(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-  if (init_condition_type == 3) BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
+  if (init_condition_type == 0) BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
 
   for (auto dit : a_UStage.layout())
   {

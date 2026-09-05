@@ -16,19 +16,20 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
    int                             a_counter) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::operator()");
-  // Test problem 6 evolves perturbations about a uniform Cartesian magnetic
-  // equilibrium. Subtract the numerical operator evaluated on that exact
-  // background. Its continuum divergence is zero, so this preserves the MHD
-  // equations while removing cubed-sphere metric/interpolation residuals that
-  // are otherwise amplified by the very low plasma beta.
+  // Magnetized test problems evolve perturbations about a uniform Cartesian
+  // magnetic equilibrium. Subtract the numerical operator evaluated on that
+  // exact background. Its continuum divergence is zero, so this preserves the
+  // MHD equations while removing cubed-sphere metric/interpolation residuals
+  // that are otherwise amplified by the very low plasma beta.
   static thread_local bool evaluatingBackground = false;
   const bool subtractBackground =
-      ParseInputs::get_init_condition_type() == 6 && !evaluatingBackground;
+      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type())
+      && !evaluatingBackground;
   if (subtractBackground)
   {
-    const bool boxesMatch = m_test6BackgroundReady
-        && m_test6BackgroundRhs.box() == a_Rhs.box();
-    if (!boxesMatch || m_test6BackgroundScale != a_scale)
+    const bool boxesMatch = m_testBackgroundReady
+        && m_testBackgroundRhs.box() == a_Rhs.box();
+    if (!boxesMatch || m_testBackgroundScale != a_scale)
     {
       State backgroundUSph(a_USph.box());
       forallInPlace([] PROTO_LAMBDA(
@@ -38,32 +39,32 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
           a_state(iMOMX) = 0.0;
           a_state(iMOMY) = 0.0;
           a_state(iMOMZ) = 0.0;
-          // Energy and magnetic conserved variables store perturbations for
-          // test problem 6; primitive recovery restores their backgrounds.
+          // Energy and magnetic conserved variables store perturbations;
+          // primitive recovery restores their backgrounds.
           a_state(iE) = 0.0;
           a_state(iBX) = 0.0;
           a_state(iBY) = 0.0;
           a_state(iBZ) = 0.0;
         },backgroundUSph);
 
-      m_test6BackgroundRhs.define(a_Rhs.box());
-      m_test6BackgroundRhs.setVal(0.0);
+      m_testBackgroundRhs.define(a_Rhs.box());
+      m_testBackgroundRhs.setVal(0.0);
       for (int dir = 0; dir < DIM; ++dir)
       {
-        m_test6BackgroundFluxes[dir].define(a_fluxes[dir].box());
-        m_test6BackgroundFluxes[dir].setVal(0.0);
+        m_testBackgroundFluxes[dir].define(a_fluxes[dir].box());
+        m_testBackgroundFluxes[dir].setVal(0.0);
       }
       evaluatingBackground = true;
       this->operator()(
-          m_test6BackgroundRhs,
-          m_test6BackgroundFluxes,
+          m_testBackgroundRhs,
+          m_testBackgroundFluxes,
           backgroundUSph,
           a_dt,
           a_scale,
           a_counter);
       evaluatingBackground = false;
-      m_test6BackgroundScale = a_scale;
-      m_test6BackgroundReady = true;
+      m_testBackgroundScale = a_scale;
+      m_testBackgroundReady = true;
     }
   }
 
@@ -72,10 +73,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     BertaOperator(a_Rhs,a_fluxes,a_USph,a_dt,a_scale,a_counter);
     if (subtractBackground)
     {
-      a_Rhs -= m_test6BackgroundRhs;
+      a_Rhs -= m_testBackgroundRhs;
       for (int dir = 0; dir < DIM; ++dir)
       {
-        a_fluxes[dir] -= m_test6BackgroundFluxes[dir];
+        a_fluxes[dir] -= m_testBackgroundFluxes[dir];
       }
     }
     return;
@@ -244,10 +245,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
 
   if (subtractBackground)
   {
-    a_Rhs -= m_test6BackgroundRhs;
+    a_Rhs -= m_testBackgroundRhs;
     for (int dir = 0; dir < DIM; ++dir)
     {
-      a_fluxes[dir] -= m_test6BackgroundFluxes[dir];
+      a_fluxes[dir] -= m_testBackgroundFluxes[dir];
     }
   }
 
@@ -884,9 +885,9 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
     double a_gamma)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::P_floor()");
-  // Test problem 6 stores perturbation energy and magnetic field in a_JU.
+  // Magnetized tests store perturbation energy and magnetic field in a_JU.
   // The legacy mapped-state floor below cannot interpret that representation.
-  if (ParseInputs::get_init_condition_type() == 6) return;
+  if (isConstantMagneticFieldTest(ParseInputs::get_init_condition_type())) return;
   // auto map = CubedSphereShell::Map(a_JU.layout(), ghost());
   // auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
   // MBLevelBoxData<double, NUMCOMPS, HOST> USph(a_layout, ghost());
@@ -900,7 +901,7 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
   // int thetaCoord = (rCoord + 1) % DIM;
   // int phiCoord = (rCoord + 2) % DIM;
   // MBLevelBoxData<double, 8, HOST> dstData(a_layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-  // if (ParseInputs::get_init_condition_type() == 3) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time);
+  // if (ParseInputs::get_init_condition_type() == 0) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time);
   // for (auto dit : a_layout)
   // {
   //     auto block = a_layout.block(dit);

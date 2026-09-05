@@ -6,9 +6,9 @@
 #   ./scripts/run_test_problems.sh [results_directory]
 #
 # Defaults (set in USER CONFIGURATION below):
-#   - Runs init_condition_type 0, 1, 5, and 6 sequentially.
-#   - Uses 18 MPI processes, 100 iterations, and writes z=0 slices every
-#     10 iterations (including the initial and final states).
+#   - Runs the selected idealized test problem(s).
+#   - Uses 18 MPI processes, 1000 iterations, and writes z=0 slices every
+#     100 iterations (including the initial and final states).
 #   - Writes each case into its own directory under ./Test_results.
 #   - Deletes an existing result directory for each selected case before
 #     starting it, so stale files cannot be mixed into the new run.
@@ -40,12 +40,14 @@ set -Eeuo pipefail
 # USER CONFIGURATION -- edit these values before running the script
 # =============================================================================
 
-# Tests to run. Use one or more IDs, for example TEST_CASES=(5) or (0 6).
-#   0 = smooth spherically symmetric wave
-#   1 = non-radial spherical wave
-#   5 = symmetric strong shock
-#   6 = symmetric strong shock with constant Cartesian magnetic field
-TEST_CASES=(6)
+# Tests to run. Use one or more IDs, for example TEST_CASES=(4) or (2 3).
+#   2 = radial pulse
+#   3 = radial pulse with constant Cartesian magnetic field
+#   4 = non-radial pulse
+#   5 = non-radial pulse with constant Cartesian magnetic field
+#   6 = strong spherical shock
+#   7 = strong spherical shock with constant Cartesian magnetic field
+TEST_CASES=(7)
 
 # Mesh resolution. DOMAIN_SIZE is the angular resolution on each face;
 # THICKNESS is the radial resolution.
@@ -77,10 +79,12 @@ PLOTTER="${SCRIPT_DIR}/Plot_Test_Slices.py"
 
 case_name_for_id() {
     case "$1" in
-        0) printf '%s\n' "smooth_spherical_wave" ;;
-        1) printf '%s\n' "non_radial_spherical_wave" ;;
-        5) printf '%s\n' "symmetric_strong_shock" ;;
-        6) printf '%s\n' "strong_shock_constant_B" ;;
+        2) printf '%s\n' "radial_pulse" ;;
+        3) printf '%s\n' "radial_pulse_constant_B" ;;
+        4) printf '%s\n' "non_radial_pulse" ;;
+        5) printf '%s\n' "non_radial_pulse_constant_B" ;;
+        6) printf '%s\n' "strong_spherical_shock" ;;
+        7) printf '%s\n' "strong_spherical_shock_constant_B" ;;
         *) return 1 ;;
     esac
 }
@@ -104,7 +108,7 @@ CASE_IDS=("${TEST_CASES[@]}")
 CASE_NAMES=()
 for case_id in "${CASE_IDS[@]}"; do
     if ! case_name="$(case_name_for_id "${case_id}")"; then
-        echo "Error: unsupported test ID '${case_id}' in TEST_CASES; choose from 0, 1, 5, and 6." >&2
+        echo "Error: unsupported test ID '${case_id}' in TEST_CASES; choose from 2 through 7." >&2
         exit 1
     fi
     CASE_NAMES+=("${case_name}")

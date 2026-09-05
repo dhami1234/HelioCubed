@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
   int MBInterp_define = ParseInputs::get_MBInterp_define();
   string BC_file = ParseInputs::get_BC_file();
   string restart_file = ParseInputs::get_restart_file();
-  if (init_condition_type == 3) BC_global.file_to_BoxData_vec(BC_file);
+  if (init_condition_type == 0) BC_global.file_to_BoxData_vec(BC_file);
   
   double probe_cadence = ParseInputs::get_Probe_cadence();
   auto num_probes  = ParseInputs::get_num_probes();
@@ -109,11 +109,27 @@ int main(int argc, char *argv[])
         }
       for (int lev = 0; lev < 3; ++lev)
         {
-          Point boxSizeVect = Point::Ones(boxSize_nonrad);
-          boxSizeVect[radialDir] = boxSize_rad;
-          MBDisjointBoxLayout layout(comparison_domain, boxSizeVect);
-          U_conv_test[lev].define(layout, zeroGhost);
-          h5.readMBLevel(U_conv_test[lev], "U_conv_test_" + to_string(lev));
+          // The separately run levels use fixed-size patches so finer meshes
+          // have more boxes and can use more MPI ranks. Read that layout first.
+          Point fileBoxSize = Point::Ones(boxSize_nonrad);
+          fileBoxSize[radialDir] = boxSize_rad;
+          MBDisjointBoxLayout fileLayout(comparison_domain, fileBoxSize);
+          MBLevelBoxData<double, NUMCOMPS, HOST> fileData(
+              fileLayout, zeroGhost);
+          h5.readMBLevel(fileData, "U_conv_test_" + to_string(lev));
+
+          // Redistribute onto the nested layouts used by the original
+          // convergence driver. A fine comparison patch then coarsens exactly
+          // onto its corresponding patch at the preceding level, even when
+          // the base patch size is odd.
+          const int levelScale = 1 << lev;
+          Point comparisonBoxSize =
+              levelScale*Point::Ones(boxSize_nonrad);
+          comparisonBoxSize[radialDir] = levelScale*boxSize_rad;
+          MBDisjointBoxLayout comparisonLayout(
+              comparison_domain, comparisonBoxSize);
+          U_conv_test[lev].define(comparisonLayout, zeroGhost);
+          fileData.copyTo(U_conv_test[lev]);
           pout(0) << "Loaded convergence level " << lev
                   << " using " << numProc() << " MPI processes" << endl;
           comparison_domain = comparison_domain.refine(refRatio);
@@ -152,7 +168,7 @@ int main(int argc, char *argv[])
       int phiCoord = (rCoord + 2) % 3;
 
       MBLevelBoxData<double, 8, HOST> dstData(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-      if (init_condition_type == 3) BC_global.BoxData_to_BC(dstData, map, time);
+      if (init_condition_type == 0) BC_global.BoxData_to_BC(dstData, map, time);
 
       MBInterpOp iop;
       iop = CubedSphereShell::InterpOp<HOST>(JU.layout(),OP::ghost() ,4);
@@ -188,11 +204,11 @@ int main(int argc, char *argv[])
             eulerOp[dit].initialize(WPoint_i, dstData[dit], radius, XCart, gamma, thickness, dx[2], block);
             eulerOp[dit].dtInv(dtinv,WPoint_i);
             eulerOp[dit].primToCons(JUTemp, WPoint_i, dVolrLev[dit], gamma, dx[2], block);
-            if (init_condition_type == 6)
+            if (isConstantMagneticFieldTest(init_condition_type))
             {
-              // Test 6 evolves perturbations about its uniform low-beta MHD
-              // background. Subtract its mapped energy and magnetic field so
-              // primitive recovery does not lose pressure to cancellation.
+              // Magnetized tests evolve perturbations about a uniform low-beta
+              // MHD background. Subtract its mapped energy and magnetic field
+              // so primitive recovery does not lose pressure to cancellation.
               BoxData<double,NUMCOMPS,HOST> WBackground(WPoint_i.box());
               WPoint_i.copyTo(WBackground);
               forallInPlace([] PROTO_LAMBDA(
@@ -336,7 +352,7 @@ int main(int argc, char *argv[])
             timeStr.c_str(),
             dateStr.c_str(),
             elapsed_seconds.count());
-      if (init_condition_type != 3 && init_condition_type != 2) {
+      if (init_condition_type != 0 && init_condition_type != 1) {
         snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)",
             iter,
             dt,

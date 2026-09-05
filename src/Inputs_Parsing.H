@@ -39,11 +39,11 @@ private:
     // Keep this as text because the shared InputParser currently converts
     // numeric inputs through single precision before assigning to a double.
     string convergence_dt = "-1";
-    // 0: smooth spherical wave; 1: non-radial spherical wave;
-    // 2: analytic solar wind; 3: file-driven solar wind;
-    // 4: legacy velocity test; 5: symmetric strong shock;
-    // 6: symmetric strong shock with constant Cartesian B.
-    int init_condition_type = 3;
+    // 0: file-driven solar wind; 1: analytic solar wind;
+    // 2: radial pulse; 3: radial pulse with constant Cartesian B;
+    // 4: non-radial pulse; 5: non-radial pulse with constant Cartesian B;
+    // 6: strong spherical shock; 7: strong spherical shock with constant B.
+    int init_condition_type = 0;
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction
     int boxSize_nonrad; // Size of the box for domain decomposition

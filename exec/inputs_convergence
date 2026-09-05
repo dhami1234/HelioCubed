@@ -2,7 +2,7 @@
 -convTestType                    1
 -convergence_level              -1
 -convergence_dt                 -1.0
--init_condition_type             1
+-init_condition_type             4
 -domainSize                      30
 -thickness                       45
 -boxSize_nonrad                  30

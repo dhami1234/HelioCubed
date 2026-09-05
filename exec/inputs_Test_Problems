@@ -1,10 +1,12 @@
 ## Idealized test problems selected by init_condition_type:
-##   0 = smooth spherically symmetric wave
-##   1 = non-radial spherical wave
-##   5 = symmetric strong shock
-##   6 = symmetric strong shock with B_cart = (1e-1, 0, 0) G
+##   2 = radial pulse
+##   3 = radial pulse with B_cart = (1e-1, 0, 0) G
+##   4 = non-radial pulse
+##   5 = non-radial pulse with B_cart = (1e-1, 0, 0) G
+##   6 = strong spherical shock
+##   7 = strong spherical shock with B_cart = (1e-1, 0, 0) G
 -convTestType                    0
--init_condition_type             5
+-init_condition_type             6
 -domainSize                      30
 -thickness                       60
 -boxSize_nonrad                  30

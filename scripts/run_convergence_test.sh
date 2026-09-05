@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-# Run HelioCubed's three-level convergence test for either the radial or
-# non-radial smooth pulse. Each resolution is a separate MPI launch, allowing
-# the finer levels to use more ranks. A final, inexpensive launch reloads the
-# three solutions and reports the observed order for all eight variables.
+# Run HelioCubed's three-level convergence test for a radial or non-radial
+# smooth pulse, with or without constant B. Each resolution is a separate MPI
+# launch, allowing the finer levels to use more ranks. A final, inexpensive
+# launch reloads the three solutions and reports the observed order for all
+# eight variables.
 #
 # This script takes no command-line settings. Edit USER CONFIGURATION below.
 # For automation, the same settings can be overridden with the
@@ -16,9 +17,11 @@ set -Eeuo pipefail
 # =============================================================================
 
 # Pulse to test:
-#   0 = smooth radial pulse
-#   1 = smooth non-radial pulse
-PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-1}"
+#   2 = radial pulse
+#   3 = radial pulse with constant Cartesian magnetic field
+#   4 = non-radial pulse
+#   5 = non-radial pulse with constant Cartesian magnetic field
+PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-3}"
 
 # Convergence mode:
 #   1 = spatial convergence (refine the mesh only)
@@ -27,14 +30,15 @@ CONVERGENCE_TEST_TYPE="${HELIOCUBED_CONVERGENCE_TEST_TYPE:-1}"
 
 # Base mesh resolution. Both convergence modes also run (2x, 2x) and
 # (4x, 4x) versions of these angular and radial resolutions.
-DOMAIN_SIZE="${HELIOCUBED_CONVERGENCE_DOMAIN_SIZE:-60}"
-THICKNESS="${HELIOCUBED_CONVERGENCE_THICKNESS:-90}"
+DOMAIN_SIZE="${HELIOCUBED_CONVERGENCE_DOMAIN_SIZE:-45}"
+THICKNESS="${HELIOCUBED_CONVERGENCE_THICKNESS:-60}"
 
-# Computational/MPI box dimensions. Each must divide its corresponding base
-# mesh dimension exactly. They remain fixed as the mesh is refined, creating
-# more boxes that can be distributed over the additional MPI ranks.
-BOX_SIZE_NONRAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_NONRAD:-60}"
-BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD:-30}"
+# Simulation box dimensions. Each must divide its corresponding base mesh
+# dimension exactly. They remain fixed as the mesh is refined, creating more
+# boxes for additional MPI ranks. The comparison stage redistributes the saved
+# solutions onto nested boxes before averaging fine data to coarse grids.
+BOX_SIZE_NONRAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_NONRAD:-45}"
+BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD:-20}"
 
 # MAX_ITER applies to the base level. Type 1 uses this count on every level;
 # type 2 uses 2*MAX_ITER and 4*MAX_ITER on the finer levels.
@@ -45,7 +49,7 @@ MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-3}"
 if [[ -n "${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL:-}" ]]; then
     read -r -a NPROCS_BY_LEVEL <<< "${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL}"
 else
-    NPROCS_BY_LEVEL=(18 36 72)
+    NPROCS_BY_LEVEL=(18 18 18)
 fi
 
 # Supported time integrators are 1, 3, and 4. Fourth order is the normal
@@ -74,10 +78,12 @@ require_positive_integer() {
 }
 
 case "${PROBLEM_TYPE}" in
-    0) PROBLEM_NAME="radial_pulse" ;;
-    1) PROBLEM_NAME="non_radial_pulse" ;;
+    2) PROBLEM_NAME="radial_pulse" ;;
+    3) PROBLEM_NAME="radial_pulse_constant_B" ;;
+    4) PROBLEM_NAME="non_radial_pulse" ;;
+    5) PROBLEM_NAME="non_radial_pulse_constant_B" ;;
     *)
-        echo "Error: PROBLEM_TYPE must be 0 (radial) or 1 (non-radial)." >&2
+        echo "Error: PROBLEM_TYPE must be 2, 3, 4, or 5." >&2
         exit 1
         ;;
 esac
@@ -112,11 +118,6 @@ if (( THICKNESS % BOX_SIZE_RAD != 0 )); then
     echo "Error: BOX_SIZE_RAD (${BOX_SIZE_RAD}) must divide THICKNESS (${THICKNESS})." >&2
     exit 1
 fi
-if (( BOX_SIZE_NONRAD % 2 != 0 || BOX_SIZE_RAD % 2 != 0 )); then
-    echo "Error: both box sizes must be even so fine boxes can be averaged onto the next coarser mesh." >&2
-    exit 1
-fi
-
 BASE_BOX_COUNT=$((
     6 * (DOMAIN_SIZE / BOX_SIZE_NONRAD) * (DOMAIN_SIZE / BOX_SIZE_NONRAD)
     * (THICKNESS / BOX_SIZE_RAD)

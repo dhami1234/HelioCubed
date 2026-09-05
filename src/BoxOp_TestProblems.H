@@ -181,7 +181,7 @@ PROTO_KERNEL_END(
 
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
-void f_addTestProblem6BackgroundB_F(
+void f_addTestProblemBackgroundB_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_W,
     const Var<T, DIM, MEM, DIM>& a_Ainv,
@@ -199,25 +199,25 @@ void f_addTestProblem6BackgroundB_F(
   }
 }
 PROTO_KERNEL_END(
-    f_addTestProblem6BackgroundB_F,
-    f_addTestProblem6BackgroundB)
+    f_addTestProblemBackgroundB_F,
+    f_addTestProblemBackgroundB)
 
 template<
     typename T,
     template<MemType> typename MAP,
     MemType MEM>
 inline void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblem6BackgroundB(
+BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblemBackgroundB(
     State& a_W,
     uint a_block) const
 {
   BoxData<T,DIM,MEM,DIM> Ainv(a_W.box());
   testProblemBasisInverse(Ainv, a_W.box(), this->dx()[2], a_block);
-  T Bx = c_TEST6_BX0;
+  T Bx = c_TEST_BX0;
   T By = 0.0;
   T Bz = 0.0;
   forallInPlace_p(
-      f_addTestProblem6BackgroundB,
+      f_addTestProblemBackgroundB,
       a_W,
       Ainv,
       Bx,
@@ -230,7 +230,7 @@ template<
     template<MemType> typename MAP,
     MemType MEM>
 inline void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblem6DeltaMagneticEnergy(
+BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblemDeltaMagneticEnergy(
     BoxData<T,1,MEM>& a_deltaMe,
     const State& a_WDelta,
     uint a_block) const
@@ -273,7 +273,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblem6DeltaMagneticEnergy(
       }
       T b2 = 0.0;
       for (int ii = 0; ii < DIM; ++ii) b2 += bCart[ii]*bCart[ii];
-      a_me(0) = (2.0*c_TEST6_BX0*bCart[0] + b2)/(8.0*M_PI);
+      a_me(0) = (2.0*c_TEST_BX0*bCart[0] + b2)/(8.0*M_PI);
     },a_deltaMe,A,a_WDelta);
 }
 
@@ -307,7 +307,7 @@ void f_testProblemMagneticBoundary_F(
 {
   const T p0 = c_TEST_P0;
   const T rho0 = c_TEST_RHO0;
-  const T Bcart[DIM] = {c_TEST6_BX0, 0.0, 0.0};
+  const T Bcart[DIM] = {c_TEST_BX0, 0.0, 0.0};
 
   a_U(iRHO) = rho0;
   a_U(iMOMX) = 0.0;
