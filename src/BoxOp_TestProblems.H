@@ -75,7 +75,6 @@ void f_nonRadialSphericalWaveInit_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_W,
     const Var<T, DIM, MEM>& a_Xcart,
-    const Var<T, DIM, MEM, DIM>& a_Ainv,
     T a_gamma)
 {
   const T p0 = 1.0e-7;
@@ -108,27 +107,12 @@ void f_nonRadialSphericalWaveInit_F(
 
   const T rho = rho0*(1.0 + amplitude);
   const T p = p0*pow(rho/rho0, a_gamma);
-  const T speed = amplitude*sqrt(a_gamma*p0/rho0);
-  T velocityCart[DIM] = {0.0, 0.0, 0.0};
-  if (distance > 0.0)
-  {
-    for (int dir = 0; dir < DIM; ++dir)
-    {
-      velocityCart[dir] = speed*displacement[dir]/distance;
-    }
-  }
 
+  // Start the density/pressure pulse at rest, including at its center.
   a_W(iRHO) = rho;
   a_W(iVX) = 0.0;
   a_W(iVY) = 0.0;
   a_W(iVZ) = 0.0;
-  for (int ii = 0; ii < DIM; ++ii)
-  {
-    for (int jj = 0; jj < DIM; ++jj)
-    {
-      a_W(iVX + ii) += a_Ainv(ii, jj)*velocityCart[jj];
-    }
-  }
   a_W(iP) = p;
   a_W(iBX) = 0.0;
   a_W(iBY) = 0.0;

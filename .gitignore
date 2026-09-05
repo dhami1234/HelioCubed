@@ -16,7 +16,9 @@ blt
 *.out
 *.sh
 !scripts/run_test_problems.sh
+!scripts/run_convergence_test.sh
 /Test_results/
+/Convergence_results/
 *.jpeg
 *.png
 *.mpg

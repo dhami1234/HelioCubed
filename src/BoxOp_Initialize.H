@@ -82,7 +82,6 @@ initialize(State& a_W,
         f_nonRadialSphericalWaveInit,
         a_W,
         a_Xcart,
-        A_matrix_inv,
         a_gamma);
   }
   if (init_condition_type == 2) forallInPlace_p(f_radialoutflowInit, a_W, a_radius, a_Xcart, a_gamma, a_nradius);
