@@ -8,7 +8,8 @@ void f_radialoutflowInit_F(
     Var<T> &a_radius,
     Var<T, DIM> &a_X_cart,
     T a_gamma,
-    int a_nradius)
+    int a_nradius,
+    T a_strength)
 {
   T r = sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1) + a_X_cart(2) * a_X_cart(2));
   T theta = atan2(sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1)), a_X_cart(2)); // polar angle
@@ -22,7 +23,15 @@ void f_radialoutflowInit_F(
   T p = p0 * pow(r_BC/r,2.0*a_gamma);
   // T ur = u0;
   // T ur = u0 - u0/10 * sin(5.0*phi)*sin(theta);
-  T ur = u0 - u0/3 * ((1 + 2*cos(5*phi))*sin(5*phi));
+  const T perturbationScale = a_strength/100.0;
+  const T sinTheta = sin(theta);
+  // The original longitude-only profile is multi-valued at the poles.
+  // Taper each azimuthal mode with sin(theta)^m, which leaves the
+  // equatorial profile unchanged and makes it smooth on the sphere.
+  const T angularPattern =
+      pow(sinTheta,5)*sin(5*phi) + pow(sinTheta,10)*sin(10*phi);
+  T ur = u0 - perturbationScale*u0/3
+      * angularPattern;
   a_W(iRHO) = rho;
   a_W(iVX) = ur;
   a_W(iVY) = 0.0;
@@ -84,7 +93,17 @@ initialize(State& a_W,
         a_Xcart,
         a_gamma);
   }
-  if (init_condition_type == 2) forallInPlace_p(f_radialoutflowInit, a_W, a_radius, a_Xcart, a_gamma, a_nradius);
+  if (init_condition_type == 2)
+  {
+    forallInPlace_p(
+        f_radialoutflowInit,
+        a_W,
+        a_radius,
+        a_Xcart,
+        a_gamma,
+        a_nradius,
+        strength);
+  }
 
   if (init_condition_type == 3) {
     Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
