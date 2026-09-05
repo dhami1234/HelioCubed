@@ -2,7 +2,7 @@
 ##   0 = smooth spherically symmetric wave
 ##   1 = non-radial spherical wave
 ##   5 = symmetric strong shock
-##   6 = symmetric strong shock with B_cart = (1e-4, 0, 0) G
+##   6 = symmetric strong shock with B_cart = (1e-2, 0, 0) G
 -convTestType                    0
 -init_condition_type             5
 -domainSize                      30

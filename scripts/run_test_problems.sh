@@ -45,7 +45,7 @@ set -Eeuo pipefail
 #   1 = non-radial spherical wave
 #   5 = symmetric strong shock
 #   6 = symmetric strong shock with constant Cartesian magnetic field
-TEST_CASES=(1)
+TEST_CASES=(6)
 
 # Mesh resolution. DOMAIN_SIZE is the angular resolution on each face;
 # THICKNESS is the radial resolution.
@@ -59,7 +59,7 @@ BOX_SIZE_RAD=40
 
 # Runtime and output settings.
 NPROCS=18
-MAX_ITER=500
+MAX_ITER=1000
 SLICE_CADENCE=100
 PLOT_WORKERS=8
 

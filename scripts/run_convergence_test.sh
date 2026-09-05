@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 
-# Run HelioCubed's built-in three-level convergence test for either the radial
-# or non-radial smooth pulse. The solver compares its base, 2x, and 4x
-# solutions and reports the observed order for all eight variables.
+# Run HelioCubed's three-level convergence test for either the radial or
+# non-radial smooth pulse. Each resolution is a separate MPI launch, allowing
+# the finer levels to use more ranks. A final, inexpensive launch reloads the
+# three solutions and reports the observed order for all eight variables.
 #
 # This script takes no command-line settings. Edit USER CONFIGURATION below.
+# For automation, the same settings can be overridden with the
+# HELIOCUBED_CONVERGENCE_* environment variables shown on each assignment.
 
 set -Eeuo pipefail
 
@@ -15,31 +18,39 @@ set -Eeuo pipefail
 # Pulse to test:
 #   0 = smooth radial pulse
 #   1 = smooth non-radial pulse
-PROBLEM_TYPE=1
+PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-1}"
 
 # Convergence mode:
 #   1 = spatial convergence (refine the mesh only)
 #   2 = space-and-time convergence (refine the mesh and timestep together)
-CONVERGENCE_TEST_TYPE=1
+CONVERGENCE_TEST_TYPE="${HELIOCUBED_CONVERGENCE_TEST_TYPE:-1}"
 
 # Base mesh resolution. Both convergence modes also run (2x, 2x) and
 # (4x, 4x) versions of these angular and radial resolutions.
-DOMAIN_SIZE=60
-THICKNESS=90
+DOMAIN_SIZE="${HELIOCUBED_CONVERGENCE_DOMAIN_SIZE:-60}"
+THICKNESS="${HELIOCUBED_CONVERGENCE_THICKNESS:-90}"
 
-# Base computational/MPI box dimensions. Each must divide its corresponding
-# base mesh dimension exactly. The solver scales the boxes with each level.
-BOX_SIZE_NONRAD=60
-BOX_SIZE_RAD=30
+# Computational/MPI box dimensions. Each must divide its corresponding base
+# mesh dimension exactly. They remain fixed as the mesh is refined, creating
+# more boxes that can be distributed over the additional MPI ranks.
+BOX_SIZE_NONRAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_NONRAD:-60}"
+BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD:-30}"
 
 # MAX_ITER applies to the base level. Type 1 uses this count on every level;
 # type 2 uses 2*MAX_ITER and 4*MAX_ITER on the finer levels.
-MAX_ITER=3
-NPROCS=18
+MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-3}"
+
+# MPI ranks for the base, 2x, and 4x levels. Increase these according to the
+# resources in your allocation. The final comparison uses the base count.
+if [[ -n "${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL:-}" ]]; then
+    read -r -a NPROCS_BY_LEVEL <<< "${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL}"
+else
+    NPROCS_BY_LEVEL=(18 36 72)
+fi
 
 # Supported time integrators are 1, 3, and 4. Fourth order is the normal
 # choice when measuring the full space-and-time accuracy of the scheme.
-TEMPORAL_ORDER=1
+TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-1}"
 
 # =============================================================================
 # END USER CONFIGURATION
@@ -85,7 +96,13 @@ require_positive_integer "THICKNESS" "${THICKNESS}"
 require_positive_integer "BOX_SIZE_NONRAD" "${BOX_SIZE_NONRAD}"
 require_positive_integer "BOX_SIZE_RAD" "${BOX_SIZE_RAD}"
 require_positive_integer "MAX_ITER" "${MAX_ITER}"
-require_positive_integer "NPROCS" "${NPROCS}"
+if (( ${#NPROCS_BY_LEVEL[@]} != 3 )); then
+    echo "Error: NPROCS_BY_LEVEL must contain exactly three process counts." >&2
+    exit 1
+fi
+for level in 0 1 2; do
+    require_positive_integer "NPROCS_BY_LEVEL[${level}]" "${NPROCS_BY_LEVEL[${level}]}"
+done
 
 if (( DOMAIN_SIZE % BOX_SIZE_NONRAD != 0 )); then
     echo "Error: BOX_SIZE_NONRAD (${BOX_SIZE_NONRAD}) must divide DOMAIN_SIZE (${DOMAIN_SIZE})." >&2
@@ -95,16 +112,30 @@ if (( THICKNESS % BOX_SIZE_RAD != 0 )); then
     echo "Error: BOX_SIZE_RAD (${BOX_SIZE_RAD}) must divide THICKNESS (${THICKNESS})." >&2
     exit 1
 fi
+if (( BOX_SIZE_NONRAD % 2 != 0 || BOX_SIZE_RAD % 2 != 0 )); then
+    echo "Error: both box sizes must be even so fine boxes can be averaged onto the next coarser mesh." >&2
+    exit 1
+fi
 
 BASE_BOX_COUNT=$((
     6 * (DOMAIN_SIZE / BOX_SIZE_NONRAD) * (DOMAIN_SIZE / BOX_SIZE_NONRAD)
     * (THICKNESS / BOX_SIZE_RAD)
 ))
-if (( NPROCS > BASE_BOX_COUNT )); then
-    echo "Error: NPROCS (${NPROCS}) exceeds the ${BASE_BOX_COUNT} computational boxes." >&2
-    echo "Reduce NPROCS or reduce the box sizes so every MPI rank owns a box." >&2
-    exit 1
-fi
+for level in 0 1 2; do
+    scale=$((1 << level))
+    level_box_count=$((BASE_BOX_COUNT * scale * scale * scale))
+    if (( NPROCS_BY_LEVEL[level] > level_box_count )); then
+        echo "Error: NPROCS_BY_LEVEL[${level}] (${NPROCS_BY_LEVEL[${level}]}) exceeds the ${level_box_count} computational boxes at level ${level}." >&2
+        echo "Reduce that process count or reduce the box sizes so every MPI rank owns a box." >&2
+        exit 1
+    fi
+    if (( level > 0 )); then
+        if (( NPROCS_BY_LEVEL[level] < NPROCS_BY_LEVEL[level - 1] )); then
+            echo "Error: NPROCS_BY_LEVEL must be nondecreasing." >&2
+            exit 1
+        fi
+    fi
+done
 case "${TEMPORAL_ORDER}" in
     1|3|4) ;;
     *)
@@ -150,20 +181,35 @@ clean_results_directory() {
 
 make_convergence_input() {
     local output_file="$1"
+    local convergence_level="$2"
+    local resolution_scale="$3"
+    local convergence_dt="$4"
+    local level_domain_size=$((resolution_scale * DOMAIN_SIZE))
+    local level_thickness=$((resolution_scale * THICKNESS))
+    local level_max_iter="${MAX_ITER}"
+
+    if [[ "${CONVERGENCE_TEST_TYPE}" -eq 2 ]]; then
+        level_max_iter=$((resolution_scale * MAX_ITER))
+    fi
 
     awk \
         -v convergence_test_type="${CONVERGENCE_TEST_TYPE}" \
+        -v convergence_level="${convergence_level}" \
+        -v convergence_dt="${convergence_dt}" \
         -v problem_type="${PROBLEM_TYPE}" \
-        -v domain_size="${DOMAIN_SIZE}" \
-        -v thickness="${THICKNESS}" \
+        -v domain_size="${level_domain_size}" \
+        -v thickness="${level_thickness}" \
         -v box_size_nonrad="${BOX_SIZE_NONRAD}" \
         -v box_size_rad="${BOX_SIZE_RAD}" \
-        -v max_iter="${MAX_ITER}" \
+        -v max_iter="${level_max_iter}" \
         -v temporal_order="${TEMPORAL_ORDER}" \
-        -v data_prefix="${PROBLEM_NAME}_convergence" \
-        -v checkpoint_prefix="${PROBLEM_NAME}_convergence_checkpoint" \
+        -v data_prefix="${PROBLEM_NAME}_convergence_L${convergence_level}" \
+        -v checkpoint_prefix="${PROBLEM_NAME}_convergence_checkpoint_L${convergence_level}" \
         '
+        BEGIN { found_level = 0; found_dt = 0 }
         $1 == "-convTestType"           { $2 = convergence_test_type }
+        $1 == "-convergence_level"      { $2 = convergence_level; found_level = 1 }
+        $1 == "-convergence_dt"         { $2 = sprintf("%.17g", convergence_dt); found_dt = 1 }
         $1 == "-init_condition_type"    { $2 = problem_type }
         $1 == "-domainSize"             { $2 = domain_size }
         $1 == "-thickness"              { $2 = thickness }
@@ -178,14 +224,16 @@ make_convergence_input() {
         $1 == "-temporal_order"         { $2 = temporal_order }
         $1 == "-radial_refinement"      { $2 = 0 }
         { print }
+        END {
+            if (!found_level) print "-convergence_level " convergence_level
+            if (!found_dt) printf "-convergence_dt %.17g\n", convergence_dt
+        }
         ' "${BASE_INPUT}" > "${output_file}"
 }
 
 clean_results_directory
-INPUT_FILE="${RESULTS_DIR}/inputs"
 LOG_FILE="${RESULTS_DIR}/run.log"
 SUMMARY_FILE="${RESULTS_DIR}/convergence_summary.txt"
-make_convergence_input "${INPUT_FILE}"
 
 FINE_DOMAIN_SIZE=$((4 * DOMAIN_SIZE))
 FINE_THICKNESS=$((4 * THICKNESS))
@@ -199,16 +247,62 @@ if [[ "${CONVERGENCE_TEST_TYPE}" -eq 2 ]]; then
 else
     echo "Iteration counts: ${MAX_ITER}, ${MAX_ITER}, ${MAX_ITER}"
 fi
-echo "MPI processes: ${NPROCS}"
+echo "MPI processes by level: ${NPROCS_BY_LEVEL[*]}"
 echo "Results: ${RESULTS_DIR}"
 
+BASE_DT=""
+for level in 0 1 2; do
+    scale=$((1 << level))
+    level_domain_size=$((scale * DOMAIN_SIZE))
+    level_thickness=$((scale * THICKNESS))
+    level_max_iter="${MAX_ITER}"
+    level_dt="-1.0"
+    if [[ "${CONVERGENCE_TEST_TYPE}" -eq 2 ]]; then
+        level_max_iter=$((scale * MAX_ITER))
+    fi
+    if (( level > 0 )); then
+        if [[ "${CONVERGENCE_TEST_TYPE}" -eq 1 ]]; then
+            level_dt="${BASE_DT}"
+        else
+            level_dt="$(awk -v dt="${BASE_DT}" -v divisor="${scale}" 'BEGIN { printf "%.17g", dt / divisor }')"
+        fi
+    fi
+
+    input_file="${RESULTS_DIR}/inputs_level${level}"
+    level_log="${RESULTS_DIR}/level${level}.log"
+    make_convergence_input "${input_file}" "${level}" "${scale}" "${level_dt}"
+
+    printf '\n=== Running convergence level %d: %dx%d, %d radial cells, %d MPI processes, %d iterations ===\n' \
+        "${level}" "${level_domain_size}" "${level_domain_size}" "${level_thickness}" \
+        "${NPROCS_BY_LEVEL[${level}]}" "${level_max_iter}" | tee -a "${LOG_FILE}"
+    (
+        cd "${RESULTS_DIR}"
+        "${MPIEXEC}" -np "${NPROCS_BY_LEVEL[${level}]}" "${EXECUTABLE}" "${input_file}"
+    ) 2>&1 | tee -a "${LOG_FILE}" "${level_log}"
+
+    if (( level == 0 )); then
+        BASE_DT="$(awk '$1 == "Convergence" && $2 == "timestep" && $3 == "=" { value = $4 } END { print value }' "${level_log}")"
+        if ! [[ "${BASE_DT}" =~ ^[+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$ ]] \
+            || ! awk -v dt="${BASE_DT}" 'BEGIN { exit !(dt > 0) }'; then
+            echo "Error: could not read a positive base convergence timestep from ${level_log}." >&2
+            exit 1
+        fi
+        echo "Base convergence timestep: ${BASE_DT}" | tee -a "${LOG_FILE}"
+    fi
+done
+
+COMPARE_INPUT="${RESULTS_DIR}/inputs_compare"
+COMPARE_LOG="${RESULTS_DIR}/compare.log"
+make_convergence_input "${COMPARE_INPUT}" 3 1 -1.0
+printf '\n=== Comparing the three convergence levels with %d MPI processes ===\n' \
+    "${NPROCS_BY_LEVEL[0]}" | tee -a "${LOG_FILE}"
 (
     cd "${RESULTS_DIR}"
-    "${MPIEXEC}" -np "${NPROCS}" "${EXECUTABLE}" "${INPUT_FILE}"
-) 2>&1 | tee "${LOG_FILE}"
+    "${MPIEXEC}" -np "${NPROCS_BY_LEVEL[0]}" "${EXECUTABLE}" "${COMPARE_INPUT}"
+) 2>&1 | tee -a "${LOG_FILE}" "${COMPARE_LOG}"
 
 awk '/Lev = [01], component = [0-7], error =/ || /order of accuracy for var [0-7] =/ { print }' \
-    "${LOG_FILE}" > "${SUMMARY_FILE}"
+    "${COMPARE_LOG}" > "${SUMMARY_FILE}"
 
 if [[ ! -s "${SUMMARY_FILE}" ]]; then
     echo "Error: the solver completed without reporting convergence results." >&2

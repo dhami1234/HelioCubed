@@ -209,7 +209,7 @@ void f_testProblemMagneticBoundary_F(
 {
   const T p0 = 1.0e-7;
   const T rho0 = 700*c_MP;
-  const T Bcart[DIM] = {1.0e-2, 0.0, 0.0};
+  const T Bcart[DIM] = {1.0e-1, 0.0, 0.0};
 
   a_U(iRHO) = rho0;
   a_U(iMOMX) = 0.0;
@@ -224,7 +224,15 @@ void f_testProblemMagneticBoundary_F(
       a_U(iBX + ii) += a_Ainv(ii, jj)*Bcart[jj];
     }
   }
-  a_U(iE) += 1.0e-8/(8.0*M_PI);
+  // Use the actual Cartesian field above. A separately hard-coded B^2 can
+  // leave total energy below magnetic energy and impose negative gas pressure
+  // in every radial ghost cell when the test field strength changes.
+  T magneticEnergy = 0.0;
+  for (int dir = 0; dir < DIM; ++dir)
+  {
+    magneticEnergy += Bcart[dir]*Bcart[dir]/(8.0*M_PI);
+  }
+  a_U(iE) += magneticEnergy;
 }
 PROTO_KERNEL_END(
     f_testProblemMagneticBoundary_F,

@@ -31,6 +31,14 @@ using namespace std;
 class ParseInputs {
 private:
     int convTestType = 0; // 0: No convergence test, 1: Space Convergence test, 2: Space and Time Convergence test
+    // -1: run all convergence levels in one MPI launch (legacy behavior);
+    // 0, 1, 2: run only that level; 3: compare previously written levels.
+    int convergence_level = -1;
+    // A positive value overrides the convergence timestep. This lets separately
+    // launched levels use the same timestep sequence as the legacy driver.
+    // Keep this as text because the shared InputParser currently converts
+    // numeric inputs through single precision before assigning to a double.
+    string convergence_dt = "-1";
     // 0: smooth spherical wave; 1: non-radial spherical wave;
     // 2: analytic solar wind; 3: file-driven solar wind;
     // 4: legacy velocity test; 5: symmetric strong shock;
@@ -130,6 +138,8 @@ public:
 
     // Static Getters
     static int get_convTestType() {return getInstance().convTestType;}
+    static int get_convergence_level() {return getInstance().convergence_level;}
+    static double get_convergence_dt() {return std::stod(getInstance().convergence_dt);}
     static int get_init_condition_type() {return getInstance().init_condition_type;}
     static int get_domainSize() {return getInstance().domainSize;}
     static int get_thickness() {return getInstance().thickness;}
@@ -200,6 +210,8 @@ public:
     void parsenow(int argc, char* argv[]) {
         InputArgs args;
         args.add("convTestType", convTestType);
+        args.add("convergence_level", convergence_level);
+        args.add("convergence_dt", convergence_dt);
         args.add("init_condition_type", init_condition_type);
         args.add("domainSize", domainSize);
         args.add("thickness", thickness);
@@ -290,6 +302,8 @@ public:
         pout(0) << "Running with the following inputs (these can be changed in the inputs file)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
         pout(0) << "convTestType: " << convTestType << endl;
+        pout(0) << "convergence_level: " << convergence_level << endl;
+        pout(0) << "convergence_dt: " << convergence_dt << endl;
         pout(0) << "init_condition_type: " << init_condition_type << endl;
         pout(0) << "domainSize: " << domainSize << endl;
         pout(0) << "thickness: " << thickness << endl;

@@ -31,6 +31,8 @@ int main(int argc, char *argv[])
   int checkpoint_cadence = ParseInputs::get_checkpoint_cadence();
   int slice_cadence = ParseInputs::get_slice_cadence();
   int convTestType = ParseInputs::get_convTestType();
+  int convergence_level = ParseInputs::get_convergence_level();
+  double convergence_dt = ParseInputs::get_convergence_dt();
   int init_condition_type = ParseInputs::get_init_condition_type();
   int radial_refinement = ParseInputs::get_radial_refinement();
   int MBInterp_define = ParseInputs::get_MBInterp_define();
@@ -55,8 +57,68 @@ int main(int argc, char *argv[])
   int levmax = 3;
   auto domain =
     CubedSphereShell::Domain(domainSize, thickness, radialDir);
+  bool split_convergence_level = (convergence_level >= 0 && convergence_level <= 2);
+  bool compare_convergence_levels = (convergence_level == 3);
+
+  if (convergence_level < -1 || convergence_level > 3)
+    {
+      pout(0) << "Error: convergence_level must be -1, 0, 1, 2, or 3." << endl;
+#ifdef PR_MPI
+      MPI_Finalize();
+#endif
+      return 1;
+    }
+  if (convergence_level != -1 && (convTestType < 1 || convTestType > 2))
+    {
+      pout(0) << "Error: split convergence levels require convTestType 1 or 2." << endl;
+#ifdef PR_MPI
+      MPI_Finalize();
+#endif
+      return 1;
+    }
+  if (convergence_dt != -1.0 && convergence_dt <= 0.0)
+    {
+      pout(0) << "Error: convergence_dt must be -1 or a positive value." << endl;
+#ifdef PR_MPI
+      MPI_Finalize();
+#endif
+      return 1;
+    }
+
   if (convTestType == 0) levmax = 1;
   if (convTestType == 4) levmax = 1;
+  if (split_convergence_level) levmax = 1;
+  if (compare_convergence_levels)
+    {
+      levmax = 0;
+      auto comparison_domain = domain;
+      Point refRatio;
+      if (radial_refinement)
+        {
+          refRatio = 2*Point::Ones() - Point::Basis(1) - Point::Basis(2);
+        }
+      else
+        {
+          refRatio = 2*Point::Ones();
+        }
+
+      Array<Point, DIM+1> zeroGhost;
+      for (int d = 0; d < DIM + 1; ++d)
+        {
+          zeroGhost[d] = Point::Zeros();
+        }
+      for (int lev = 0; lev < 3; ++lev)
+        {
+          Point boxSizeVect = Point::Ones(boxSize_nonrad);
+          boxSizeVect[radialDir] = boxSize_rad;
+          MBDisjointBoxLayout layout(comparison_domain, boxSizeVect);
+          U_conv_test[lev].define(layout, zeroGhost);
+          h5.readMBLevel(U_conv_test[lev], "U_conv_test_" + to_string(lev));
+          pout(0) << "Loaded convergence level " << lev
+                  << " using " << numProc() << " MPI processes" << endl;
+          comparison_domain = comparison_domain.refine(refRatio);
+        }
+    }
   for (int lev=0; lev<levmax; lev++)
     {
       typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
@@ -169,6 +231,17 @@ int main(int argc, char *argv[])
         double dtcfl1 = OP::dtCFL(JU,iop,dVolrLev);
         dt = 0.2*dtcfl1*ParseInputs::get_CFL();
       }
+    if (split_convergence_level && convergence_dt > 0.0)
+      {
+        dt = convergence_dt;
+      }
+    if (convTestType == 1 || convTestType == 2)
+      {
+        int output_level = split_convergence_level ? convergence_level : lev;
+        pout(0) << "Convergence level = " << output_level << endl;
+        pout(0) << "Convergence timestep = " << setprecision(17) << dt
+                << setprecision(6) << endl;
+      }
     if (convTestType > 2) max_iter = 1;
     
     bool time_exceeded = false;
@@ -250,41 +323,45 @@ int main(int argc, char *argv[])
     }
 
       if ((convTestType > 0) && (convTestType != 4)) {
+        int output_level = split_convergence_level ? convergence_level : lev;
         Array<Point, DIM+1> zeroGhost;
           for (int d = 0; d < DIM + 1; ++d)
             {
               zeroGhost[d] = Point::Zeros();
             }
-      U_conv_test[lev].define(layout, zeroGhost);
+      U_conv_test[output_level].define(layout, zeroGhost);
       for (auto dit : layout)
       {
-        JU[dit].copyTo(U_conv_test[lev][dit]);
+        JU[dit].copyTo(U_conv_test[output_level][dit]);
       }
-      h5.writeMBLevel({}, map, U_conv_test[lev], "U_conv_test_" + to_string(lev));
-      Point refRatio = 2*Point::Ones();
-      if (radial_refinement)
+      h5.writeMBLevel({}, map, U_conv_test[output_level], "U_conv_test_" + to_string(output_level));
+      if (!split_convergence_level)
         {
-          refRatio = 2*Point::Ones() - Point::Basis(1) - Point::Basis(2);
-          domainSize *= refRatio[1];
-          boxSize_nonrad *= refRatio[1];
-        } else {
-          domainSize *= 2;
-          boxSize_nonrad *= 2;
+          Point refRatio = 2*Point::Ones();
+          if (radial_refinement)
+            {
+              refRatio = 2*Point::Ones() - Point::Basis(1) - Point::Basis(2);
+              domainSize *= refRatio[1];
+              boxSize_nonrad *= refRatio[1];
+            } else {
+              domainSize *= 2;
+              boxSize_nonrad *= 2;
+            }
+
+          thickness *= 2;
+          boxSize_rad *= 2;
+          time = 0.;
+          domain = domain.refine(refRatio);
+          if (convTestType == 2){
+            dt /= 2;
+            max_iter *= 2;
+          }
+          pout(0) << "thickness = " << thickness/2 << " is done" << endl;
         }
-      
-      thickness *= 2;
-      boxSize_rad *= 2;
-      time = 0.;
-      domain = domain.refine(refRatio); 
-      if (convTestType == 2){
-        dt /= 2;
-        max_iter *= 2;
       }
-      pout(0) << "thickness = " << thickness/2 << " is done" << endl;
-    }
   }
 
-    if((convTestType > 0) && (convTestType != 4))
+    if((convTestType > 0) && (convTestType != 4) && !split_convergence_level)
       {
         Array<Array<double,8>,2> errmaxglobal;
         for(int lev=0; lev<2; lev++)
