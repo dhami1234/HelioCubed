@@ -13,25 +13,30 @@ inline void testProblemBasisInverse(
     T a_h,
     uint a_block)
 {
-  BoxData<T, DIM, MEM, DIM> A =
-      CubedSphereShell::detA_A<T, MEM>(a_box, a_h, a_block, 0);
-  BoxData<T, 1, MEM> detA =
-      CubedSphereShell::detA<T, MEM>(a_box, a_h, 0);
+  Array<Array<uint,DIM>,6> permute =
+      {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+  Array<Array<int,DIM>,6> sign =
+      {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
+  Point low = a_box.low();
+  Point high = a_box.high();
+  high[CUBED_SPHERE_SHELL_RADIAL_COORD] =
+      low[CUBED_SPHERE_SHELL_RADIAL_COORD];
 
-  forallInPlace(
-      [] PROTO_LAMBDA(
-          Var<T, DIM, MEM, DIM>& a_A,
-          const Var<T, 1, MEM>& a_detA)
-      {
-        const T invDetA = 1.0/a_detA(0);
-        for (int ii = 0; ii < DIM; ++ii)
-        {
-          for (int jj = 0; jj < DIM; ++jj)
-          {
-            a_A(ii, jj) *= invDetA;
-          }
-        }
-      }, A, detA);
+  // A constant Cartesian field must be transformed with the pointwise basis
+  // at cell centers.  Inverting detA_A/detA instead introduces an O(h^2)
+  // mismatch between the analytic background and the basis used by the flux
+  // operator, which becomes the leading magnetic error in low-beta tests.
+  BoxData<T, DIM, MEM, DIM> A(a_box);
+  forallInPlace_p(
+      f_Amatrix,
+      Box(low, high),
+      A,
+      permute[a_block],
+      sign[a_block],
+      a_h,
+      T(0.5),
+      T(0.5));
+  spreadSlice(A);
 
   a_Ainv.setToZero();
   forallInPlace(f_matinv3by3, a_Ainv, A);

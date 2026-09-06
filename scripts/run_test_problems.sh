@@ -47,7 +47,7 @@ set -Eeuo pipefail
 #   5 = non-radial pulse with constant Cartesian magnetic field
 #   6 = strong spherical shock
 #   7 = strong spherical shock with constant Cartesian magnetic field
-TEST_CASES=(7)
+TEST_CASES=(2 3 4 5 6 7)
 
 # Mesh resolution. DOMAIN_SIZE is the angular resolution on each face;
 # THICKNESS is the radial resolution.
@@ -62,7 +62,7 @@ BOX_SIZE_RAD=40
 # Runtime and output settings.
 NPROCS=18
 MAX_ITER=1000
-SLICE_CADENCE=100
+SLICE_CADENCE=50
 PLOT_WORKERS=8
 
 # =============================================================================

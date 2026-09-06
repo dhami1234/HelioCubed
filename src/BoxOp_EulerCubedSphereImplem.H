@@ -96,9 +96,35 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   Box bx = a_USph.box();
   State W;
   State WBar;
-  sphToPrim(W,WBar,a_USph,a_block);
-  
-  BoxData<T,1,MEM> me = magneticEnergyW(WBar,a_block,0);
+  const bool magneticTest =
+      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+  // Reconstruct the evolved perturbation for magnetized test problems.  A
+  // single face representation of the analytic background is added below so
+  // that the Rusanov jump cannot contain two independently reconstructed
+  // copies of the same constant Cartesian field.
+  sphToPrim(W,WBar,a_USph,a_block,!magneticTest);
+
+  State testBackgroundW;
+  State testBackgroundWBar;
+  State WBarForLimiter;
+  if (magneticTest)
+  {
+    testBackgroundWBar.define(WBar.box());
+    testBackgroundWBar.setVal(0.0);
+    addTestProblemBackgroundB(testBackgroundWBar,a_block);
+
+    testBackgroundW.define(W.box());
+    testBackgroundWBar.copyTo(testBackgroundW);
+    testBackgroundW +=
+        Stencil<T>::Laplacian()(testBackgroundWBar,T(1.0/24.0));
+
+    WBarForLimiter.define(WBar.box());
+    WBar.copyTo(WBarForLimiter);
+    WBarForLimiter += testBackgroundWBar;
+  }
+
+  BoxData<T,1,MEM> me = magneticEnergyW(
+      magneticTest ? WBarForLimiter : WBar,a_block,0);
   // Compute Fluxes, rhs.
   // a_Rhs.setVal(0.0);
   T dxiPerp = this->dx()[1];
@@ -196,6 +222,22 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         WFaceBar *= 0.5;
       }
 
+      if (magneticTest)
+      {
+        // W and WBar contain delta-B.  Add the same centered, fourth-order
+        // face average of B0 to both Riemann states, while WFaceBar receives
+        // the corresponding second-order face-center value.  This keeps the
+        // physical flux and wave speed based on the full field but removes
+        // B0 exactly from the dissipative left/right jump.
+        State backgroundFace =
+            Stencil<T>::CellToFace(dir)(testBackgroundW);
+        State backgroundFaceBar =
+            Stencil<T>::CellToFace(dir,Side::Lo,2)(testBackgroundWBar);
+        WFace_L += backgroundFace;
+        WFace_R += backgroundFace;
+        WFaceBar += backgroundFaceBar;
+      }
+
       // Fluxes on dir face.
       // Average of advective fluxes in spherical variables at the
       // face center, given point values of W.
@@ -241,7 +283,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
 
   // Multiply -J*div(B) by the remaining Powell terms for the mapped RHS.
-  if (ParseInputs::get_divergence_cleaning() == 1) DivBPowell2(a_Rhs, minusJDivB, W, A_matrix0);
+  if (ParseInputs::get_divergence_cleaning() == 1)
+  {
+    if (magneticTest) W += testBackgroundW;
+    DivBPowell2(a_Rhs, minusJDivB, W, A_matrix0);
+  }
 
   if (subtractBackground)
   {

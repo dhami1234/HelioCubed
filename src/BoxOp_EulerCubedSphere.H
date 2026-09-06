@@ -404,7 +404,8 @@ public:
                          State& a_W,
                          State& a_WBar,
                          const State& a_USph,
-                         uint a_block) const;
+                         uint a_block,
+                         bool a_restoreTestBackground = true) const;
 
   // Implemented.
   inline void sphToPrim_2O(

@@ -21,7 +21,7 @@ set -Eeuo pipefail
 #   3 = radial pulse with constant Cartesian magnetic field
 #   4 = non-radial pulse
 #   5 = non-radial pulse with constant Cartesian magnetic field
-PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-3}"
+PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-5}"
 
 # Convergence mode:
 #   1 = spatial convergence (refine the mesh only)

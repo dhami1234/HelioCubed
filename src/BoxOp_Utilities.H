@@ -582,7 +582,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                                           State& a_W,
                                           State& a_WBar,
                                           const State& a_USph,
-                                          uint a_block) const
+                                          uint a_block,
+                                          bool a_restoreTestBackground) const
 {
   // Get radial conserved variables.
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim()");
@@ -602,8 +603,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
   {
     testProblemDeltaMagneticEnergy(deltaMeBar,a_WBar,a_block);
     testProblemDeltaMagneticEnergy(deltaMePoint,a_W,a_block);
-    addTestProblemBackgroundB(a_WBar,a_block);
-    addTestProblemBackgroundB(a_W,a_block);
+    if (a_restoreTestBackground)
+    {
+      addTestProblemBackgroundB(a_WBar,a_block);
+      addTestProblemBackgroundB(a_W,a_block);
+    }
   }
   // Compute pressure.
   BoxData<T,1,MEM> keBar = kineticEnergyW(a_WBar,a_block,-1);
