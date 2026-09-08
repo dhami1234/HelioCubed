@@ -116,9 +116,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
     BoxData<T,1,MEM> Ui = slice(U,i);
     BoxData<T,1,MEM> dvolrUi = a_dVolr*Ui;  
     T twelveth = 1.0/12.0;
-    Box bxOut = this->layout()[this->index()];
     unsigned int block = this->block();
-    Box blockBox = this->layout().blockDomainBox(block);  
+    Box blockBox = this->layout().blockDomainBox(block);
+    // Angular derivatives below need radially corrected neighboring cells.
+    Box bxOut = this->layout()[this->index()].grow(Point(0,1,1)) & blockBox;
     BoxData<T,1,MEM> ddVolr = Stencil<T>::Derivative(1,0,2)(a_dVolr,twelveth);
     BoxData<T,1,MEM> dUi = CubedSphereShell::deriv3case(Ui,bxOut,blockBox,0);
     dvolrUi.copyTo(Ui);
