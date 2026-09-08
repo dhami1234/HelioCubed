@@ -16,8 +16,9 @@ blt
 *.out
 *.sh
 !scripts/run_test_problems.sh
+!scripts/run_test_problems_anvil.sh
 !scripts/run_convergence_test.sh
-!scripts/job_convergence.anvil.sh
+!scripts/run_convergence_test_anvil.sh
 /Test_results/
 /Convergence_results/
 /Convergence_jobs/

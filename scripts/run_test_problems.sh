@@ -69,9 +69,18 @@ BOX_SIZE_RAD="${HELIOCUBED_TEST_BOX_SIZE_RAD:-40}"
 # Runtime and output settings.
 NPROCS="${HELIOCUBED_TEST_NPROCS:-18}"
 MAX_ITER="${HELIOCUBED_TEST_MAX_ITER:-100}"
-# Blast cases use gamma=1.4 and the FLASH t=0.01 comparison time, converted
-# for the default shell dimensions. Adjust this time if rebuilding the shell.
-BLAST_MAX_TIME="${HELIOCUBED_TEST_BLAST_MAX_TIME:-5001.23}"
+# Maximum simulation time for each test problem. Cases 8 and 9 use the FLASH
+# t=0.01 comparison time, converted for the default shell dimensions. Adjust
+# their times if rebuilding the shell. HELIOCUBED_TEST_BLAST_MAX_TIME remains
+# a shared fallback for both blast cases for backward compatibility.
+CASE_2_MAX_TIME="${HELIOCUBED_TEST_CASE_2_MAX_TIME:-3600000.0}" # radial pulse
+CASE_3_MAX_TIME="${HELIOCUBED_TEST_CASE_3_MAX_TIME:-3600000.0}" # radial pulse, constant B
+CASE_4_MAX_TIME="${HELIOCUBED_TEST_CASE_4_MAX_TIME:-3600000.0}" # non-radial pulse
+CASE_5_MAX_TIME="${HELIOCUBED_TEST_CASE_5_MAX_TIME:-3600000.0}" # non-radial pulse, constant B
+CASE_6_MAX_TIME="${HELIOCUBED_TEST_CASE_6_MAX_TIME:-3600000.0}" # strong spherical shock
+CASE_7_MAX_TIME="${HELIOCUBED_TEST_CASE_7_MAX_TIME:-3600000.0}" # strong shock, constant B
+CASE_8_MAX_TIME="${HELIOCUBED_TEST_CASE_8_MAX_TIME:-${HELIOCUBED_TEST_BLAST_MAX_TIME:-5001.23}}" # hydro blast
+CASE_9_MAX_TIME="${HELIOCUBED_TEST_CASE_9_MAX_TIME:-${HELIOCUBED_TEST_BLAST_MAX_TIME:-5001.23}}" # MHD blast
 BLAST_MAX_ITER="${HELIOCUBED_TEST_MAX_ITER:-10000}"
 SLICE_CADENCE="${HELIOCUBED_TEST_SLICE_CADENCE:-50}"
 PLOT_WORKERS="${HELIOCUBED_TEST_PLOT_WORKERS:-8}"
@@ -90,14 +99,28 @@ PLOTTER="${SCRIPT_DIR}/Plot_Test_Slices.py"
 
 case_name_for_id() {
     case "$1" in
-        2) printf '%s\n' "radial_pulse" ;;
-        3) printf '%s\n' "radial_pulse_constant_B" ;;
-        4) printf '%s\n' "non_radial_pulse" ;;
-        5) printf '%s\n' "non_radial_pulse_constant_B" ;;
-        6) printf '%s\n' "strong_spherical_shock" ;;
-        7) printf '%s\n' "strong_spherical_shock_constant_B" ;;
-        8) printf '%s\n' "hydro_blast" ;;
-        9) printf '%s\n' "mhd_blast_constant_B" ;;
+        2) printf '%s\n' "02_radial_pulse" ;;
+        3) printf '%s\n' "03_radial_pulse_constant_B" ;;
+        4) printf '%s\n' "04_non_radial_pulse" ;;
+        5) printf '%s\n' "05_non_radial_pulse_constant_B" ;;
+        6) printf '%s\n' "06_strong_spherical_shock" ;;
+        7) printf '%s\n' "07_strong_spherical_shock_constant_B" ;;
+        8) printf '%s\n' "08_hydro_blast" ;;
+        9) printf '%s\n' "09_mhd_blast_constant_B" ;;
+        *) return 1 ;;
+    esac
+}
+
+max_time_for_id() {
+    case "$1" in
+        2) printf '%s\n' "${CASE_2_MAX_TIME}" ;;
+        3) printf '%s\n' "${CASE_3_MAX_TIME}" ;;
+        4) printf '%s\n' "${CASE_4_MAX_TIME}" ;;
+        5) printf '%s\n' "${CASE_5_MAX_TIME}" ;;
+        6) printf '%s\n' "${CASE_6_MAX_TIME}" ;;
+        7) printf '%s\n' "${CASE_7_MAX_TIME}" ;;
+        8) printf '%s\n' "${CASE_8_MAX_TIME}" ;;
+        9) printf '%s\n' "${CASE_9_MAX_TIME}" ;;
         *) return 1 ;;
     esac
 }
@@ -108,6 +131,18 @@ require_positive_integer() {
 
     if ! [[ "${value}" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: ${variable_name} must be a positive integer (got '${value}')." >&2
+        exit 1
+    fi
+}
+
+require_positive_number() {
+    local variable_name="$1"
+    local value="$2"
+
+    if ! awk -v value="${value}" 'BEGIN {
+        exit !(value ~ /^[0-9]+([.][0-9]*)?([eE][+-]?[0-9]+)?$/ && value+0 > 0)
+    }'; then
+        echo "Error: ${variable_name} must be a positive number (got '${value}')." >&2
         exit 1
     fi
 }
@@ -135,12 +170,14 @@ require_positive_integer "BOX_SIZE_RAD" "${BOX_SIZE_RAD}"
 require_positive_integer "NPROCS" "${NPROCS}"
 require_positive_integer "MAX_ITER" "${MAX_ITER}"
 require_positive_integer "BLAST_MAX_ITER" "${BLAST_MAX_ITER}"
-if ! awk -v t="${BLAST_MAX_TIME}" 'BEGIN {
-    exit !(t ~ /^[0-9]+([.][0-9]*)?([eE][+-]?[0-9]+)?$/ && t+0 > 0)
-}'; then
-    echo "Error: HELIOCUBED_TEST_BLAST_MAX_TIME must be positive." >&2
-    exit 1
-fi
+require_positive_number "CASE_2_MAX_TIME" "${CASE_2_MAX_TIME}"
+require_positive_number "CASE_3_MAX_TIME" "${CASE_3_MAX_TIME}"
+require_positive_number "CASE_4_MAX_TIME" "${CASE_4_MAX_TIME}"
+require_positive_number "CASE_5_MAX_TIME" "${CASE_5_MAX_TIME}"
+require_positive_number "CASE_6_MAX_TIME" "${CASE_6_MAX_TIME}"
+require_positive_number "CASE_7_MAX_TIME" "${CASE_7_MAX_TIME}"
+require_positive_number "CASE_8_MAX_TIME" "${CASE_8_MAX_TIME}"
+require_positive_number "CASE_9_MAX_TIME" "${CASE_9_MAX_TIME}"
 require_positive_integer "SLICE_CADENCE" "${SLICE_CADENCE}"
 require_positive_integer "PLOT_WORKERS" "${PLOT_WORKERS}"
 
@@ -246,6 +283,7 @@ make_case_input() {
     local case_id="$1"
     local case_name="$2"
     local output_file="$3"
+    local max_time="$4"
 
     awk \
         -v case_id="${case_id}" \
@@ -256,13 +294,13 @@ make_case_input() {
         -v box_size_nonrad="${BOX_SIZE_NONRAD}" \
         -v box_size_rad="${BOX_SIZE_RAD}" \
         -v max_iter="${MAX_ITER}" \
-        -v blast_max_time="${BLAST_MAX_TIME}" \
+        -v max_time="${max_time}" \
         -v slice_cadence="${SLICE_CADENCE}" \
         '
         BEGIN { found_slices = 0 }
         $1 == "-init_condition_type"  { $2 = case_id }
         $1 == "-gamma" && (case_id == 8 || case_id == 9) { $2 = "1.4" }
-        $1 == "-max_time" && (case_id == 8 || case_id == 9) { $2 = blast_max_time }
+        $1 == "-max_time"             { $2 = max_time }
         $1 == "-domainSize"           { $2 = domain_size }
         $1 == "-thickness"            { $2 = thickness }
         $1 == "-boxSize_nonrad"       { $2 = box_size_nonrad }
@@ -313,16 +351,18 @@ for index in "${!CASE_IDS[@]}"; do
         MAX_ITER="${BLAST_MAX_ITER}"
     fi
     case_name="${CASE_NAMES[${index}]}"
+    case_max_time="$(max_time_for_id "${case_id}")"
     case_dir="${RESULTS_DIR}/${case_name}"
     case_input="${case_dir}/inputs"
     plot_dir="${case_dir}/plots_z0_raw"
 
     clean_case_directory "${case_dir}" "${case_name}"
-    make_case_input "${case_id}" "${case_name}" "${case_input}"
+    make_case_input "${case_id}" "${case_name}" "${case_input}" "${case_max_time}"
 
     echo
     echo "=== [case ${case_number}/${TOTAL_CASES}] Running ${case_name} (init_condition_type=${case_id}) ==="
     echo "Results: ${case_dir}"
+    echo "Limits: max_iter=${MAX_ITER}, max_time=${case_max_time}"
     case_start="${SECONDS}"
     (
         cd "${case_dir}"
