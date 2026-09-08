@@ -1,13 +1,13 @@
 ## Idealized test problems selected by init_condition_type:
 ##   2 = radial pulse
-##   3 = radial pulse with B_cart set by c_TEST_BX0
+##   3 = radial pulse with B_cart set by c_RADIAL_PULSE_BX0
 ##   4 = non-radial pulse
-##   5 = non-radial pulse with B_cart set by c_TEST_BX0
+##   5 = non-radial pulse with B_cart set by c_NONRADIAL_PULSE_BX0
 ##   6 = strong spherical shock
-##   7 = strong spherical shock with B_cart set by c_TEST_BX0
+##   7 = strong spherical shock with B_cart set by c_STRONG_SHOCK_BX0
 ##   8 = off-center hydrodynamic blast
 ##   9 = off-center blast with B_cart = (0.1, 0, 0) G
-## For 8/9 use inputs_Blast, or the test runner which sets gamma/time per case.
+## For 8/9 use the test runner, which sets gamma/time per case.
 -convTestType                    0
 -init_condition_type             6
 -domainSize                      30
@@ -23,10 +23,10 @@
 -Berta_detector_type             0
 -Berta_fallback_type             0
 -strength                        100.0
--write_cadence                   10
+-write_cadence                   1000000000
 -slice_cadence                   1000000000
--write_time_cadence              1000000000.0
--slice_time_cadence              1000000000.0
+-write_time_cadence              1800.0
+-slice_time_cadence              1800.0
 -slices                          Z
 -checkpoint_cadence              100
 -P_floor_cadence                 1000000000
