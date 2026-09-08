@@ -42,6 +42,8 @@ BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD:-20}"
 
 # MAX_ITER applies to the base level. Type 1 uses this count on every level;
 # type 2 uses 2*MAX_ITER and 4*MAX_ITER on the finer levels.
+# Each level also stops at -max_time from the input template, shortening its
+# final step if needed. The earlier of the iteration and time limits wins.
 MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-3}"
 
 # MPI ranks for the base, 2x, and 4x levels. Increase these according to the

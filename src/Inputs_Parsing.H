@@ -42,7 +42,9 @@ private:
     // 0: file-driven solar wind; 1: analytic solar wind;
     // 2: radial pulse; 3: radial pulse with constant Cartesian B;
     // 4: non-radial pulse; 5: non-radial pulse with constant Cartesian B;
-    // 6: strong spherical shock; 7: strong spherical shock with constant B.
+    // 6: strong spherical shock; 7: strong spherical shock with constant B;
+    // 8: off-center hydro blast; 9: off-center blast with constant B = 0.1 G.
+    // For 8/9 use gamma=1.4 (see exec/inputs_Blast).
     int init_condition_type = 0;
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction

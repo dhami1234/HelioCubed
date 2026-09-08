@@ -1021,6 +1021,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   int scale_data_with_r = ParseInputs::get_scale_data_with_r(); 
   int init_condition_type = ParseInputs::get_init_condition_type();
   bool magneticTest = isConstantMagneticFieldTest(init_condition_type);
+  double testBx0 = testProblemBackgroundBx(init_condition_type);
   Array<std::string,NUMCOMPS+2> names = {"density", "VxPerp", "VyPerp", "VzPerp", "P", "BxPerp", "ByPerp", "BzPerp","Vr","Br*r^2"};//,"e^entropy"};
   if (scale_data_with_r == 1){
     names[0] = "density_scaled";
@@ -1057,7 +1058,8 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
      const Var<double,1,HOST>& a_radius,
      const Var<double,DIM,HOST>& a_Xcart,
      int a_scale_data_with_r,
-     bool a_magneticTest)
+     bool a_magneticTest,
+     double a_Bx0)
     {
       // Primitive variables with vec_non_rad as vec_x_non, vec_y_non, vec_z_non
       a_Wout(0) = a_USemiSph(0);
@@ -1075,13 +1077,13 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
         // Restore the uniform energy and magnetic background before
         // primitive recovery and output conversion.
         totalEnergy += c_TEST_P0/(a_gamma - 1.0)
-            + c_TEST_BX0*c_TEST_BX0/(8.0*M_PI);
+            + a_Bx0*a_Bx0/(8.0*M_PI);
         const double x = a_Xcart(0);
         const double y = a_Xcart(1);
         const double z = a_Xcart(2);
         const double r = sqrt(x*x + y*y + z*z);
-        const double Br0 = c_TEST_BX0*x/r;
-        a_Wout(5) += c_TEST_BX0 - Br0*x/r;
+        const double Br0 = a_Bx0*x/r;
+        a_Wout(5) += a_Bx0 - Br0*x/r;
         a_Wout(6) += -Br0*y/r;
         a_Wout(7) += -Br0*z/r;
         a_Wout(9) += Br0;
@@ -1127,7 +1129,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
       }
       
     }, Wout[dit], W_sph_out[dit], USemiSph, gamma, radiusLev[dit], XCart,
-       scale_data_with_r, magneticTest);
+       scale_data_with_r, magneticTest, testBx0);
 
 #if 0    
     forallInPlace([ ] PROTO_LAMBDA

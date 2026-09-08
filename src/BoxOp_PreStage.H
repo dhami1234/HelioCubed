@@ -90,7 +90,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   {
     if (init_condition_type == 2
         || init_condition_type == 4
-        || init_condition_type == 6){
+        || init_condition_type == 6
+        || init_condition_type == 8){
       forallInPlace_p(
           f_testProblemHydroBoundary,
           bdryBoxHigh,
@@ -182,7 +183,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
 
     if (init_condition_type == 2
         || init_condition_type == 4
-        || init_condition_type == 6){
+        || init_condition_type == 6
+        || init_condition_type == 8){
       forallInPlace_p(
           f_testProblemHydroBoundary,
           bdryBoxLow,

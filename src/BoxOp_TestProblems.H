@@ -127,6 +127,41 @@ PROTO_KERNEL_END(f_nonRadialSphericalWaveInit_F, f_nonRadialSphericalWaveInit)
 
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
+void f_nonRadialBlastInit_F(
+    Point a_pt,
+    Var<T, NUMCOMPS, MEM>& a_W,
+    const Var<T, DIM, MEM>& a_Xcart)
+{
+  // Same center as the non-radial pulse, but a smaller, sharp pressure sphere.
+  // FLASH: rho=1, p_out=0.1, p_in=1000, R=0.1, gamma=1.4.
+  const T dirNorm = sqrt(0.9*0.9 + 0.4*0.4);
+  const T centerRadius = 0.5*(CUBED_SPHERE_SHELL_R0 + CUBED_SPHERE_SHELL_R1);
+  const T center[DIM] = {
+      -0.9*centerRadius/dirNorm,
+      -0.4*centerRadius/dirNorm,
+      0.0};
+  const T blastRadius = c_BLAST_RADIUS_FRACTION*
+      (CUBED_SPHERE_SHELL_R1 - CUBED_SPHERE_SHELL_R0);
+  T distance2 = 0.0;
+  for (int dir = 0; dir < DIM; ++dir)
+  {
+    const T displacement = a_Xcart(dir) - center[dir];
+    distance2 += displacement*displacement;
+  }
+  a_W(iRHO) = c_TEST_RHO0;
+  a_W(iP) = c_TEST_P0 *
+      (distance2 < blastRadius*blastRadius ? c_BLAST_PRESSURE_RATIO : 1.0);
+  a_W(iVX) = 0.0;
+  a_W(iVY) = 0.0;
+  a_W(iVZ) = 0.0;
+  a_W(iBX) = 0.0;
+  a_W(iBY) = 0.0;
+  a_W(iBZ) = 0.0;
+}
+PROTO_KERNEL_END(f_nonRadialBlastInit_F, f_nonRadialBlastInit)
+
+template <typename T, MemType MEM>
+PROTO_KERNEL_START
 void f_symmetricStrongShockInit_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_W,
@@ -218,7 +253,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblemBackgroundB(
 {
   BoxData<T,DIM,MEM,DIM> Ainv(a_W.box());
   testProblemBasisInverse(Ainv, a_W.box(), this->dx()[2], a_block);
-  T Bx = c_TEST_BX0;
+  T Bx = testProblemBackgroundBx(ParseInputs::get_init_condition_type());
   T By = 0.0;
   T Bz = 0.0;
   forallInPlace_p(
@@ -262,10 +297,12 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblemDeltaMagneticEnergy(
   spreadSlice(A);
 
   a_deltaMe.define(bx);
+  T Bx0 = testProblemBackgroundBx(ParseInputs::get_init_condition_type());
   forallInPlace([] PROTO_LAMBDA(
       Var<T,1,MEM>& a_me,
       const Var<T,DIM,MEM,DIM>& a_A,
-      const Var<T,NUMCOMPS,MEM>& a_W)
+      const Var<T,NUMCOMPS,MEM>& a_W,
+      T a_Bx0)
     {
       T bCart[DIM];
       for (int ii = 0; ii < DIM; ++ii)
@@ -278,8 +315,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblemDeltaMagneticEnergy(
       }
       T b2 = 0.0;
       for (int ii = 0; ii < DIM; ++ii) b2 += bCart[ii]*bCart[ii];
-      a_me(0) = (2.0*c_TEST_BX0*bCart[0] + b2)/(8.0*M_PI);
-    },a_deltaMe,A,a_WDelta);
+      a_me(0) = (2.0*a_Bx0*bCart[0] + b2)/(8.0*M_PI);
+    },a_deltaMe,A,a_WDelta,Bx0);
 }
 
 template <typename T, MemType MEM>
@@ -308,11 +345,12 @@ void f_testProblemMagneticBoundary_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_U,
     const Var<T, DIM, MEM, DIM>& a_Ainv,
-    T a_gamma)
+    T a_gamma,
+    T a_Bx0)
 {
   const T p0 = c_TEST_P0;
   const T rho0 = c_TEST_RHO0;
-  const T Bcart[DIM] = {c_TEST_BX0, 0.0, 0.0};
+  const T Bcart[DIM] = {a_Bx0, 0.0, 0.0};
 
   a_U(iRHO) = rho0;
   a_U(iMOMX) = 0.0;

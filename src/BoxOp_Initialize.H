@@ -81,7 +81,7 @@ initialize(State& a_W,
 
 
   T strength = ParseInputs::get_strength();
-  T testBx = c_TEST_BX0;
+  T testBx = testProblemBackgroundBx(init_condition_type);
   T testBy = 0.0;
   T testBz = 0.0;
   if (init_condition_type == 2 || init_condition_type == 3)
@@ -105,6 +105,20 @@ initialize(State& a_W,
         a_W,
         a_Xcart,
         a_gamma);
+    if (isConstantMagneticFieldTest(init_condition_type))
+    {
+      forallInPlace_p(
+          f_setConstantCartesianBPrimitive,
+          a_W,
+          A_matrix_inv,
+          testBx,
+          testBy,
+          testBz);
+    }
+  }
+  if (init_condition_type == 8 || init_condition_type == 9)
+  {
+    forallInPlace_p(f_nonRadialBlastInit, a_W, a_Xcart);
     if (isConstantMagneticFieldTest(init_condition_type))
     {
       forallInPlace_p(

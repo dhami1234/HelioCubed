@@ -288,9 +288,13 @@ int main(int argc, char *argv[])
                 << setprecision(6) << endl;
       }
     if (convTestType > 2) max_iter = 1;
+    // A final step may be shortened to reach max_time. Preserve the nominal
+    // convergence timestep for the next level when running levels in one launch.
+    const double convergence_step_dt = dt;
     
     bool time_exceeded = false;
-    for (int iter = restart_step + 1; iter <= max_iter; iter++)
+    for (int iter = restart_step + 1;
+         iter <= max_iter && (convTestType >= 3 || time < max_time); iter++)
     {
       auto start = chrono::steady_clock::now();
       if ((iter % ParseInputs::get_P_floor_cadence()) == 0) OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
@@ -298,23 +302,26 @@ int main(int argc, char *argv[])
         {
           double dtcfl1 = OP::dtCFL(JU,iop,dVolrLev);
           dt = dtcfl1*ParseInputs::get_CFL();
-          if (time + dt > max_time) {
-            dt = max_time - time;
-            time_exceeded = true;
-          }
+        }
+      // Normal simulations and time-evolving convergence tests share the same
+      // end-time limit. Convergence timesteps otherwise remain fixed.
+      if (convTestType < 3 && dt >= max_time - time)
+        {
+          dt = max_time - time;
+          time_exceeded = true;
         }
       if (convTestType < 3)
         {
           rk4.advance(JU, dVolrLev, dt, time, temporal_order);
-          time += dt;
+          time = time_exceeded ? max_time : time + dt;
         }
 
       int write_time_cadence_new = floor(time/write_time_cadence);
       int slice_time_cadence_new = floor(time/slice_time_cadence);
       int write_trigger_count_now = floor(time/write_time_cadence);
       int slice_trigger_count_now = floor(time/slice_time_cadence);
-      bool write_data = ((time > write_trigger_count_now * write_time_cadence - dt) && (time < write_trigger_count_now * write_time_cadence + dt) && (write_trigger_count_now != write_trigger_count_temp)) || (iter % write_cadence == 0) || (iter == max_iter);
-      bool slice_data = ((time > slice_trigger_count_now * slice_time_cadence - dt) && (time < slice_trigger_count_now * slice_time_cadence + dt) && (slice_trigger_count_now != slice_trigger_count_temp)) || (iter % slice_cadence == 0) || (iter == max_iter);
+      bool write_data = ((time > write_trigger_count_now * write_time_cadence - dt) && (time < write_trigger_count_now * write_time_cadence + dt) && (write_trigger_count_now != write_trigger_count_temp)) || (iter % write_cadence == 0) || (iter == max_iter) || time_exceeded;
+      bool slice_data = ((time > slice_trigger_count_now * slice_time_cadence - dt) && (time < slice_trigger_count_now * slice_time_cadence + dt) && (slice_trigger_count_now != slice_trigger_count_temp)) || (iter % slice_cadence == 0) || (iter == max_iter) || time_exceeded;
       if (write_data || slice_data)
         {
           Write_W(JU, eulerOp, iop, iter, time, dt, write_data, slice_data);
@@ -322,14 +329,14 @@ int main(int argc, char *argv[])
           if (slice_data) slice_trigger_count_temp = slice_trigger_count_now;
         }
       // Checkpointing.
-      if ((iter % checkpoint_cadence == 0) || (iter == max_iter))
+      if ((iter % checkpoint_cadence == 0) || (iter == max_iter) || time_exceeded)
         {
           Write_Checkpoint(JU, iter, restart_step, time, dt);
         }
       
       int probe_trigger_count_now = floor(time/probe_cadence);
       bool do_probes = (time > probe_trigger_count_now * probe_cadence - dt) && (time < probe_trigger_count_now * probe_cadence + dt) && (probe_trigger_count_now != probe_trigger_count_temp);
-      if (do_probes || iter == 1){
+      if (do_probes || iter == 1 || time_exceeded){
         for (int p = 0; p < num_probes; ++p) {
           string probe_coord = probe_coords[static_cast<size_t>(p)];
           string probe_filename = probe_filenames[static_cast<size_t>(p)];
@@ -397,6 +404,7 @@ int main(int argc, char *argv[])
           boxSize_rad *= 2;
           time = 0.;
           domain = domain.refine(refRatio);
+          dt = convergence_step_dt;
           if (convTestType == 2){
             dt /= 2;
             max_iter *= 2;

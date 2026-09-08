@@ -1,21 +1,17 @@
-## Idealized test problems selected by init_condition_type:
-##   2 = radial pulse
-##   3 = radial pulse with B_cart set by c_TEST_BX0
-##   4 = non-radial pulse
-##   5 = non-radial pulse with B_cart set by c_TEST_BX0
-##   6 = strong spherical shock
-##   7 = strong spherical shock with B_cart set by c_TEST_BX0
-##   8 = off-center hydrodynamic blast
-##   9 = off-center blast with B_cart = (0.1, 0, 0) G
-## For 8/9 use inputs_Blast, or the test runner which sets gamma/time per case.
+## FLASH-style off-center blast: 8 = hydro, 9 = constant Cartesian B (0.1 G).
+## rho = 700*m_p; p_out = 1e-7; p_in = 1e-3, in CGS units.
+## Radius = 0.1*(R1-R0); center matches the non-radial pulse.
+## max_time below is FLASH t=0.01 converted for the default shell dimensions.
+## For another shell: t_stop = 0.1*R_blast / sqrt(10*c_TEST_P0/c_TEST_RHO0).
+## Reference: https://flash.rochester.edu/site/flashcode/user_support/flash_ug_devel/node192.html
 -convTestType                    0
--init_condition_type             6
+-init_condition_type            8
 -domainSize                      30
 -thickness                       60
 -boxSize_nonrad                  30
--boxSize_rad                     20
--max_iter                        100
--max_time                        3600000.0
+-boxSize_rad                     60
+-max_iter                       10000
+-max_time                       5001.23
 -CFL                             0.5
 -limiter                         1
 -spatial_operator                1
@@ -23,19 +19,19 @@
 -Berta_detector_type             0
 -Berta_fallback_type             0
 -strength                        100.0
--write_cadence                   10
+-write_cadence                  1000
 -slice_cadence                   1000000000
 -write_time_cadence              1000000000.0
 -slice_time_cadence              1000000000.0
 -slices                          Z
 -checkpoint_cadence              100
 -P_floor_cadence                 1000000000
--data_file_prefix                test_data
--checkpoint_file_prefix          test_checkpoint
+-data_file_prefix               blast_data
+-checkpoint_file_prefix         blast_checkpoint
 -scale_data_with_r               0
 -output_divB                     1
 -max_checkpoint_files            1
--gamma                           1.6666666666666666666667
+-gamma                          1.4
 -temporal_order                  4
 -divergence_cleaning             1
 -linear_viscosity                1
