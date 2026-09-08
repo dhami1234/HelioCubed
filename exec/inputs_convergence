@@ -7,9 +7,9 @@
 -thickness                       45
 -boxSize_nonrad                  30
 -boxSize_rad                     45
--max_iter                        3
+-max_iter                        10
 -max_time                        3600000.0
--CFL                             0.05
+-CFL                             0.5
 -limiter                         1
 -spatial_operator                1
 -Berta_eta_d                     0.02
