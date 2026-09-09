@@ -74,7 +74,16 @@ initialize(State& a_W,
           a_amat(i,j) = a_amat(i,j) * inv_deta;
         }
       }
-    },amat,deta);
+      },amat,deta);
+  if (ParseInputs::use_wind_boundary())
+  {
+    // This input is pointwise. Inverting an averaged basis introduces an
+    // O(h^2) error in nonradial velocity and magnetic components.
+    Array<Array<uint,DIM>,6> perm={{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+    Array<Array<int,DIM>,6> signs={{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
+    T half=.5;
+    forallInPlace_p(f_Amatrix,amat.box(),amat,perm[a_block],signs[a_block],a_h,half,half);
+  }
   BoxData<T,DIM,MEM,DIM> A_matrix_inv(a_W.box());
   A_matrix_inv.setToZero();
   forallInPlace(f_matinv3by3,A_matrix_inv,amat);
@@ -128,6 +137,24 @@ initialize(State& a_W,
           testBx,
           testBy,
           testBz);
+    }
+  }
+  if (init_condition_type == 10 || init_condition_type == 11)
+  {
+    for (auto pt : a_W.box())
+    {
+      const WindBoundary::Matrix a=WindBoundary::basis(pt[1],pt[2],a_h,a_block);
+      const double r=a_radius(pt,0)/CUBED_SPHERE_SHELL_R0;
+      const WindBoundary::Vec x={r*a[0][0],r*a[1][0],r*a[2][0]};
+      const auto cartW=WindBoundary::primitive(WindBoundary::exact(x,0,a_gamma),a_gamma);
+      const auto w=WindBoundary::transform(cartW,WindBoundary::inverse(a));
+      a_W(pt,0)=w[0]*WindBoundary::densityUnit();
+      a_W(pt,4)=w[4]*WindBoundary::unit(4);
+      for (int d=0;d<3;++d)
+      {
+        a_W(pt,1+d)=w[1+d]*WindBoundary::velocityUnit();
+        a_W(pt,5+d)=w[5+d]*WindBoundary::magneticUnit();
+      }
     }
   }
   if (init_condition_type == 1)

@@ -45,7 +45,10 @@ private:
     // 6: strong spherical shock; 7: strong spherical shock with constant B;
     // 8: off-center hydro blast; 9: off-center blast with constant B = 0.1 G.
     // For 8/9 use gamma=1.4 (see exec/inputs_Blast).
+    // 10: exact smooth expanding hydrodynamic wind (B=0, no gravity).
+    // 11: the same expansion with uniform Cartesian B(t).
     int init_condition_type = 0;
+    int wind_boundary_order = 0; // 0: legacy radial BC; 4: smooth super-fast ILW BC
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction
     int boxSize_nonrad; // Size of the box for domain decomposition
@@ -142,7 +145,12 @@ public:
     static int get_convTestType() {return getInstance().convTestType;}
     static int get_convergence_level() {return getInstance().convergence_level;}
     static double get_convergence_dt() {return std::stod(getInstance().convergence_dt);}
+    static int get_wind_boundary_order() {return getInstance().wind_boundary_order;}
     static int get_init_condition_type() {return getInstance().init_condition_type;}
+    static bool use_wind_boundary() {
+        const int type = get_init_condition_type();
+        return get_wind_boundary_order() == 4 && (type == 0 || type == 1 || type == 10 || type == 11);
+    }
     static int get_domainSize() {return getInstance().domainSize;}
     static int get_thickness() {return getInstance().thickness;}
     static int get_boxSize_nonrad() {return getInstance().boxSize_nonrad;}
@@ -215,6 +223,7 @@ public:
         args.add("convergence_level", convergence_level);
         args.add("convergence_dt", convergence_dt);
         args.add("init_condition_type", init_condition_type);
+        args.add("wind_boundary_order", wind_boundary_order);
         args.add("domainSize", domainSize);
         args.add("thickness", thickness);
         args.add("boxSize_nonrad", boxSize_nonrad);
@@ -307,6 +316,7 @@ public:
         pout(0) << "convergence_level: " << convergence_level << endl;
         pout(0) << "convergence_dt: " << convergence_dt << endl;
         pout(0) << "init_condition_type: " << init_condition_type << endl;
+        pout(0) << "wind_boundary_order: " << wind_boundary_order << endl;
         pout(0) << "domainSize: " << domainSize << endl;
         pout(0) << "thickness: " << thickness << endl;
         pout(0) << "boxSize_nonrad: " << boxSize_nonrad << endl;

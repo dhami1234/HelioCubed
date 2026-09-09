@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Run HelioCubed's three-level convergence test for a radial or non-radial
-# smooth pulse, with or without constant B. Each resolution is a separate MPI
+# Run HelioCubed's three-level convergence test for a smooth pulse or wind.
+# Each resolution is a separate MPI
 # launch, allowing the finer levels to use more ranks. A final, inexpensive
 # launch reloads the three solutions and reports the observed order for all
 # eight variables.
@@ -16,11 +16,16 @@ set -Eeuo pipefail
 # USER CONFIGURATION -- edit these values before running the script
 # =============================================================================
 
-# Pulse to test:
+# Problem to test (wind settings are read from the input template):
+#   0 = file-driven solar wind (use an absolute -BC_file path)
+#   1 = analytic outflow
 #   2 = radial pulse
 #   3 = radial pulse with constant Cartesian magnetic field
 #   4 = non-radial pulse
 #   5 = non-radial pulse with constant Cartesian magnetic field
+#  10 = smooth exact expanding wind, B=0
+#  11 = the same wind with uniform Cartesian B(t)
+# Both require wind_boundary_order 4 and Sun_gravity 0.
 PROBLEM_TYPE="${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-5}"
 
 # Convergence mode:
@@ -54,9 +59,9 @@ else
     NPROCS_BY_LEVEL=(18 18 18)
 fi
 
-# Supported time integrators are 1, 3, and 4. Fourth order is the normal
-# choice when measuring the full space-and-time accuracy of the scheme.
-TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-1}"
+# Leave empty to use -temporal_order from the input template.
+# An explicit override may select 1, 3, or 4.
+TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-}"
 
 # =============================================================================
 # END USER CONFIGURATION
@@ -80,12 +85,16 @@ require_positive_integer() {
 }
 
 case "${PROBLEM_TYPE}" in
+    0) PROBLEM_NAME="solar_wind" ;;
+    1) PROBLEM_NAME="analytic_outflow" ;;
     2) PROBLEM_NAME="radial_pulse" ;;
     3) PROBLEM_NAME="radial_pulse_constant_B" ;;
     4) PROBLEM_NAME="non_radial_pulse" ;;
     5) PROBLEM_NAME="non_radial_pulse_constant_B" ;;
+    10) PROBLEM_NAME="exact_wind" ;;
+    11) PROBLEM_NAME="exact_wind_constant_B" ;;
     *)
-        echo "Error: PROBLEM_TYPE must be 2, 3, 4, or 5." >&2
+        echo "Error: PROBLEM_TYPE must be 0, 1, 2, 3, 4, 5, 10, or 11." >&2
         exit 1
         ;;
 esac
@@ -140,7 +149,7 @@ for level in 0 1 2; do
     fi
 done
 case "${TEMPORAL_ORDER}" in
-    1|3|4) ;;
+    ""|1|3|4) ;;
     *)
         echo "Error: TEMPORAL_ORDER must be 1, 3, or 4 (got '${TEMPORAL_ORDER}')." >&2
         exit 1
@@ -224,10 +233,11 @@ make_convergence_input() {
         $1 == "-P_floor_cadence"        { $2 = 1000000000 }
         $1 == "-data_file_prefix"       { $2 = data_prefix }
         $1 == "-checkpoint_file_prefix" { $2 = checkpoint_prefix }
-        $1 == "-temporal_order"         { $2 = temporal_order }
+        $1 == "-temporal_order" && temporal_order != "" { $2 = temporal_order; found_temporal = 1 }
         $1 == "-radial_refinement"      { $2 = 0 }
         { print }
         END {
+            if (temporal_order != "" && !found_temporal) print "-temporal_order " temporal_order
             if (!found_level) print "-convergence_level " convergence_level
             if (!found_dt) printf "-convergence_dt %.17g\n", convergence_dt
         }
@@ -310,6 +320,15 @@ awk '/Lev = [01], component = [0-7], error =/ || /order of accuracy for var [0-7
 if [[ ! -s "${SUMMARY_FILE}" ]]; then
     echo "Error: the solver completed without reporting convergence results." >&2
     exit 1
+fi
+
+# Problems 10 and 11 also report independent exact-solution errors, including the
+# first three radial layers. Keep them alongside the usual refinement orders.
+if [[ "${PROBLEM_TYPE}" -eq 10 || "${PROBLEM_TYPE}" -eq 11 ]]; then
+    for level in 0 1 2; do
+        awk -v level="${level}" '/^Wind exact error / { print "Level " level ": " $0 }' \
+            "${RESULTS_DIR}/level${level}.log" >> "${SUMMARY_FILE}"
+    done
 fi
 
 echo

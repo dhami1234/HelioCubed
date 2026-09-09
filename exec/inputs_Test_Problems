@@ -7,9 +7,13 @@
 ##   7 = strong spherical shock with B_cart set by c_STRONG_SHOCK_BX0
 ##   8 = off-center hydrodynamic blast
 ##   9 = off-center blast with B_cart = (0.1, 0, 0) G
+##  10 = smooth exact expansion without B (inputs_smooth_outflow)
+##  11 = smooth exact expansion with uniform B(t) (inputs_smooth_outflow_const_B)
 ## For 8/9 use the test runner, which sets gamma/time per case.
 -convTestType                    0
 -init_condition_type             6
+# Applies only to cases 0, 1, 10, and 11; ignored for other cases.
+-wind_boundary_order             4
 -domainSize                      30
 -thickness                       60
 -boxSize_nonrad                  30

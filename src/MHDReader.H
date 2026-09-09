@@ -2,6 +2,7 @@
 #include "Proto.H"
 #include "hdf5.h"
 #include "Inputs_Parsing.H"
+#include "WindBoundary.H"
 
 using namespace Proto;
 
@@ -16,6 +17,12 @@ public:
 	std::vector<double> theta;
 	std::vector<double> phi;
 	Box Box_BC;
+    struct HighOrderFrames
+    {
+        std::array<BoxData<double,8,HOST>,4> data;
+        std::array<int,4> id={{-1,-1,-1,-1}};
+    };
+    HighOrderFrames m_highOrderFrames;
         Array<double,NUMCOMPS> m_scalevars =
                   {RHO00,VEL00*RHO00,VEL00*RHO00,VEL00*RHO00,P00,B00,B00,B00};
 
@@ -26,6 +33,7 @@ public:
 		int thetaCoord = (rCoord + 1) % 3;
 		int phiCoord   = (rCoord + 2) % 3;
 
+		m_highOrderFrames.id.fill(-1);
 		pout(0) << "Reading BC data from file: " << a_filename << endl;
 
 		// Geometry can be read by all (small)
@@ -106,6 +114,113 @@ public:
 	#endif
 	}
 
+    // Interpolate smooth boundary images directly, without the legacy
+    // bilinear remap plus linear fractional rotation. Vector interpolation
+    // is Cartesian, including reflection through the poles; output retains
+    // the file's r,phi,theta convention and units.
+    template<typename T, MemType MEM>
+    void fourthOrderBoundary(MBLevelBoxData<T,8,MEM>& dst,
+        const MBLevelMap<MBMap_CubedSphereShell,MEM>& map, double time)
+    {
+        static_assert(MEM==HOST,"High-order wind boundary currently uses HOST data");
+        int nf=procID()==0 ? int(BC_data.size()) : 0;
+#ifdef PR_MPI
+        MPI_Bcast(&nf,1,MPI_INT,0,MPI_COMM_WORLD);
+#endif
+        PROTO_ASSERT(nf>0,"Wind BC: no boundary frames");
+        const int nt=int(theta.size()),np=int(phi.size());
+        PROTO_ASSERT(nt>=4 && np>=4,"Wind BC needs at least four samples in each angular direction");
+        const double cadence=ParseInputs::get_BC_cadence()*3600.;
+        PROTO_ASSERT(cadence>0,"Wind BC cadence must be positive");
+        const double frameTime=std::max(0.,std::min(time/cadence,double(nf-1)));
+        const int count=std::min(4,nf);
+        const int first=std::max(0,std::min(int(std::floor(frameTime))-1,nf-count));
+        auto& cache=m_highOrderFrames;
+        std::array<double,4> timeWeight{};
+        for (int f=0;f<count;++f)
+        {
+            const int id=first+f;
+            if(cache.id[f]!=id)
+            {
+                cache.data[f].define(Box_BC);
+                if(procID()==0) BC_data[id].copyTo(cache.data[f]);
+                bcast_boxdata(cache.data[f]);cache.id[f]=id;
+            }
+            timeWeight[f]=1;
+            for(int m=0;m<count;++m) if(m!=f)
+                timeWeight[f]*=(frameTime-(first+m))/double(f-m);
+        }
+        const double dphi=2*M_PI/np;
+        const double h=1./map.layout().domain().getBlock(0).box().sizes()[1];
+        for (auto dit : dst.layout())
+        {
+            auto& out=dst[dit];const auto box=out.box();
+            for(int k=box.low()[2];k<=box.high()[2];++k)
+            for(int j=box.low()[1];j<=box.high()[1];++j)
+            {
+                const auto a=WindBoundary::basis(j,k,h,dst.layout().block(dit));
+                const double polar=std::acos(std::max(-1.,std::min(1.,a[2][0])));
+                const double longitude=std::atan2(a[1][0],a[0][0]);
+                int bracket=int(std::upper_bound(theta.begin(),theta.end(),polar)-theta.begin())-1;
+                const int start=std::max(-2,std::min(bracket-1,nt-2));
+                WindBoundary::State cart{};
+                for(int f=0;f<count;++f)
+                {
+                    const double rotation=2*M_PI*(time+(ParseInputs::get_BC_frame_rotate() ? (first+f)*cadence : 0.))/(25.38*24*3600);
+                    WindBoundary::State frame{};
+                    for(int it=0;it<4;++it)
+                    {
+                        const int virtualIndex=start+it;
+                        auto thetaCoordinate=[&](int q){
+                            return q<0 ? -theta[-q-1] : (q>=nt ? 2*M_PI-theta[2*nt-q-1] : theta[q]);};
+                        const double node=thetaCoordinate(virtualIndex);
+                        double wt=1;
+                        for(int m=0;m<4;++m)if(m!=it)
+                            wt*=(polar-thetaCoordinate(start+m))/(node-thetaCoordinate(start+m));
+                        const bool reflected=virtualIndex<0 || virtualIndex>=nt;
+                        const int ti=virtualIndex<0 ? -virtualIndex-1 : (virtualIndex>=nt ? 2*nt-virtualIndex-1 : virtualIndex);
+                        const double targetPhi=longitude-rotation+(reflected?M_PI:0.);
+                        const double coordinate=(targetPhi-phi[0])/dphi;
+                        const int ps=int(std::floor(coordinate))-1;
+                        for(int ip=0;ip<4;++ip)
+                        {
+                            double wp=1;
+                            for(int m=0;m<4;++m)if(m!=ip)wp*=(coordinate-(ps+m))/double(ip-m);
+                            const int piIndex=((ps+ip)%np+np)%np;
+                            const Point src(Box_BC.low()[0],ti,piIndex);
+                            const double st=std::sin(theta[ti]),ct=std::cos(theta[ti]);
+                            const double cp=std::cos(phi[piIndex]),sp=std::sin(phi[piIndex]);
+                            const double n[3]={st*cp,st*sp,ct},et[3]={ct*cp,ct*sp,-st},ep[3]={-sp,cp,0};
+                            const double weight=wt*wp;
+                            frame[0]+=weight*cache.data[f](src,0);
+                            frame[4]+=weight*cache.data[f](src,4);
+                            for(int begin : {1,5})for(int d=0;d<3;++d)
+                                frame[begin+d]+=weight*(cache.data[f](src,begin)*n[d]
+                                    +cache.data[f](src,begin+1)*ep[d]+cache.data[f](src,begin+2)*et[d]);
+                        }
+                    }
+                    for(int begin : {1,5})
+                    {
+                        const double x=frame[begin],y=frame[begin+1];
+                        frame[begin]=std::cos(rotation)*x-std::sin(rotation)*y;
+                        frame[begin+1]=std::sin(rotation)*x+std::cos(rotation)*y;
+                    }
+                    for(int c=0;c<8;++c)cart[c]+=timeWeight[f]*frame[c];
+                }
+                const double st=std::sin(polar),ct=std::cos(polar),cp=std::cos(longitude),sp=std::sin(longitude);
+                const double n[3]={st*cp,st*sp,ct},et[3]={ct*cp,ct*sp,-st},ep[3]={-sp,cp,0};
+                const Point pt(box.low()[0],j,k);
+                out(pt,0)=cart[0];out(pt,4)=cart[4];
+                for(int begin : {1,5})
+                {
+                    double vr=0,vp=0,vt=0;
+                    for(int d=0;d<3;++d){vr+=n[d]*cart[begin+d];vp+=ep[d]*cart[begin+d];vt+=et[d]*cart[begin+d];}
+                    out(pt,begin)=vr;out(pt,begin+1)=vp;out(pt,begin+2)=vt;
+                }
+            }
+        }
+    }
+
 	// Using this instead of Stencil-based fractional shift for BoxData increased speed significantly
 	template <typename T, MemType MEM>
 	inline void
@@ -142,6 +257,11 @@ public:
 							const MBLevelMap<MBMap_CubedSphereShell, MEM> &a_map,
 							T a_time)
 	{
+		if (ParseInputs::use_wind_boundary())
+		{
+			fourthOrderBoundary(a_dstData,a_map,a_time);
+			return;
+		}
 		PR_TIMERS("MHDReader::BoxData_to_BC");
 		HDF5Handler h5;
 		int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;

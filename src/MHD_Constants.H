@@ -23,6 +23,7 @@
 #define c_BLAST_RADIUS_FRACTION 0.1
 #define c_BLAST_BX0 1.0e-1
 
+// Stationary pulse/blast backgrounds only. Case 11 evolves the full B(t).
 inline bool isConstantMagneticFieldTest(int a_initConditionType)
 {
   return a_initConditionType == 3

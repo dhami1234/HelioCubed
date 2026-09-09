@@ -65,6 +65,38 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity_Euler(
     BoxData<T,1,MEM> dVolr(bxRad);
     radialMetrics(radius,Dr,adjDr,dVolr,bxRad);
 
+    if (ParseInputs::use_wind_boundary())
+    {
+        // Form the mapped source at points, then average it. Products of
+        // separately averaged rho, gravity and metrics lose spatial order.
+        State point=(1.0*Shift(Point::Zeros())
+            -(1.0/24.0)*Stencil<T>::Laplacian())(a_USph);
+        BoxData<T,DIM,MEM,DIM> basis(point.box());
+        Array<Array<uint,DIM>,6> perm={{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+        Array<Array<int,DIM>,6> signs={{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
+        const T h=this->dx()[1],hr=this->dx()[0];
+        T half=.5;
+        forallInPlace_p(f_Amatrix,basis.box(),basis,perm[block],signs[block],h,half,half);
+        State source(point.box());source.setVal(0.);
+        forallInPlace_p([] PROTO_LAMBDA(Point pt,Var<T,NUMCOMPS,MEM>& s,
+            const Var<T,NUMCOMPS,MEM>& u,const Var<T,DIM,MEM,DIM>& a,T hr)
+        {
+            const T stretch=CUBED_SPHERE_RADIAL_STRETCH;
+            const T rt=(CUBED_SPHERE_SHELL_R1-CUBED_SPHERE_SHELL_R0)/expm1(stretch);
+            const T e=exp(stretch*(pt[0]+.5)*hr);
+            const T det=a(0,0)*(a(1,1)*a(2,2)-a(1,2)*a(2,1))
+                       -a(0,1)*(a(1,0)*a(2,2)-a(1,2)*a(2,0))
+                       +a(0,2)*(a(1,0)*a(2,1)-a(1,1)*a(2,0));
+            const T jg=-c_G*c_M0*det*rt*stretch*e;
+            for(int d=0;d<3;++d)s(iMOMX+d)=jg*u(iRHO)*a(d,0);
+            s(iE)=jg*u(iMOMX);
+        },source,point,basis,hr);
+        State averaged=(1.0*Shift(Point::Zeros())
+            +(1.0/24.0)*Stencil<T>::Laplacian())(source);
+        a_Rhs+=averaged;
+        return;
+    }
+
     State W;
     State WBar;
     sphToPrim(W,WBar,a_USph,block);

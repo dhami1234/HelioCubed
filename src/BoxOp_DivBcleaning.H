@@ -21,6 +21,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell1(
       a_fluxout(0) = a_deta(0)*a_Wsph(iBX + a_dir);
     },Bfluxdir,a_WFace,a_deta,a_dir);
 
+  if (ParseInputs::use_wind_boundary())
+  {
+    // Both factors are face averages; their product needs the transverse
+    // derivative correction, including for a uniform Cartesian field.
+    auto Bface = slice(a_WFace,iBX + a_dir);
+    auto product = faceProduct(a_deta,Bface,a_dir);
+    product.copyTo(Bfluxdir);
+  }
+
   BoxData<T,1,MEM> Bfluxprod = faceProduct(Bfluxdir,a_adjDrDir,a_dir);
   Bfluxprod.copyTo(Bfluxdir);
 

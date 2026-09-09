@@ -362,7 +362,7 @@ Insert_CME(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
         MBLevelBoxData<double, NUMCOMPS, HOST> Wout(a_layout, Point::Zeros());
         a_JU.exchange();
         a_JU.copyTo(USph_CME);
-        CubedSphereShell::consToSphInterpEuler(USph_CME,a_iop,a_dVolrLev, 4); // Transform a_JU -> USph.
+        WindBoundary::consToSph(USph_CME,a_iop,a_dVolrLev, 4); // Transform a_JU -> USph.
         int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
         int thetaCoord = (rCoord + 1) % DIM;
         int phiCoord = (rCoord + 2) % DIM;

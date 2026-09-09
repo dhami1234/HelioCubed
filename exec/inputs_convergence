@@ -3,6 +3,8 @@
 -convergence_level              -1
 -convergence_dt                 -1.0
 -init_condition_type             4
+# Applies only to cases 0, 1, 10, and 11; ignored for other cases.
+-wind_boundary_order             4
 -domainSize                      30
 -thickness                       45
 -boxSize_nonrad                  30

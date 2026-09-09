@@ -636,7 +636,9 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
                 BoxData<T,NUMCOMPS,MEM>& a_BC,
                 BoxData<T,1,MEM>& a_dVolr,
                 Box a_blockBox,
-                T a_time);
+                T a_time,
+                T a_dt = 0, int a_kstage = -1,
+                const State* a_BCtimeSamples = nullptr);
   
   /// Exchange, block boundary conditions, transform from JU to USph. 
   // Implemented.
@@ -666,9 +668,9 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
 
 private:
   int m_count = 0;
-  // The exact magnetic-test equilibrium and geometry are time-independent.
-  // Cache its discrete operator so well balancing adds only one operator
-  // evaluation per patch per run, rather than one at every RK stage.
+  // Cache the stationary reference operator once per patch. For case 11,
+  // its magnetic force scales as B(t)^2, evaluated at the current RK time.
+  T m_testBackgroundFactor = 1.0;
   mutable bool m_testBackgroundReady = false;
   mutable T m_testBackgroundScale = 0.0;
   mutable State m_testBackgroundRhs;

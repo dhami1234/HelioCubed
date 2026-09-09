@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
     MPI_Init(&argc, &argv);
   #endif
   ParseInputs::getInstance().parsenow(argc, argv);
+  WindBoundary::validateSettings();
   HDF5Handler h5;
 
   int domainSize = ParseInputs::get_domainSize();
@@ -171,7 +172,7 @@ int main(int argc, char *argv[])
       if (init_condition_type == 0) BC_global.BoxData_to_BC(dstData, map, time);
 
       MBInterpOp iop;
-      iop = CubedSphereShell::InterpOp<HOST>(JU.layout(),OP::ghost() ,4);
+      iop = CubedSphereShell::InterpOp<HOST>(JU.layout(),OP::ghost(),4);
 
       // Set input solution.
       for (auto dit : layout)
@@ -250,22 +251,6 @@ int main(int argc, char *argv[])
       MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell, double> rk4(map, iop);
       // OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
       Write_W(JU, eulerOp, iop, restart_step, time, dt, true, true);            
-      {
-        HDF5Handler h5;
-        MBLevelBoxData<double, NUMCOMPS, HOST> JUTemp(JU.layout(), OP::ghost());
-        JU.copyTo(JUTemp);
-        CubedSphereShell::consToSphInterpEuler(JUTemp,iop,dVolrLev,4);
-        
-        for (auto dit : JUTemp.layout())
-          {
-            unsigned int block = layout.block(dit);
-            Box blockBox = layout.getBlock(block).domain().box();           
-            auto &USph_i = JUTemp[dit];
-            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox, time);
-          }
-      }
-    
-  
     bool give_space_in_probe_file = true;
     int probe_trigger_count_temp = -1;
     int write_trigger_count_temp = -1;
@@ -312,6 +297,8 @@ int main(int argc, char *argv[])
         }
       if (convTestType < 3)
         {
+          if (!std::isfinite(dt) || dt<=0 || time+dt<=time)
+              throw std::runtime_error("Invalid timestep: solution cannot advance; check boundary states, resolution and CFL");
           rk4.advance(JU, dVolrLev, dt, time, temporal_order);
           time = time_exceeded ? max_time : time + dt;
         }
@@ -373,6 +360,31 @@ int main(int argc, char *argv[])
         break;
       }
     }
+
+      if (init_condition_type==10 || init_condition_type==11) WindBoundary::reportExactError(JU,time);
+      if (WindBoundary::enabled())
+      {
+        long invalid=0;
+        for(auto dit:layout)for(auto pt:layout[dit])
+            for(int c=0;c<NUMCOMPS;++c)
+                if(!std::isfinite(JU[dit](pt,c))) ++invalid;
+        long limited=WindBoundary::limitedColumns();
+        long ghostLimited=WindBoundary::limitedGhostColumns();
+        long outflowLimited=WindBoundary::limitedOutflowColumns();
+#ifdef PR_MPI
+        MPI_Allreduce(MPI_IN_PLACE,&invalid,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&limited,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&ghostLimited,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,&outflowLimited,1,MPI_LONG,MPI_SUM,MPI_COMM_WORLD);
+#endif
+        if(invalid) throw std::runtime_error("Wind solution contains nonfinite values; check resolution, CFL and limiting");
+        pout(0)<<"Wind BC positivity-limited column-stages: "<<limited<<std::endl;
+        pout(0)<<"Wind BC limited auxiliary angular ghost columns: "<<ghostLimited<<std::endl;
+        pout(0)<<"Wind BC positivity-limited outflow column-stages: "<<outflowLimited<<std::endl;
+        WindBoundary::limitedOutflowColumns()=0;
+        WindBoundary::limitedColumns()=0;
+        WindBoundary::limitedGhostColumns()=0;
+      }
 
       if ((convTestType > 0) && (convTestType != 4)) {
         int output_level = split_convergence_level ? convergence_level : lev;

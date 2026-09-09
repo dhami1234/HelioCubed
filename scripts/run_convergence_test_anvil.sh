@@ -115,10 +115,15 @@ fi
 # =============================================================================
 
 # Select one or more problems, e.g. TEST_CASES=(2 3 4 5).
+#   0 = file-driven solar wind (use an absolute -BC_file path)
+#   1 = analytic outflow
 #   2 = radial pulse
 #   3 = radial pulse with constant Cartesian magnetic field
 #   4 = non-radial pulse
 #   5 = non-radial pulse with constant Cartesian magnetic field
+#  10 = smooth exact expanding wind, B=0
+#  11 = the same wind with uniform Cartesian B(t)
+# Both require wind_boundary_order 4 and Sun_gravity 0.
 TEST_CASES=(3 4 5)
 if [[ -n "${HELIOCUBED_CONVERGENCE_TEST_CASES:-}" ]]; then
     read -r -a TEST_CASES <<< "${HELIOCUBED_CONVERGENCE_TEST_CASES}"
@@ -128,7 +133,11 @@ elif [[ -n "${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-}" ]]; then
 fi
 
 # Maximum simulation time in seconds, independently for each problem.
-# Defaults preserve inputs_convergence's previous 3600000.0-second limit.
+CASE_0_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_0_MAX_TIME:-36000.0}"
+CASE_1_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_1_MAX_TIME:-36000.0}"
+# Two initial cycles become one at tau=29928 s for the standard inner radius.
+CASE_10_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_10_MAX_TIME:-29928.0}"
+CASE_11_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_11_MAX_TIME:-29928.0}"
 CASE_2_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_2_MAX_TIME:-47600.0}"
 CASE_3_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_3_MAX_TIME:-47600.0}"
 CASE_4_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_4_MAX_TIME:-360000.0}"
@@ -150,7 +159,8 @@ export HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RA
 export HELIOCUBED_CONVERGENCE_MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-200000}"
 # MPI ranks for levels 0, 1, 2. Comparison uses the level-0 count.
 export HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL="${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL:-18 144 1152}"
-export HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-4}"
+# Leave empty to preserve -temporal_order in the input template.
+export HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-}"
 export MPIEXEC="${MPIEXEC:-mpirun}"
 
 # Slurm resources PER PROBLEM, not shared across the selected problems.
@@ -193,8 +203,8 @@ fi
 seen_case_ids=" "
 for case_id in "${TEST_CASES[@]}"; do
     case "${case_id}" in
-        2|3|4|5) ;;
-        *) echo "ERROR: unsupported problem ID '${case_id}'; choose 2, 3, 4, or 5." >&2; exit 1 ;;
+        0|1|2|3|4|5|10|11) ;;
+        *) echo "ERROR: unsupported problem ID '${case_id}'; choose 0, 1, 2, 3, 4, 5, 10, or 11." >&2; exit 1 ;;
     esac
     if [[ "${seen_case_ids}" == *" ${case_id} "* ]]; then
         echo "ERROR: duplicate problem ID '${case_id}' in TEST_CASES." >&2

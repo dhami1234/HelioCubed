@@ -2,6 +2,7 @@
 #include "MHD_Constants.H"
 #include <memory>  
 extern MHDReader BC_global;
+#include "BoxOp_WindBoundary.H"
 template <typename T, MemType MEM>
 PROTO_KERNEL_START
 void f_radialoutflowIBCs_F(
@@ -58,7 +59,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
               BoxData<T,NUMCOMPS,MEM>& a_BC,
               BoxData<T,1,MEM>& a_dVolr,
               Box a_blockBox,
-              T a_time)
+              T a_time, T a_dt, int a_kstage,
+              const State* a_BCtimeSamples)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::PreStagePatch()");
   HDF5Handler h5;
@@ -66,6 +68,12 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   // if (procID() == 0) h5.writePatch(1,a_USphStage,"a_USphStage_noBC");
 
   int a_block = this->block();
+  if (WindBoundary::enabled())
+  {
+    WindBoundary::fill(a_USphStage,a_BC,a_BCtimeSamples,a_blockBox,
+                       this->dx(),a_block,a_time,a_dt,a_kstage);
+    return;
+  }
   Box bxGhosted = a_USphStage.box();
   BoxData<double> radius(a_dVolr.box());
   BoxData<double, DIM, HOST> Dr(a_dVolr.box());
@@ -361,7 +369,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   auto& eulerOp = *s_eulerOp;
 
   // Transform JU -> USph.
-  CubedSphereShell::consToSphInterpEuler(a_UStage,a_iop,a_dVolrLev, 4, 0);
+  WindBoundary::consToSph(a_UStage,a_iop,a_dVolrLev, 4, 0);
 
   // initialize a_k to zero. 
   a_k.setVal(0.);
@@ -371,6 +379,18 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   MBLevelBoxData<double, 8, HOST> dstData(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
   if (init_condition_type == 0) BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
 
+  std::array<MBLevelBoxData<double,8,HOST>,4> bcTimeSamples;
+  if (WindBoundary::enabled() && a_kstage == 0)
+  {
+    WindBoundary::stageCache().clear();
+    if (init_condition_type == 0)
+      for (int i=0;i<4;++i)
+      {
+        bcTimeSamples[i].define(layout,Point::Basis(rCoord)
+            +NGHOST*Point::Basis(thetaCoord)+NGHOST*Point::Basis(phiCoord));
+        BC_global.BoxData_to_BC<double,HOST>(bcTimeSamples[i],map,a_time+i+1.);
+      }
+  }
   for (auto dit : a_UStage.layout())
   {
     unsigned int block = layout.block(dit);
@@ -378,7 +398,15 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox, a_time);
+    std::array<State,4> patchTimeSamples;
+    const State* samplePtr=nullptr;
+    if (WindBoundary::enabled() && init_condition_type==0 && a_kstage==0)
+    {
+      for (int i=0;i<4;++i) patchTimeSamples[i]=alias(bcTimeSamples[i][dit]);
+      samplePtr=patchTimeSamples.data();
+    }
+    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox,
+                              a_time,a_dt,a_kstage,samplePtr);
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     int linear_visc = ParseInputs::get_linear_viscosity();
@@ -397,7 +425,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         fluxes[2].define(rhs_i.box().extrude(2));
         fluxes[2].setToZero();
         if (ParseInputs::get_linear_viscosity() == 1) eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i,a_dt);
-        if (ParseInputs::get_Sun_gravity() == 1) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
+        if (ParseInputs::get_Sun_gravity() == 1 && !WindBoundary::enabled()) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
         a_blockreg.increment(fluxes, dit, a_dt);
         CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,a_dt);
       }

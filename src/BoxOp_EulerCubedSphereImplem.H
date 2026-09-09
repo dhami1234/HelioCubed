@@ -16,15 +16,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
    int                             a_counter) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::operator()");
-  // Magnetized test problems evolve perturbations about a uniform Cartesian
-  // magnetic equilibrium. Subtract the numerical operator evaluated on that
-  // exact background. Its continuum divergence is zero, so this preserves the
-  // MHD equations while removing cubed-sphere metric/interpolation residuals
-  // that are otherwise amplified by the very low plasma beta.
+  // Remove the discrete residual of a spatially uniform magnetic equilibrium.
+  // Cases 3/5/7/9 evolve perturbations; case 11 retains the full state and
+  // subtracts only the reference momentum force and its registered fluxes.
+  // The reference has zero continuum RHS; physical perturbations still evolve.
   static thread_local bool evaluatingBackground = false;
+  const bool expandingWind = ParseInputs::get_init_condition_type()==11;
   const bool subtractBackground =
-      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type())
-      && !evaluatingBackground;
+      (isConstantMagneticFieldTest(ParseInputs::get_init_condition_type())
+       || expandingWind) && !evaluatingBackground;
   if (subtractBackground)
   {
     const bool boxesMatch = m_testBackgroundReady
@@ -47,6 +47,20 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
           a_state(iBZ) = 0.0;
         },backgroundUSph);
 
+      if (expandingWind)
+      {
+        const Box box=backgroundUSph.box();
+        for(int k=box.low()[2];k<=box.high()[2];++k)
+          for(int j=box.low()[1];j<=box.high()[1];++j)
+          {
+            const auto reference=WindBoundary::magneticEquilibriumAverage(
+                j,k,this->dx()[1],this->block(),m_gamma);
+            for(int r=box.low()[0];r<=box.high()[0];++r)
+              for(int c=0;c<NUMCOMPS;++c)
+                backgroundUSph(Point(r,j,k),c)=reference[c]*WindBoundary::unit(c);
+          }
+      }
+
       m_testBackgroundRhs.define(a_Rhs.box());
       m_testBackgroundRhs.setVal(0.0);
       for (int dir = 0; dir < DIM; ++dir)
@@ -68,17 +82,29 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
   }
 
+  // Apply the same correction to the cell RHS and interface flux register.
+  // For case 11 only momentum is corrected: induction and energy continue
+  // to evolve normally, including any diffusion from the selected limiter.
+  const auto subtractEquilibrium = [&]()
+  {
+    if (!subtractBackground) return;
+    const T factor=expandingWind ? m_testBackgroundFactor : 1.0;
+    const int first=expandingWind ? iMOMX : 0;
+    const int last=expandingWind ? iE : NUMCOMPS;
+    auto subtract=[] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& state,
+        const Var<T,NUMCOMPS,MEM>& reference,T scale,int begin,int end)
+    {
+      for(int c=begin;c<end;++c) state(c)-=scale*reference(c);
+    };
+    forallInPlace(subtract,a_Rhs,m_testBackgroundRhs,factor,first,last);
+    for(int dir=0;dir<DIM;++dir)
+      forallInPlace(subtract,a_fluxes[dir],m_testBackgroundFluxes[dir],factor,first,last);
+  };
+
   if (ParseInputs::get_spatial_operator() == 2)
   {
     BertaOperator(a_Rhs,a_fluxes,a_USph,a_dt,a_scale,a_counter);
-    if (subtractBackground)
-    {
-      a_Rhs -= m_testBackgroundRhs;
-      for (int dir = 0; dir < DIM; ++dir)
-      {
-        a_fluxes[dir] -= m_testBackgroundFluxes[dir];
-      }
-    }
+    subtractEquilibrium();
     return;
   }
 
@@ -289,14 +315,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     DivBPowell2(a_Rhs, minusJDivB, W, A_matrix0);
   }
 
-  if (subtractBackground)
-  {
-    a_Rhs -= m_testBackgroundRhs;
-    for (int dir = 0; dir < DIM; ++dir)
-    {
-      a_fluxes[dir] -= m_testBackgroundFluxes[dir];
-    }
-  }
+  subtractEquilibrium();
 
   // if (ParseInputs::get_Sun_gravity() == 1) Gravity(a_Rhs, W, radius, A_matrix0, deta0, dVolr);
     
@@ -343,6 +362,17 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
                   a_advflux(iRHO) = a_deta(0)*a_fluxin(iRHO);
                   a_advflux(iE) = a_deta(0)*a_fluxin(iE);  
                 },a_fluxdir,a_physFlux,a_deta,a_adjDrDir);
+
+  if (ParseInputs::use_wind_boundary())
+  {
+    for (int comp : {iRHO, iE})
+    {
+      auto physical = slice(a_physFlux,comp);
+      auto mapped = slice(a_fluxdir,comp);
+      auto product = faceProduct(a_deta,physical,a_dir);
+      product.copyTo(mapped);
+    }
+  }
     
   for (int comp = 0; comp < NUMCOMPS;comp++)
     {
@@ -750,7 +780,14 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
     fluxes[1].setToZero();
     fluxes[2].setToZero();
     unsigned int block = layout.block(dit);
+    if (ParseInputs::get_init_condition_type()==11)
+      eulerOp[dit].m_testBackgroundFactor=
+          std::pow(1.+a_time/WindBoundary::timeUnit(),-4.);
     eulerOp[dit](k_i, fluxes, USph_i, 1.0);
+    // High-order wind boundaries include gravity in their stage polynomial;
+    // the interior must integrate that source in the same RK stages.
+    if (WindBoundary::enabled() && ParseInputs::get_Sun_gravity()==1)
+      eulerOp[dit].Gravity_Euler(k_i,USph_i);
     auto dx = eulerOp[dit].dx();
     Box blockBox = layout.getBlock(block).domain().box();
     a_blockreg.increment(fluxes,dit,wgtxdt);
