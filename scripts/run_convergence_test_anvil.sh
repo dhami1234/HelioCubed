@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1152
 #SBATCH --ntasks-per-node=128
 #SBATCH --cpus-per-task=1
-#SBATCH --time=10:00:00
+#SBATCH --time=72:00:00
 #SBATCH --job-name=hc-conv
 #SBATCH --output=hc-conv.o%j
 #SBATCH --error=hc-conv.e%j
@@ -119,7 +119,7 @@ fi
 #   3 = radial pulse with constant Cartesian magnetic field
 #   4 = non-radial pulse
 #   5 = non-radial pulse with constant Cartesian magnetic field
-TEST_CASES=(3)
+TEST_CASES=(3 4 5)
 if [[ -n "${HELIOCUBED_CONVERGENCE_TEST_CASES:-}" ]]; then
     read -r -a TEST_CASES <<< "${HELIOCUBED_CONVERGENCE_TEST_CASES}"
 elif [[ -n "${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-}" ]]; then
@@ -129,10 +129,10 @@ fi
 
 # Maximum simulation time in seconds, independently for each problem.
 # Defaults preserve inputs_convergence's previous 3600000.0-second limit.
-CASE_2_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_2_MAX_TIME:-3600000.0}"
-CASE_3_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_3_MAX_TIME:-3600000.0}"
-CASE_4_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_4_MAX_TIME:-3600000.0}"
-CASE_5_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_5_MAX_TIME:-3600000.0}"
+CASE_2_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_2_MAX_TIME:-47600.0}"
+CASE_3_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_3_MAX_TIME:-47600.0}"
+CASE_4_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_4_MAX_TIME:-360000.0}"
+CASE_5_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_5_MAX_TIME:-36000.0}"
 
 # 1 = spatial convergence; 2 = combined space-and-time convergence.
 export HELIOCUBED_CONVERGENCE_TEST_TYPE="${HELIOCUBED_CONVERGENCE_TEST_TYPE:-1}"
@@ -147,7 +147,7 @@ export HELIOCUBED_CONVERGENCE_BOX_SIZE_RAD="${HELIOCUBED_CONVERGENCE_BOX_SIZE_RA
 # The earlier of max_iter and max_time wins. Increase this count if you want
 # runs to reach max_time. Mode 1 uses this count at every level; mode 2 uses
 # this count, 2x this count, and 4x this count.
-export HELIOCUBED_CONVERGENCE_MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-20}"
+export HELIOCUBED_CONVERGENCE_MAX_ITER="${HELIOCUBED_CONVERGENCE_MAX_ITER:-200000}"
 # MPI ranks for levels 0, 1, 2. Comparison uses the level-0 count.
 export HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL="${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL:-18 144 1152}"
 export HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-4}"
@@ -156,7 +156,7 @@ export MPIEXEC="${MPIEXEC:-mpirun}"
 # Slurm resources PER PROBLEM, not shared across the selected problems.
 NODES="${HELIOCUBED_ANVIL_NODES:-9}"
 NPROCS="${HELIOCUBED_ANVIL_NTASKS:-1152}"
-WALLTIME="${HELIOCUBED_ANVIL_WALLTIME:-10:00:00}"
+WALLTIME="${HELIOCUBED_ANVIL_WALLTIME:-72:00:00}"
 PARTITION="${HELIOCUBED_ANVIL_PARTITION:-wholenode}"
 ACCOUNT="${HELIOCUBED_ANVIL_ACCOUNT:-mca07s033}"
 

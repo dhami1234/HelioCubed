@@ -22,6 +22,7 @@ blt
 /Test_results/
 /Convergence_results/
 /Convergence_jobs/
+/Test_jobs/
 *.jpeg
 *.png
 *.mpg

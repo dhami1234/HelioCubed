@@ -100,7 +100,7 @@ EXEC_DIR="${HELIOCUBED_EXEC_DIR:-/anvil/projects/x-mca07s033/Talwinder/HelioCube
 #   7 = strong spherical shock with constant Cartesian magnetic field
 #   8 = off-center hydrodynamic blast
 #   9 = off-center blast with constant Cartesian B = (0.1, 0, 0) G
-TEST_CASES=(8 9 3 5)
+TEST_CASES=(2 3 4 5 6 7 8 9)
 if [[ -n "${HELIOCUBED_TEST_CASES:-}" ]]; then
     read -r -a TEST_CASES <<< "${HELIOCUBED_TEST_CASES}"
 fi
@@ -115,7 +115,8 @@ BOX_SIZE_RAD="${HELIOCUBED_TEST_BOX_SIZE_RAD:-25}"
 # Simulation limits and output cadence.
 MAX_ITER="${HELIOCUBED_TEST_MAX_ITER:-1000000000}"
 BLAST_MAX_ITER="${HELIOCUBED_TEST_BLAST_MAX_ITER:-1000000000}"
-SLICE_CADENCE="${HELIOCUBED_TEST_SLICE_CADENCE:-50}"
+SLICE_CADENCE="${HELIOCUBED_TEST_SLICE_CADENCE:-5000000}"
+SLICE_TIME_CADENCE="${HELIOCUBED_TEST_SLICE_TIME_CADENCE:-1800.0}" # time between slice outputs 
 
 # Maximum simulation time for each test problem.
 CASE_2_MAX_TIME="${HELIOCUBED_TEST_CASE_2_MAX_TIME:-47600.0}" # radial pulse
@@ -129,9 +130,9 @@ CASE_9_MAX_TIME="${HELIOCUBED_TEST_CASE_9_MAX_TIME:-${HELIOCUBED_TEST_BLAST_MAX_
 
 # Slurm resources. Command-line sbatch options generated below override the
 # matching #SBATCH defaults at the top of this file.
-NODES="${HELIOCUBED_ANVIL_NODES:-7}"
+NODES="${HELIOCUBED_ANVIL_NODES:-6}"
 # NPROCS is passed to Slurm as --ntasks and is the number of MPI processes.
-NPROCS="${HELIOCUBED_TEST_NPROCS:-${HELIOCUBED_ANVIL_NTASKS:-864}}"
+NPROCS="${HELIOCUBED_TEST_NPROCS:-${HELIOCUBED_ANVIL_NTASKS:-768}}"
 WALLTIME="${HELIOCUBED_ANVIL_WALLTIME:-24:00:00}"
 PARTITION="${HELIOCUBED_ANVIL_PARTITION:-wholenode}"
 
@@ -224,6 +225,7 @@ make_case_input() {
         -v max_iter="${max_iter}" \
         -v max_time="${max_time}" \
         -v slice_cadence="${SLICE_CADENCE}" \
+        -v slice_time_cadence="${SLICE_TIME_CADENCE}" \
         '
         BEGIN { found_slices = 0 }
         $1 == "-init_condition_type"  { $2 = case_id }
@@ -235,10 +237,10 @@ make_case_input() {
         $1 == "-boxSize_rad"          { $2 = box_size_rad }
         $1 == "-max_iter"             { $2 = max_iter }
         $1 == "-slice_cadence"        { $2 = slice_cadence }
-        $1 == "-slice_time_cadence"   { $2 = "1.0e30" }
+        $1 == "-slice_time_cadence"   { $2 = slice_time_cadence }
         $1 == "-slices"               { $2 = "Z"; found_slices = 1 }
         $1 == "-write_cadence"        { $2 = max_iter }
-        $1 == "-write_time_cadence"   { $2 = "1.0e30" }
+        $1 == "-write_time_cadence"   { $2 = slice_time_cadence }
         $1 == "-checkpoint_cadence"   { $2 = max_iter }
         $1 == "-data_file_prefix"     { $2 = data_prefix }
         $1 == "-checkpoint_file_prefix" { $2 = checkpoint_prefix }
