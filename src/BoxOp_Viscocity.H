@@ -1,3 +1,22 @@
+template<typename T, template<MemType> typename MAP, MemType MEM>
+inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
+    const State& a_W, uint a_dir) const
+{
+  State face = Stencil<T>::CellToFace(a_dir)(a_W);
+  State left = (1.0*Shift(Point::Basis(a_dir,-1)))(a_W);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,NUMCOMPS,MEM>& a_face,
+      const Var<T,NUMCOMPS,MEM>& a_left,
+      const Var<T,NUMCOMPS,MEM>& a_right)
+    {
+      a_face(iRHO) = MHD_Reconstruction::boundedFaceValue(
+          a_face(iRHO),a_left(iRHO),a_right(iRHO),RHO00);
+      a_face(iP) = MHD_Reconstruction::boundedFaceValue(
+          a_face(iP),a_left(iP),a_right(iP),0.0);
+    },face,left,a_W);
+  return face;
+}
+
 template<
   typename T,
   template<MemType> typename MAP,
@@ -40,7 +59,7 @@ viscFlux(
     {
       PR_TIME("BoxOp_Euler::viscous operator");
       // high order linear viscosity.
-      State WFace = Stencil<T>::CellToFace(dir)(W);
+      State WFace = viscosityFaceState(W,dir);
       // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       Stencil<double> D2 = 1.0*Shift(Point::Basis(dir)) + (-2.0)*Shift(Point::Zeros())
         + 1.0*Shift(Point::Basis(dir,-1));

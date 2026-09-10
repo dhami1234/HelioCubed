@@ -100,7 +100,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
   // Reconstruct the evolved perturbation for magnetized test problems.  A
   // single face representation of the analytic background is added below so
-  // that the Rusanov jump cannot contain two independently reconstructed
+  // that the dissipative jump cannot contain two independently reconstructed
   // copies of the same constant Cartesian field.
   sphToPrim(W,WBar,a_USph,a_block,!magneticTest);
 
@@ -222,6 +222,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         WFaceBar *= 0.5;
       }
 
+      if (ParseInputs::get_Riemann_solver_type() == 2)
+      {
+        // Repair delta-B states before adding the common background field.
+        // Both the physical flux and Roe dissipation use these repaired states.
+        repairRoeFaceStates(WFace_L,WFace_R,WFaceBar,WBar,dir);
+      }
+
       if (magneticTest)
       {
         // W and WBar contain delta-B.  Add the same centered, fourth-order
@@ -245,23 +252,31 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       primToFlux(physFlux_L,WFace_L,WFaceBar,adjDrDir,a_block,dir);
       primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir);
       Box bxface0 = a_fluxes[dir].box();
-      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Rus(bxface);
+      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss(bxface);
       
       primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
       primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
-      primToMappedRusanovFlux(fluxdir_Rus,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir);
+      if (ParseInputs::get_Riemann_solver_type() == 2)
+      {
+        fluxdir_Diss.define(bxface0);
+        primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,dir);
+      }
+      else
+      {
+        primToMappedRusanovFlux(fluxdir_Diss,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir);
+      }
       
       forallInPlace([ ] PROTO_LAMBDA
         (Var<T,NUMCOMPS,MEM>& a_fluxout,
           const Var<T,NUMCOMPS,MEM>& a_fluxin_L,
           const Var<T,NUMCOMPS,MEM>& a_fluxin_R,
-          const Var<T,NUMCOMPS,MEM>& a_fluxin_Rus)
+          const Var<T,NUMCOMPS,MEM>& a_fluxin_Diss)
         {  
           for (int comp = 0; comp < NUMCOMPS;comp++)
           {                  
-            a_fluxout(comp) = 0.5*(a_fluxin_L(comp) + a_fluxin_R(comp) - a_fluxin_Rus(comp));
+            a_fluxout(comp) = 0.5*(a_fluxin_L(comp) + a_fluxin_R(comp) - a_fluxin_Diss(comp));
           }
-        },fluxdir,fluxdir_L,fluxdir_R,fluxdir_Rus);
+        },fluxdir,fluxdir_L,fluxdir_R,fluxdir_Diss);
 
       // Save fluxes, update RHS.
       fluxdir.copyTo(a_fluxes[dir]);
@@ -614,6 +629,25 @@ template<
     typename T,
     template<MemType> typename MAP,
     MemType MEM>
+inline bool BoxOp_EulerCubedSphere<T,MAP,MEM>::validConservedState(
+    const MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU)
+{
+  Reduction<T,Operation::Sum,MEM> invalid;
+  invalid.reset();
+  for (auto dit : a_JU.layout())
+  {
+    BoxData<T,1,MEM> bad(a_JU.layout()[dit]);
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,1,MEM>& a_bad, const Var<T,NUMCOMPS,MEM>& a_state)
+      {
+        a_bad(0) = MHD_Reconstruction::finiteConservedStateWithPositiveDensity<NUMCOMPS>(a_state) ? 0.0 : 1.0;
+      },bad,a_JU[dit]);
+    bad.reduce(invalid);
+  }
+  return invalid.fetch() == 0.0;
+}
+
+template<typename T, template<MemType> typename MAP, MemType MEM>
 inline T BoxOp_EulerCubedSphere<T,MAP,MEM>::
 dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
       MBInterpOp& a_iop,
@@ -828,7 +862,7 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
       bool viscnl = true;
 
       // high order linear viscosity.
-      State WFace = Stencil<T>::CellToFace(dir)(a_W);
+      State WFace = viscosityFaceState(a_W,dir);
       // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,block,dir);
       Box bxdir = bx.extrude(Point::Basis(dir));

@@ -4,6 +4,7 @@
 
 #include "Proto.H"
 #include "Inputs_Parsing.H"
+#include "MHD_Reconstruction.H"
 
 #define NUMCOMPS 2*DIM+2
 #define NUMREG NUMCOMPS
@@ -436,6 +437,9 @@ public:
                          uint a_block) const;
 
   inline void dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,const State& a_W) const;
+
+  inline static bool validConservedState(
+                         const MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU);
    
    inline static T dtCFL(
                          MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
@@ -505,8 +509,30 @@ public:
                               uint a_block,
                               uint a_dir) const;
 
+  /// Repair invalid reconstructed states before either part of the Roe flux.
+  inline void repairRoeFaceStates(
+                              State& a_WFace_L,
+                              State& a_WFace_R,
+                              const State& a_WFaceBar,
+                              const State& a_WBar,
+                              uint a_dir) const;
+
+  /// Roe dissipation from face averages, returned in mapped Cartesian form.
+  inline void primToMappedRoeFlux(
+                              State& a_fluxdir,
+                              const State& a_WFace_L,
+                              const State& a_WFace_R,
+                              const State& a_WFaceBar,
+                              const BoxData<T,1,MEM>& a_adjDdir,
+                              const BoxData<T,DIM,MEM,DIM>& a_detA_A,
+                              const BoxData<T,1,MEM>& a_detA,
+                              const BoxData<T,DIM,MEM,DIM>& a_A,
+                              uint a_dir) const;
+
   // End new factorization of operator().
   // Viscosity starts here.
+
+  inline State viscosityFaceState(const State& a_W, uint a_dir) const;
 
   inline void
   viscFlux(
@@ -682,6 +708,7 @@ private:
 #include "BoxOp_Limiters.H"
 #include "BoxOp_TestProblems.H"
 #include "BoxOp_PreStage.H"
+#include "BoxOp_RoeCubedSphere.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
 #include "BoxOp_BertaCubedSphereImplem.H"
 #include "BoxOp_Initialize.H"

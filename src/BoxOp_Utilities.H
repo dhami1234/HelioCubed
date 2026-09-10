@@ -592,6 +592,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                                   - (1.0/24.0)*Stencil<T>::Laplacian());
          
   BoxData<T,NUMCOMPS,MEM> UPoint = deconvolveStencil(a_USph);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,NUMCOMPS,MEM>& a_point,
+      const Var<T,NUMCOMPS,MEM>& a_cell)
+    {
+      MHD_Reconstruction::useCellAverageForInvalidDensity<NUMCOMPS>(
+          a_point,a_cell,RHO00);
+    },UPoint,a_USph);
   a_WBar = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
   a_W = forall<T,NUMCOMPS,MEM>(f_sphToPrim,UPoint);
   const bool magneticTest =
@@ -632,7 +639,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                   {
                     a_w(iP) = (a_w(iP) - a_ke(0) - a_me(0))*(a_gamma - 1.0);
                   }
-                  if (a_w(iP) < 0) a_w(iP) = 0.0;
+                  // Keep invalid point pressure until complete-state recovery.
                 },a_W,kePoint,mePoint,deltaMePoint,magneticTest,m_gamma);
   forallInPlace([ ] PROTO_LAMBDA
                 (Var<T,NUMCOMPS>& a_w,
@@ -653,6 +660,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                   }
                   if (a_w(iP) < 0) a_w(iP) = 0.0;
                 },a_WBar,keBar,meBar,deltaMeBar,magneticTest,m_gamma);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,NUMCOMPS,MEM>& a_point,
+      const Var<T,NUMCOMPS,MEM>& a_cell)
+    {
+      MHD_Reconstruction::useCellAverageForInvalidPrimitive<NUMCOMPS>(
+          a_point,a_cell,RHO00);
+    },a_W,a_WBar);
   T coef = 1.0/24.0;
   a_W += Stencil<T>::Laplacian()(a_WBar,coef);
   

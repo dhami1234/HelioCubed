@@ -55,6 +55,8 @@ private:
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
+    int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard operator only)
+    double entropy_fix_coeff = 0.3; // FullSphere entropy-fix coefficient; 0 disables it
     double Berta_eta_d = 0.02; // Berta detector threshold
     int Berta_detector_type = 0; // 0: Jameson detector, 1: Berta derivative-ratio detector
     int Berta_fallback_type = 0; // 0: WENO3 fallback, 1: PLM fallback
@@ -152,6 +154,8 @@ public:
     static double get_CFL() {return getInstance().CFL;}
     static int get_limiter() {return getInstance().limiter;}
     static int get_spatial_operator() {return getInstance().spatial_operator;}
+    static int get_Riemann_solver_type() {return getInstance().Riemann_solver_type;}
+    static double get_entropy_fix_coeff() {return getInstance().entropy_fix_coeff;}
     static double get_Berta_eta_d() {return getInstance().Berta_eta_d;}
     static int get_Berta_detector_type() {return getInstance().Berta_detector_type;}
     static int get_Berta_fallback_type() {return getInstance().Berta_fallback_type;}
@@ -224,6 +228,8 @@ public:
         args.add("CFL", CFL);
         args.add("limiter", limiter);
         args.add("spatial_operator", spatial_operator);
+        args.add("Riemann_solver_type", Riemann_solver_type);
+        args.add("entropy_fix_coeff", entropy_fix_coeff);
         args.add("Berta_eta_d", Berta_eta_d);
         args.add("Berta_detector_type", Berta_detector_type);
         args.add("Berta_fallback_type", Berta_fallback_type);
@@ -316,6 +322,8 @@ public:
         pout(0) << "CFL: " << CFL << endl;
         pout(0) << "limiter: " << limiter << endl;
         pout(0) << "spatial_operator: " << spatial_operator << endl;
+        pout(0) << "Riemann_solver_type: " << Riemann_solver_type << endl;
+        pout(0) << "entropy_fix_coeff: " << entropy_fix_coeff << endl;
         pout(0) << "Berta_eta_d: " << Berta_eta_d << endl;
         pout(0) << "Berta_detector_type: " << Berta_detector_type << endl;
         pout(0) << "Berta_fallback_type: " << Berta_fallback_type << endl;

@@ -13,6 +13,20 @@ int main(int argc, char *argv[])
     MPI_Init(&argc, &argv);
   #endif
   ParseInputs::getInstance().parsenow(argc, argv);
+  const int riemannSolver = ParseInputs::get_Riemann_solver_type();
+  const double entropyFix = ParseInputs::get_entropy_fix_coeff();
+  if ((riemannSolver != 1 && riemannSolver != 2)
+      || (riemannSolver == 2 && ParseInputs::get_spatial_operator() != 1)
+      || !std::isfinite(entropyFix) || entropyFix < 0.0)
+  {
+    pout(0) << "Error: Riemann_solver_type must be 1 (Rusanov) or 2 (Roe 8-wave). "
+            << "Roe requires spatial_operator=1. entropy_fix_coeff must be finite "
+            << "and nonnegative." << endl;
+#ifdef PR_MPI
+    MPI_Finalize();
+#endif
+    return 1;
+  }
   HDF5Handler h5;
 
   int domainSize = ParseInputs::get_domainSize();
@@ -305,6 +319,16 @@ int main(int argc, char *argv[])
         }
       // Normal simulations and time-evolving convergence tests share the same
       // end-time limit. Convergence timesteps otherwise remain fixed.
+      if (convTestType < 3 &&
+          (!std::isfinite(dt) || !(dt > 0.0) || !(time + dt > time)))
+        {
+          pout(0) << "Error: invalid or non-advancing timestep at iteration "
+                  << iter << ": time=" << time << ", dt=" << dt << endl;
+#ifdef PR_MPI
+          MPI_Finalize();
+#endif
+          return 1;
+        }
       if (convTestType < 3 && dt >= max_time - time)
         {
           dt = max_time - time;
@@ -313,6 +337,15 @@ int main(int argc, char *argv[])
       if (convTestType < 3)
         {
           rk4.advance(JU, dVolrLev, dt, time, temporal_order);
+          if (!OP::validConservedState(JU))
+            {
+              pout(0) << "Error: nonfinite conserved state or nonpositive cell-average "
+                      << "density after iteration " << iter << ", time=" << time + dt << endl;
+#ifdef PR_MPI
+              MPI_Finalize();
+#endif
+              return 1;
+            }
           time = time_exceeded ? max_time : time + dt;
         }
 

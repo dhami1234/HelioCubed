@@ -51,7 +51,7 @@ set -Eeuo pipefail
 #   7 = strong spherical shock with constant Cartesian magnetic field
 #   8 = off-center hydrodynamic blast
 #   9 = off-center blast with constant Cartesian B = (0.1, 0, 0) G
-TEST_CASES=(8 9 3 5)
+TEST_CASES=(2 4 6 8 3 5 7 9)
 if [[ -n "${HELIOCUBED_TEST_CASES:-}" ]]; then
     read -r -a TEST_CASES <<< "${HELIOCUBED_TEST_CASES}"
 fi
@@ -73,12 +73,12 @@ MAX_ITER="${HELIOCUBED_TEST_MAX_ITER:-100}"
 # t=0.01 comparison time, converted for the default shell dimensions. Adjust
 # their times if rebuilding the shell. HELIOCUBED_TEST_BLAST_MAX_TIME remains
 # a shared fallback for both blast cases for backward compatibility.
-CASE_2_MAX_TIME="${HELIOCUBED_TEST_CASE_2_MAX_TIME:-3600000.0}" # radial pulse
-CASE_3_MAX_TIME="${HELIOCUBED_TEST_CASE_3_MAX_TIME:-3600000.0}" # radial pulse, constant B
-CASE_4_MAX_TIME="${HELIOCUBED_TEST_CASE_4_MAX_TIME:-3600000.0}" # non-radial pulse
-CASE_5_MAX_TIME="${HELIOCUBED_TEST_CASE_5_MAX_TIME:-3600000.0}" # non-radial pulse, constant B
-CASE_6_MAX_TIME="${HELIOCUBED_TEST_CASE_6_MAX_TIME:-3600000.0}" # strong spherical shock
-CASE_7_MAX_TIME="${HELIOCUBED_TEST_CASE_7_MAX_TIME:-3600000.0}" # strong shock, constant B
+CASE_2_MAX_TIME="${HELIOCUBED_TEST_CASE_2_MAX_TIME:-47600.0}" # radial pulse
+CASE_3_MAX_TIME="${HELIOCUBED_TEST_CASE_3_MAX_TIME:-47600.0}" # radial pulse, constant B
+CASE_4_MAX_TIME="${HELIOCUBED_TEST_CASE_4_MAX_TIME:-360000.0}" # non-radial pulse
+CASE_5_MAX_TIME="${HELIOCUBED_TEST_CASE_5_MAX_TIME:-36000.0}" # non-radial pulse, constant B
+CASE_6_MAX_TIME="${HELIOCUBED_TEST_CASE_6_MAX_TIME:-47600.0}" # strong spherical shock
+CASE_7_MAX_TIME="${HELIOCUBED_TEST_CASE_7_MAX_TIME:-7200.0}" # strong shock, constant B
 CASE_8_MAX_TIME="${HELIOCUBED_TEST_CASE_8_MAX_TIME:-${HELIOCUBED_TEST_BLAST_MAX_TIME:-5001.23}}" # hydro blast
 CASE_9_MAX_TIME="${HELIOCUBED_TEST_CASE_9_MAX_TIME:-${HELIOCUBED_TEST_BLAST_MAX_TIME:-5001.23}}" # MHD blast
 BLAST_MAX_ITER="${HELIOCUBED_TEST_MAX_ITER:-10000}"

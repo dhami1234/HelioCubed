@@ -19,6 +19,9 @@
 -CFL                             0.5
 -limiter                         1
 -spatial_operator                1
+# Standard operator: 1 = Rusanov (default), 2 = Roe 8-wave.
+-Riemann_solver_type             2
+-entropy_fix_coeff               0.3
 -Berta_eta_d                     0.02
 -Berta_detector_type             0
 -Berta_fallback_type             0
