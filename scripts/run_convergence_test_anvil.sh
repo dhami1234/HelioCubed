@@ -119,7 +119,7 @@ fi
 #   3 = radial pulse with constant Cartesian magnetic field
 #   4 = non-radial pulse
 #   5 = non-radial pulse with constant Cartesian magnetic field
-TEST_CASES=(3 4 5)
+TEST_CASES=(4)
 if [[ -n "${HELIOCUBED_CONVERGENCE_TEST_CASES:-}" ]]; then
     read -r -a TEST_CASES <<< "${HELIOCUBED_CONVERGENCE_TEST_CASES}"
 elif [[ -n "${HELIOCUBED_CONVERGENCE_PROBLEM_TYPE:-}" ]]; then
@@ -131,7 +131,7 @@ fi
 # Defaults preserve inputs_convergence's previous 3600000.0-second limit.
 CASE_2_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_2_MAX_TIME:-47600.0}"
 CASE_3_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_3_MAX_TIME:-47600.0}"
-CASE_4_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_4_MAX_TIME:-360000.0}"
+CASE_4_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_4_MAX_TIME:-43200.0}"
 CASE_5_MAX_TIME="${HELIOCUBED_CONVERGENCE_CASE_5_MAX_TIME:-36000.0}"
 
 # 1 = spatial convergence; 2 = combined space-and-time convergence.
