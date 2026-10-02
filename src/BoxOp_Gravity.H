@@ -2,7 +2,7 @@
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
@@ -48,7 +48,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity_Euler(

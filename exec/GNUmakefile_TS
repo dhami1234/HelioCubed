@@ -34,7 +34,7 @@ CXXOPTFLAGS+=-DmemoryFootPrint
 #CXXOPTFLAGS+=-DPR_AMR
 CXXOPTFLAGS+= -DPR_DISABLE_INIT_CHECKS
 CXXOPTFLAGS+=-DPR_MMB
-CXXOPTFLAGS+=-DPR_OPS
+CXXOPTFLAGS+=-DPR_LAPACK
 CXXOPTFLAGS+=-DPR_CFD
 CXXOPTFLAGS+=-DPR_LAPACK
 CXXOPTFLAGS+= -DPR_HDF5=TRUE
@@ -61,7 +61,7 @@ DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
 VPATH=o. ../src  $(PROTO)/examples/_common
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/ops -I$(PROTO)/include/utils -I$(PROTO)/include/tests -I$(PROTO)/include/lapack -I. -I../src -I$(PROTO)/examples/_common
+CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/include/tests -I$(PROTO)/include/lapack -I. -I../src -I$(PROTO)/examples/_common
 CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20
 
 ifdef HDF5_LIB

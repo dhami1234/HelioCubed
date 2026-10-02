@@ -50,7 +50,7 @@ PROTO_KERNEL_END(f_radialoutflowIBCs_F, f_radialoutflowIBCs)
 // Radial boundary conditions here.
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::
@@ -321,7 +321,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
 /// Exchange, block boundary conditions, transform from JU to USph. Set state variables in boundary registers.
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::

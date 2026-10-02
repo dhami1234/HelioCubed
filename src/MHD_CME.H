@@ -340,7 +340,7 @@ PROTO_KERNEL_END(define_CMEF, define_CME)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::

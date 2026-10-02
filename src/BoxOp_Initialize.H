@@ -46,7 +46,7 @@ PROTO_KERNEL_END(f_radialoutflowInit_F, f_radialoutflowInit)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::
 initialize(State& a_W,

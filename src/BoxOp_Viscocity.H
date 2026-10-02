@@ -1,4 +1,4 @@
-template<typename T, template<MemType> typename MAP, MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
     const State& a_W, uint a_dir) const
 {
@@ -19,7 +19,7 @@ inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::
@@ -212,7 +212,7 @@ viscFlux(
 }
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::
@@ -268,7 +268,7 @@ primToMappedViscFlux(
 }
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
@@ -356,7 +356,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
 }
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::

@@ -18,7 +18,7 @@
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
@@ -77,7 +77,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
@@ -229,7 +229,7 @@ PROTO_KERNEL_END(f_berta_dilate_thetaF, f_berta_dilate_theta)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaJameson(
@@ -398,7 +398,7 @@ PROTO_KERNEL_END(f_berta_derivative_ratio_theta_rawF, f_berta_derivative_ratio_t
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaDerivativeRatio(
@@ -511,7 +511,7 @@ PROTO_KERNEL_END(f_berta_avg_to_point_thetaF, f_berta_avg_to_point_theta)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaAverageToPoint(
@@ -817,7 +817,7 @@ PROTO_KERNEL_END(f_select_reconstructionF, f_select_reconstruction)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaReconstructWithFallback(
@@ -964,7 +964,7 @@ PROTO_KERNEL_END(f_flux_point_to_avg_thetaF, f_flux_point_to_avg_theta)
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToFluxAverage(
@@ -1029,7 +1029,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToFluxAverage(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedFlux(
@@ -1156,7 +1156,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedFlux(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
@@ -1392,7 +1392,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator

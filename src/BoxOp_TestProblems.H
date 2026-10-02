@@ -244,7 +244,7 @@ PROTO_KERNEL_END(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblemBackgroundB(
@@ -267,7 +267,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::addTestProblemBackgroundB(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::testProblemDeltaMagneticEnergy(

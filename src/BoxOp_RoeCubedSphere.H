@@ -2,7 +2,7 @@
 
 #include "MHD_Roe8Wave.H"
 
-template<typename T, template<MemType> typename MAP, MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::repairRoeFaceStates(
     State& a_WFace_L, State& a_WFace_R,
     const State& a_WFaceBar, const State& a_WBar, uint a_dir) const
@@ -26,7 +26,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::repairRoeFaceStates(
     },a_WFace_L,a_WFace_R,pointLeft,pointRight,donorLeft,a_WBar,correction);
 }
 
-template<typename T, template<MemType> typename MAP, MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
     State& a_fluxdir,
     const State& a_WFace_L,

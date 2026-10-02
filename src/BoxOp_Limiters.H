@@ -240,7 +240,7 @@ PROTO_KERNEL_END(compare_calcF, compare_calc)
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave_L_lim_flat,
@@ -388,7 +388,7 @@ PROTO_KERNEL_END(minmod_calcF, minmod_calc)
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_minmod

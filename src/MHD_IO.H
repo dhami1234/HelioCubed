@@ -181,7 +181,7 @@ std::string getPhysTime_date(double a_time)
 }
 
 template<
-  template<MemType> typename MAP,
+  typename MAP,
   typename T, unsigned int C, MemType MEM, Centering CTR
 >
 void writeTecplotSlice_plane(
@@ -722,7 +722,7 @@ void writeTecplotSlice_plane(
 // Usage:
 // writeTecplotSlice_spherical(map, data, varNames, "r1.50.dat", time, /*radius=*/1.50);
 template<
-  template<MemType> typename MAP,
+  typename MAP,
   typename T, unsigned int C, MemType MEM, Centering CTR
 >
 void writeTecplotSlice_spherical(
@@ -999,7 +999,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   h5.setTime(time);
 	h5.setTimestep(dt);
   h5.setIter(iter);
-  typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
+  typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell<HOST>, HOST> OP;
   auto layout = a_JU.layout();
   auto map = CubedSphereShell::Map(layout, OP::ghost());
   MBLevelBoxData<double, NUMCOMPS+2, HOST> Wout(layout, Point::Zeros());
@@ -1384,7 +1384,7 @@ double interpolate(vector<double> &xData, vector<double> &yData, double x, bool 
 
 template<typename BOX_OP>
 void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
-          const MBLevelMap<MBMap_CubedSphereShell, HOST>& a_map,
+          const MBLevelMap<MBMap_CubedSphereShell<HOST>, HOST>& a_map,
           BOX_OP &a_eulerOp,
           MBInterpOp &a_iop,
           int a_iter,
@@ -1563,7 +1563,7 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   Point index_n2(pt0_nearest, pt1_nearest, pt2_neigbor);
 
 
-  typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
+  typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell<HOST>, HOST> OP;
 
   MBLevelBoxData<double, NUMCOMPS, HOST> JUTemp(layout, OP::ghost());
   MBLevelBoxData<double, 1, HOST> dVolrLev(layout, OP::ghost() + Point::Basis(0, 2));

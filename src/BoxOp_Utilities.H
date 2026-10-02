@@ -1,6 +1,6 @@
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::radialMetrics(
@@ -58,7 +58,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::radialMetrics(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
@@ -186,7 +186,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
 }
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 BoxData<T,1,MEM> 
 BoxOp_EulerCubedSphere<T,MAP,MEM>::kineticEnergyW(
@@ -257,7 +257,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::kineticEnergyW(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 BoxData<T,1,MEM> 
 BoxOp_EulerCubedSphere<T,MAP,MEM>::magneticEnergyW(
@@ -327,7 +327,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::magneticEnergyW(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 BoxData<T,1,MEM> 
 BoxOp_EulerCubedSphere<T,MAP,MEM>::vdotbW(
@@ -408,7 +408,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::vdotbW(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
@@ -494,7 +494,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
 
 template<
   typename T,
-  template<MemType> typename MAP,
+  typename MAP,
   MemType MEM>
 void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
@@ -576,7 +576,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
@@ -674,7 +674,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(

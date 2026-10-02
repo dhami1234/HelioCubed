@@ -14,7 +14,7 @@ CXXOPTFLAGS=-O3
 CXXOPTFLAGS+=-DmemoryFootPrint
 #CXXOPTFLAGS+=-DPR_AMR
 CXXOPTFLAGS+=-DPR_MMB
-CXXOPTFLAGS+=-DPR_OPS
+CXXOPTFLAGS+=-DPR_LAPACK
 CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+=-DPR_CFD
 #HDF5_LIB=/usr/local/lib
@@ -39,7 +39,17 @@ DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
 VPATH=o. ../src  ../../_common
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/ops -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I../../_common
+CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I../../_common
+# Preserve the cubedSphereDev shell configuration explicitly.
+CUBED_SPHERE_SHELL_R0 ?= 0.1
+CUBED_SPHERE_SHELL_R1 ?= 2.0
+CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0
+CUBED_SPHERE_RADIAL_STRETCH ?= 1.5
+CXXOPTFLAGS += -DCUBED_SPHERE_SHELL_R0=$(CUBED_SPHERE_SHELL_R0)
+CXXOPTFLAGS += -DCUBED_SPHERE_SHELL_R1=$(CUBED_SPHERE_SHELL_R1)
+CXXOPTFLAGS += -DCUBED_SPHERE_SHELL_RADIAL_COORD=$(CUBED_SPHERE_SHELL_RADIAL_COORD)
+CXXOPTFLAGS += -DCUBED_SPHERE_RADIAL_STRETCH=$(CUBED_SPHERE_RADIAL_STRETCH)
+
 CXXFLAGS:= $(CXXOPTFLAGS) --std=c++2a
 
 LIBS += $(LAPACK_LIB)

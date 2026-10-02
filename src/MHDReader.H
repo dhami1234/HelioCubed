@@ -139,7 +139,7 @@ public:
 
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
-							const MBLevelMap<MBMap_CubedSphereShell, MEM> &a_map,
+							const MBLevelMap<MBMap_CubedSphereShell<MEM>, MEM> &a_map,
 							T a_time)
 	{
 		PR_TIMERS("MHDReader::BoxData_to_BC");

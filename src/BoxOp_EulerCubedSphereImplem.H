@@ -3,7 +3,7 @@
 // ====================================================================================
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
@@ -319,7 +319,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
 // primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
@@ -392,7 +392,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRusanovFlux(
@@ -567,7 +567,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRusanovFlux(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::
 primToFlux(
@@ -627,7 +627,7 @@ primToFlux(
 // ====================================================================================
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline bool BoxOp_EulerCubedSphere<T,MAP,MEM>::validConservedState(
     const MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU)
@@ -647,7 +647,7 @@ inline bool BoxOp_EulerCubedSphere<T,MAP,MEM>::validConservedState(
   return invalid.fetch() == 0.0;
 }
 
-template<typename T, template<MemType> typename MAP, MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline T BoxOp_EulerCubedSphere<T,MAP,MEM>::
 dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
       MBInterpOp& a_iop,
@@ -737,7 +737,7 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
 }
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::
@@ -793,7 +793,7 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
 }
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::
@@ -952,7 +952,7 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::

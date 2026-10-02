@@ -1,6 +1,6 @@
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell1(
@@ -38,7 +38,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell1(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell2(
@@ -74,7 +74,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell2(
 
 template<
     typename T,
-    template<MemType> typename MAP,
+    typename MAP,
     MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(

@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
     }
   for (int lev=0; lev<levmax; lev++)
     {
-      typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell, HOST> OP;
+      typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell<HOST>, HOST> OP;
       
       Array<Array<uint, DIM>, 6> permute = {{2, 1, 0}, {2, 1, 0}, {1, 0, 2}, {0, 1, 2}, {1, 0, 2}, {0, 1, 2}};
       Array<Array<int, DIM>, 6> sign = {{-1, 1, 1}, {1, 1, -1}, {-1, 1, 1}, {1, 1, 1}, {1, -1, 1}, {-1, -1, 1}}; 
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
       if (init_condition_type == 0) BC_global.BoxData_to_BC(dstData, map, time);
 
       MBInterpOp iop;
-      iop = CubedSphereShell::InterpOp<HOST>(JU.layout(),OP::ghost() ,4);
+      iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(),OP::ghost() ,4);
 
       // Set input solution.
       for (auto dit : layout)
@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
 
       OP::Insert_CME(JU,dVolrLev,iop,layout,time,dt,gamma);
 
-      MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell, double> rk4(map, iop);
+      MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell<HOST>, double> rk4(map, iop);
       // OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
       Write_W(JU, eulerOp, iop, restart_step, time, dt, true, true);            
       {
