@@ -44,7 +44,10 @@ run_anvil_case() {
     export MV2_HOMOGENEOUS_CLUSTER=1
     export OMP_NUM_THREADS=1
     export OMP_PLACES=cores
-    export OMP_PROC_BIND=close
+    # OpenBLAS initializes OpenMP even for a single thread. Binding it to the
+    # first place pins every MPI rank to CPU 0 when MPI affinity is disabled.
+    # Let MPI/Slurm or the OS place ranks on the allocated cores.
+    export OMP_PROC_BIND=false
 
     # ---------------------------------------------------------------------------
     # Shared-library paths.
@@ -93,7 +96,7 @@ run_anvil_case() {
     echo "MPI ranks:         ${HELIOCUBED_CONVERGENCE_NPROCS_BY_LEVEL}"
     echo "Results root:      ${results_root}"
 
-    bash "${project_dir}/scripts/run_convergence_test.sh"
+    bash "${HELIOCUBED_CONVERGENCE_DRIVER:-${project_dir}/scripts/run_convergence_test.sh}"
     echo "Convergence job completed successfully. Results: ${results_root}"
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Proto_accel.H"
+#include "Proto_Accel.H"
 #include <cmath>
 
 namespace MHD_Reconstruction
