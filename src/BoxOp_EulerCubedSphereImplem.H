@@ -804,7 +804,12 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
   Box bx= this->box();  
   T dxiR = this->dx()[0];
   T dxiPerp = this->dx()[1];
-  T viscspeed = 0.;
+  // Match the switches used by preStageLevel() and viscFlux().
+  const bool linearViscosityEnabled = (ParseInputs::get_linear_viscosity() == 1);
+  const bool nonlinearViscosityEnabled = (ParseInputs::get_nonlinear_viscosity() == 1);
+  const bool viscosityEnabled = linearViscosityEnabled || nonlinearViscosityEnabled;
+  const bool scaleViscosityWithR =
+    (ParseInputs::get_scale_viscosity_with_r() == 1);
   int block = this->block();
   Box bxRadius = bx;
   BoxData<T,DIM,MEM> Dr(bxRadius);
@@ -817,10 +822,6 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
   T half = .5;
   BoxData<T,1,MEM> visccoef(bx.grow(2));
   visccoef.setToZero();
-  BoxData<T,1,MEM> nlvisccoefout(bx.grow(2));
-  nlvisccoefout.setToZero();
-  BoxData<T,1,MEM> linvisccoefout(bx.grow(2));
-  linvisccoefout.setToZero();
   for (int dir = 0 ; dir < DIM; dir++)
     {
       Box bxface = bx;
@@ -842,30 +843,16 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
       forallInPlace_p(f_Amatrix,bx0,A_matrix,permute[block],sign[block],
                       dxiPerp,offseta,offsetb);
       spreadSlice(A_matrix);
-      //speedMax.setVal(0.);
       forallInPlace(f_speedmax,
                     speedMax,a_W,A_matrix,
                     ntrow,adjDrDir,deta,
                     dVolr,Dr,dxiPerp,
                     dxiR,dir,m_gamma);
 
-      auto domainBox = this->layout().domain().getBlock(block).box();
-      auto dxi = this->dx();
-      // Transform to primitive variables, spherical velocities.
-      Box bx = this->box();
-      // Compute Fluxes, rhs.  
-      Box outputbox = bx;
-      T one = 1.0;
-      T half = 0.5;
-      T dxiPerp = this->dx()[1];
-      bool viscl = true;
-      bool viscnl = true;
+      if (!viscosityEnabled) continue;
 
-      // high order linear viscosity.
+      auto dxi = this->dx();
       State WFace = viscosityFaceState(a_W,dir);
-      // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
-      BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,block,dir);
-      Box bxdir = bx.extrude(Point::Basis(dir));
       T D_rScale;
       double r0 = CUBED_SPHERE_SHELL_R0;
       double r1 = CUBED_SPHERE_SHELL_R1;
@@ -881,68 +868,50 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
         }
       
       BoxData<T,1,MEM> dx(bxface);
-      dx.setVal(D_rScale);
       forallInPlace(f_dx,dx,ntrow,adjDrDir,deta,
                     dVolr,Dr,dxiPerp,dxiR,dir);
+      if (linearViscosityEnabled)
         {
           BoxData<T,1,MEM> linvisccoef(bxface);
           linvisccoef.setToZero();
           LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
-          if (dir == 0)
+          if (scaleViscosityWithR && dir == 0)
             {
               auto Drslice = slice(Dr,0);
               linvisccoef *= Drslice;
               linvisccoef /= D_rScale;
-              linvisccoef /= dx;
-              linvisccoef.copyTo(visccoef);
             }
-          else
+          else if (scaleViscosityWithR)
             {
               linvisccoef *= radius;
-              linvisccoef /= r0;
-              linvisccoef /= dx;
-              visccoef += linvisccoef;
+              linvisccoef /= D_rScale;
             }
-          
-          //cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", min lin dt = " << 1./linvisccoef.absMax() << endl;
-          if (dir == 0)
-            {
-              // cout << ", maxratio = "<< Dr.absMax()/D_rScale << endl;
-            }
-          else
-            {
-              //cout << ", maxratio = "<< radius.absMax()/D_rScale << endl;
-            }
+          // Convert the scaled damping coefficient to an inverse timescale.
+          linvisccoef /= dx;
+          visccoef += linvisccoef;
         }
-      
+      if (nonlinearViscosityEnabled)
         {
           BoxData<T,1,MEM> nlvisccoef(bxface);
           nlvisccoef.setToZero();
           NonLinearViscCoef(nlvisccoef,WFace,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
-          if (dir == 0)
+          if (scaleViscosityWithR && dir == 0)
             {
               auto Drslice = slice(Dr,0);
               nlvisccoef *= Drslice;
-              nlvisccoef /= dx;
               nlvisccoef /= D_rScale;
-              visccoef += nlvisccoef;
             }
-          else
+          else if (scaleViscosityWithR)
             {
               nlvisccoef *= radius;
-              nlvisccoef /= r0;
-              nlvisccoef /= dx;
-              visccoef += nlvisccoef;
+              nlvisccoef /= D_rScale;
             }
-          //cout << "block = " << block << ", box = " << bxface << ", dir = " << dir << ", min nl dt = " << 1./nlvisccoef.absMax() << endl;
+          nlvisccoef /= dx;
+          visccoef += nlvisccoef;
         }      
     }
   speedMax.reduce(a_dtInv);
-  visccoef.reduce(a_dtInv);
-  // if (speedMax.absMax() < visccoef.absMax())
-  //   {
-  //     cout << "block = " << block << ", box = " << bx << ", hyperbolic speedmax = " << speedMax.absMax() << ", viscous speedmax = " << visccoef.absMax() << endl;
-  //   }
+  if (viscosityEnabled) visccoef.reduce(a_dtInv);
 }
 
 // ====================================================================================

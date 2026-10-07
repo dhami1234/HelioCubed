@@ -114,9 +114,10 @@ void f_dx_F
     T adjA_mag = sqrt(a_adjA(0)*a_adjA(0) + a_adjA(1)*a_adjA(1) + a_adjA(2)*a_adjA(2));
     dx_d = a_dVolr(0) * a_detA(0) * a_dxiPerp / a_adjDrDir(0) / adjA_mag;
   } 
-  if (a_d == 0){
+  else{
     dx_d = a_Dr(0) * a_dxiR;
-  }   
+  }
+  a_dx(0) = dx_d;
 }
 PROTO_KERNEL_END(f_dx_F, f_dx);
 template<typename T,MemType MEM>

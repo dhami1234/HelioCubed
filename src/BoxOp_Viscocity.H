@@ -52,8 +52,8 @@ viscFlux(
   T one = 1.0;
   T half = 0.5;
   T dxiPerp = this->dx()[1];
-  bool viscl = true;
-  bool viscnl = true;
+  const bool linearViscosityEnabled = (ParseInputs::get_linear_viscosity() == 1);
+  const bool nonlinearViscosityEnabled = (ParseInputs::get_nonlinear_viscosity() == 1);
 
   for (int dir = 0; dir < DIM; dir++)
     {
@@ -112,7 +112,7 @@ viscFlux(
         {
           D_rScale = r0;
         }
-      if (viscl)
+      if (linearViscosityEnabled)
         {
           State fluxtemp(bxface);
           fluxtemp.setToZero();
@@ -152,7 +152,7 @@ viscFlux(
               fluxcomp += fluxtempcomp;
             }
         }
-      if (viscnl) 
+      if (nonlinearViscosityEnabled)
         {
           State fluxtemp(bxface);
           fluxtemp.setToZero();

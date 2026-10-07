@@ -33,7 +33,9 @@
 -gamma                           1.5
 -temporal_order                  4
 -divergence_cleaning             1
+# Independent artificial-viscosity switches: 0 = off, 1 = on.
 -linear_viscosity                1
+-nonlinear_viscosity             1
 -scale_viscosity_with_r          1
 -boundary_reflux                 1
 -radial_refinement               0
