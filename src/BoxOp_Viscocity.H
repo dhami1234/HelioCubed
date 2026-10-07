@@ -100,13 +100,14 @@ viscFlux(
         (ParseInputs::get_scale_viscosity_with_r() == 1);
 
       T D_rScale;
-      double r0 = CUBED_SPHERE_SHELL_R0;
-      double r1 = CUBED_SPHERE_SHELL_R1;
-      double C_rad = CUBED_SPHERE_RADIAL_STRETCH;
-      T R_t = (r1 - r0) / (exp(C_rad) - 1.0);
+      double r0 = ParseInputs::get_inner_radius();
+      double r1 = ParseInputs::get_outer_radius();
+      double C_rad = ParseInputs::get_radial_stretch();
+      T R_t = C_rad == 0.0 ? (r1 - r0) : (r1 - r0) / std::expm1(C_rad);
       if (dir == 0)
         {
-          D_rScale = R_t*(exp(C_rad*dxi[dir]) - 1.0)/dxi[dir];
+          D_rScale = C_rad == 0.0 ? (r1 - r0)
+            : R_t*std::expm1(C_rad*dxi[dir])/dxi[dir];
         }
       else
         {

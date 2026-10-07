@@ -9,13 +9,13 @@ void f_radialoutflowInit_F(
     Var<T, DIM> &a_X_cart,
     T a_gamma,
     int a_nradius,
-    T a_strength)
+    T a_strength,
+    double r_BC)
 {
   T r = sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1) + a_X_cart(2) * a_X_cart(2));
   T theta = atan2(sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1)), a_X_cart(2)); // polar angle
   T phi = atan2(a_X_cart(1), a_X_cart(0)); // azimuthal angle
   // Compute spherical initial data.
-  double r_BC = CUBED_SPHERE_SHELL_R0; //in cm
   T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
   T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
   T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
@@ -60,6 +60,8 @@ initialize(State& a_W,
 {
   PR_TIME("BoxOp_EulerCubedSphere::initialize()");
   int init_condition_type = ParseInputs::get_init_condition_type();
+  double innerRadius = ParseInputs::get_inner_radius();
+  double outerRadius = ParseInputs::get_outer_radius();
 
   // Calculate A_matrix_inv
   BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(a_W.box(),a_h,a_block,0);
@@ -104,7 +106,9 @@ initialize(State& a_W,
         f_nonRadialSphericalWaveInit,
         a_W,
         a_Xcart,
-        a_gamma);
+        a_gamma,
+        innerRadius,
+        outerRadius);
     if (isConstantMagneticFieldTest(init_condition_type))
     {
       forallInPlace_p(
@@ -118,7 +122,8 @@ initialize(State& a_W,
   }
   if (init_condition_type == 8 || init_condition_type == 9)
   {
-    forallInPlace_p(f_nonRadialBlastInit, a_W, a_Xcart);
+    forallInPlace_p(f_nonRadialBlastInit, a_W, a_Xcart,
+                   innerRadius, outerRadius);
     if (isConstantMagneticFieldTest(init_condition_type))
     {
       forallInPlace_p(
@@ -139,7 +144,8 @@ initialize(State& a_W,
         a_Xcart,
         a_gamma,
         a_nradius,
-        strength);
+        strength,
+        innerRadius);
   }
 
   if (init_condition_type == 0) {
@@ -195,9 +201,9 @@ initialize(State& a_W,
     forallInPlace([ ] PROTO_LAMBDA
     (Var<double, NUMCOMPS, HOST> &a_WSph,
     Var<double> &a_radius,
-    double a_gamma)
+    double a_gamma,
+    double r_BC)
     {  
-      double r_BC = CUBED_SPHERE_SHELL_R0; //in cm
       double rad = a_radius(0);
       double rho = a_WSph(0)*c_MP*pow(r_BC/rad,2.0);
       double u = a_WSph(1);
@@ -215,7 +221,7 @@ initialize(State& a_W,
       a_WSph(5) = Bx; //Bx
       a_WSph(6) = By; //By
       a_WSph(7) = Bz; //Bz
-    },a_W,a_radius,a_gamma);
+    },a_W,a_radius,a_gamma,innerRadius);
   }
 
   if (init_condition_type == 6 || init_condition_type == 7)

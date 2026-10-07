@@ -12,7 +12,18 @@ int main(int argc, char *argv[])
   #ifdef PR_MPI
     MPI_Init(&argc, &argv);
   #endif
-  ParseInputs::getInstance().parsenow(argc, argv);
+  try
+  {
+    ParseInputs::getInstance().parsenow(argc, argv);
+  }
+  catch (const std::exception& error)
+  {
+    pout(0) << "Error: " << error.what() << endl;
+#ifdef PR_MPI
+    MPI_Finalize();
+#endif
+    return 1;
+  }
   const int riemannSolver = ParseInputs::get_Riemann_solver_type();
   const double entropyFix = ParseInputs::get_entropy_fix_coeff();
   if ((riemannSolver != 1 && riemannSolver != 2)

@@ -7,7 +7,7 @@ USE_HDF5=TRUE
 PROTO ?= ../../proto
 COMMON ?= $(PROTO)/examples/_common
 
-# Cubed-sphere shell defaults; override on make command line if needed.
+# Shell defaults; inputs-file inner_radius/outer_radius/radial_stretch override at runtime.
 CUBED_SPHERE_SHELL_R0 ?= 1496400000000.0
 CUBED_SPHERE_SHELL_R1 ?= 16112400000000.0
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0

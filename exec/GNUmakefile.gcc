@@ -40,7 +40,7 @@ VPATH=o. ../src  ../../_common
 
 
 CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I../../_common
-# Preserve the cubedSphereDev shell configuration explicitly.
+# Shell defaults; inputs-file inner_radius/outer_radius/radial_stretch override at runtime.
 CUBED_SPHERE_SHELL_R0 ?= 0.1
 CUBED_SPHERE_SHELL_R1 ?= 2.0
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0

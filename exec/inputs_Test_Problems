@@ -1,3 +1,8 @@
+# Optional runtime shell geometry (radii in cm; stretch is dimensionless).
+# Omit these to use the Makefile defaults. radial_stretch = 0 is uniform.
+#-inner_radius                   1.4964e12
+#-outer_radius                   1.61124e13
+#-radial_stretch                 1.5
 ## Idealized test problems selected by init_condition_type:
 ##   2 = radial pulse
 ##   3 = radial pulse with B_cart set by c_RADIAL_PULSE_BX0

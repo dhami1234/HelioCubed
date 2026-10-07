@@ -7,6 +7,8 @@
 #include <iomanip>   // For std::setw, etc.
 #include <vector>
 #include <sstream>
+#include <cmath>
+#include <stdexcept>
 #include "MHD_pout.H"
 #include "MHD_Constants.H"
 
@@ -48,6 +50,11 @@ private:
     int init_condition_type = 0;
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction
+    // Empty strings retain the Makefile defaults. Parse overrides with stod
+    // because InputArgs converts double inputs through single precision.
+    string inner_radius;
+    string outer_radius;
+    string radial_stretch;
     int boxSize_nonrad; // Size of the box for domain decomposition
     int boxSize_rad; // Size of the box for domain decomposition
     int max_iter; 
@@ -148,6 +155,9 @@ public:
     static int get_init_condition_type() {return getInstance().init_condition_type;}
     static int get_domainSize() {return getInstance().domainSize;}
     static int get_thickness() {return getInstance().thickness;}
+    static double get_inner_radius() {return cubedSphereShellGeometry().r0;}
+    static double get_outer_radius() {return cubedSphereShellGeometry().r1;}
+    static double get_radial_stretch() {return cubedSphereShellGeometry().radialStretch;}
     static int get_boxSize_nonrad() {return getInstance().boxSize_nonrad;}
     static int get_boxSize_rad() {return getInstance().boxSize_rad;}
     static int get_max_iter() {return getInstance().max_iter;}
@@ -223,6 +233,9 @@ public:
         args.add("init_condition_type", init_condition_type);
         args.add("domainSize", domainSize);
         args.add("thickness", thickness);
+        args.add("inner_radius", inner_radius);
+        args.add("outer_radius", outer_radius);
+        args.add("radial_stretch", radial_stretch);
         args.add("boxSize_nonrad", boxSize_nonrad);
         args.add("boxSize_rad", boxSize_rad);
         args.add("max_iter", max_iter);
@@ -293,6 +306,38 @@ public:
         args.add("CME_a1", CME_a1);
         args.add("CME_shift", CME_shift);
         args.parse(argc, argv);
+        auto geometry = cubedSphereShellGeometry();
+        auto parseGeometryValue = [](const string& raw, const char* name,
+                                     double defaultValue) {
+            if (raw.empty()) return defaultValue;
+            try {
+                size_t end = 0;
+                double value = std::stod(raw, &end);
+                size_t tail = raw.find_first_not_of(" \t\r\n", end);
+                if (tail != string::npos && raw[tail] != '#') {
+                    throw std::invalid_argument("trailing characters");
+                }
+                return value;
+            } catch (const std::exception&) {
+                throw std::invalid_argument(string(name) + " must be a number.");
+            }
+        };
+        geometry.r0 = parseGeometryValue(inner_radius, "inner_radius", geometry.r0);
+        geometry.r1 = parseGeometryValue(outer_radius, "outer_radius", geometry.r1);
+        geometry.radialStretch = parseGeometryValue(
+            radial_stretch, "radial_stretch", geometry.radialStretch);
+        if (!std::isfinite(geometry.r0) || !std::isfinite(geometry.r1)
+            || geometry.r0 <= 0.0 || geometry.r1 <= geometry.r0) {
+            throw std::invalid_argument(
+                "Shell radii must be finite and satisfy 0 < inner_radius < outer_radius (cm).");
+        }
+        if (!std::isfinite(geometry.radialStretch)
+            || !std::isfinite(std::expm1(geometry.radialStretch))) {
+            throw std::invalid_argument("radial_stretch must be finite without exponential overflow.");
+        }
+        // Configure Proto before any maps, interpolation operators, or metrics
+        // are built, so every consumer uses the same runtime geometry.
+        cubedSphereShellGeometry() = geometry;
         parseSlices();
         // use only the first num_probes entries
         probe_filenames.resize((size_t)std::max(0, num_probes));
@@ -304,11 +349,11 @@ public:
         pout(0) << "Git hash: " << GIT_HASH << endl; 
         pout(0) << "Commit message: " << GIT_MESSAGE << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
-        pout(0) << "Running with the following Cubed Sphere inputs (these can be changed in Makefile at compile time)" << endl;
+        pout(0) << "Running with the following Cubed Sphere inputs (inputs file overrides Makefile defaults)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
-        pout(0) << "Inner Radius: " << CUBED_SPHERE_SHELL_R0/c_SR << " SR" << endl;
-        pout(0) << "Outer Radius: " << CUBED_SPHERE_SHELL_R1/c_SR << " SR" << endl;
-        pout(0) << "Radial Grid Stretching Parameter (C): " << CUBED_SPHERE_RADIAL_STRETCH << endl;
+        pout(0) << "Inner Radius: " << get_inner_radius()/c_SR << " SR" << endl;
+        pout(0) << "Outer Radius: " << get_outer_radius()/c_SR << " SR" << endl;
+        pout(0) << "Radial Grid Stretching Parameter (C): " << get_radial_stretch() << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
         pout(0) << "Running with the following inputs (these can be changed in the inputs file)" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;

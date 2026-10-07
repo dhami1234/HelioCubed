@@ -12,9 +12,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::radialMetrics(
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::radialMetrics()");
   int r_dir = CUBED_SPHERE_SHELL_RADIAL_COORD;
-  double r0 = CUBED_SPHERE_SHELL_R0;
-  double r1 = CUBED_SPHERE_SHELL_R1;
-  double C_rad = CUBED_SPHERE_RADIAL_STRETCH;
+  double r0 = ParseInputs::get_inner_radius();
+  double r1 = ParseInputs::get_outer_radius();
+  double C_rad = ParseInputs::get_radial_stretch();
   T dxi0 = this->dx()[r_dir];
   double dr = (r1-r0)*dxi0;
   forallInPlace_p([]PROTO_LAMBDA(Point a_pt,
@@ -33,13 +33,17 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::radialMetrics(
                     // T rlow = a_rad(0);
                     // T rhigh = a_rad(0)+a_dr;
 
-                    T R_t = (a_r1 - a_r0) / (exp(a_C_rad) - 1.0);
+                    T R_t = a_C_rad == 0.0 ? (a_r1 - a_r0)
+                      : (a_r1 - a_r0) / std::expm1(a_C_rad);
                     T etalow = a_pt[a_rdir]*a_dxi0;
-                    T rlow = a_r0 + R_t * (exp(a_C_rad * etalow) - 1.0);
+                    T rlow = a_r0 + R_t * (a_C_rad == 0.0 ? etalow
+                      : std::expm1(a_C_rad * etalow));
                     T etahigh = (a_pt[a_rdir] + 1.0)*a_dxi0;
-                    T rhigh = a_r0 + R_t * (exp(a_C_rad * etahigh) - 1.0);
+                    T rhigh = a_r0 + R_t * (a_C_rad == 0.0 ? etahigh
+                      : std::expm1(a_C_rad * etahigh));
                     T eta_half = (etalow + etahigh) / 2.0;
-                    T rhalf = a_r0 + R_t * (exp(a_C_rad * eta_half) - 1.0);
+                    T rhalf = a_r0 + R_t * (a_C_rad == 0.0 ? eta_half
+                      : std::expm1(a_C_rad * eta_half));
 
                     // a_rad(0) = rlow;
                     // a_rad(0) = (rlow+rhigh)/2.0;

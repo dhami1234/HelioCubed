@@ -12,13 +12,13 @@ void f_radialoutflowIBCs_F(
     T a_gamma,
     int a_nradius,
     T a_time,
-    T a_strength)
+    T a_strength,
+    double r_BC)
 {
   T r = sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1) + a_X_cart(2) * a_X_cart(2));
   T theta = atan2(sqrt(a_X_cart(0) * a_X_cart(0) + a_X_cart(1) * a_X_cart(1)), a_X_cart(2)); // polar angle
   T phi = atan2(a_X_cart(1), a_X_cart(0)); // azimuthal angle
   // Compute spherical BCs.
-  double r_BC = CUBED_SPHERE_SHELL_R0; //in cm
   T p0 = 1.0e-7; // p near 21.5 c_SR is about 1e-7 dyne/cm2
   T rho0 = 700*c_MP; // rho at 21.5 c_SR is about 700/cm3
   T u0 = 500.0*1e5; // v at 21.5 c_SR is about 500 km/s
@@ -78,6 +78,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   int thickness = std::round(1.0 / dxradius);
   // Set radial boundary condtions in radial ghost cells.
   int init_condition_type = ParseInputs::get_init_condition_type();
+  double innerRadius = ParseInputs::get_inner_radius();
   Point low = bxGhosted.low();
   low[0] = a_blockBox.high()[0] + 1;
   Box bdryBoxHigh(low, bxGhosted.high());
@@ -202,7 +203,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
           m_gamma,
           thickness,
           a_time,
-          strength);
+          strength,
+          innerRadius);
     }
     if (init_condition_type == 0){
       Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
@@ -271,9 +273,9 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
        Var<T, DIM, MEM> &a_V_cart,
        Var<T, DIM, MEM> &a_B_cart,
        Var<T> &a_radius,
-       T a_gamma)
+       T a_gamma,
+       double r_BC)
       {  
-        double r_BC = CUBED_SPHERE_SHELL_R0; //in cm
         double rad = a_radius(0);
         double rho = a_USph(0)*1.67262192e-24*pow(r_BC/rad,2.0);
         double u = a_USph(1);
@@ -297,7 +299,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
         a_USph(5) = Bx; //Bx
         a_USph(6) = By; //By
         a_USph(7) = Bz; //Bz
-      },bdryBoxLow,a_USphStage,V_cart,B_cart,radius,m_gamma);
+      },bdryBoxLow,a_USphStage,V_cart,B_cart,radius,m_gamma,
+        innerRadius);
     }
 
     if (isConstantMagneticFieldTest(init_condition_type))

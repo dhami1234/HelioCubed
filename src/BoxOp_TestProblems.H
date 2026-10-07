@@ -80,7 +80,9 @@ void f_nonRadialSphericalWaveInit_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_W,
     const Var<T, DIM, MEM>& a_Xcart,
-    T a_gamma)
+    T a_gamma,
+    double a_r0,
+    double a_r1)
 {
   const T p0 = c_TEST_P0;
   const T rho0 = c_TEST_RHO0;
@@ -89,12 +91,12 @@ void f_nonRadialSphericalWaveInit_F(
   // Put a compact spherical pulse halfway through the shell, in a direction
   // that is not aligned with a cubed-sphere coordinate axis.
   const T dirNorm = sqrt(0.9*0.9 + 0.4*0.4);
-  const T centerRadius = 0.5*(CUBED_SPHERE_SHELL_R0 + CUBED_SPHERE_SHELL_R1);
+  const T centerRadius = 0.5*(a_r0 + a_r1);
   const T center[DIM] = {
       -0.9*centerRadius/dirNorm,
       -0.4*centerRadius/dirNorm,
       0.0};
-  const T waveRadius = 0.2*(CUBED_SPHERE_SHELL_R1 - CUBED_SPHERE_SHELL_R0);
+  const T waveRadius = 0.2*(a_r1 - a_r0);
   T displacement[DIM];
   T distance2 = 0.0;
   for (int dir = 0; dir < DIM; ++dir)
@@ -130,18 +132,20 @@ PROTO_KERNEL_START
 void f_nonRadialBlastInit_F(
     Point a_pt,
     Var<T, NUMCOMPS, MEM>& a_W,
-    const Var<T, DIM, MEM>& a_Xcart)
+    const Var<T, DIM, MEM>& a_Xcart,
+    double a_r0,
+    double a_r1)
 {
   // Same center as the non-radial pulse, but a smaller, sharp pressure sphere.
   // FLASH: rho=1, p_out=0.1, p_in=1000, R=0.1, gamma=1.4.
   const T dirNorm = sqrt(0.9*0.9 + 0.4*0.4);
-  const T centerRadius = 0.5*(CUBED_SPHERE_SHELL_R0 + CUBED_SPHERE_SHELL_R1);
+  const T centerRadius = 0.5*(a_r0 + a_r1);
   const T center[DIM] = {
       -0.9*centerRadius/dirNorm,
       -0.4*centerRadius/dirNorm,
       0.0};
   const T blastRadius = c_BLAST_RADIUS_FRACTION*
-      (CUBED_SPHERE_SHELL_R1 - CUBED_SPHERE_SHELL_R0);
+      (a_r1 - a_r0);
   T distance2 = 0.0;
   for (int dir = 0; dir < DIM; ++dir)
   {
