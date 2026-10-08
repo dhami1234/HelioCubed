@@ -41,6 +41,8 @@
 # Independent artificial-viscosity switches: 0 = off, 1 = on.
 -linear_viscosity                1
 -nonlinear_viscosity             1
+# Linear viscosity order: 3 = third order, 5 = fifth order (default).
+-viscosity_order                 5
 -scale_viscosity_with_r          1
 -boundary_reflux                 1
 -radial_refinement               0

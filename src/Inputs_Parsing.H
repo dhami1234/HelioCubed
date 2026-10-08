@@ -101,6 +101,7 @@ private:
     int divergence_cleaning = 1; // 0: No divergence cleaning, 1: Divergence cleaning
     int linear_viscosity = 1; // 0: No linear viscosity, 1: Linear viscosity
     int nonlinear_viscosity = 1; // 0: No nonlinear viscosity, 1: Nonlinear viscosity
+    int viscosity_order = 5; // Linear viscosity order: 3 or 5
     int scale_viscosity_with_r = 1; // 0: historical scaling, 1: radius-scaled viscosity
     int boundary_reflux = 1; // 0: don't reflux at block boundaries, 1: reflux
     int radial_refinement = 0; // 0: refine in all directions by 2 for convergence studies;
@@ -192,6 +193,7 @@ public:
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
     static int get_linear_viscosity() {return getInstance().linear_viscosity;}
     static int get_nonlinear_viscosity() {return getInstance().nonlinear_viscosity;}
+    static int get_viscosity_order() {return getInstance().viscosity_order;}
     static int get_scale_viscosity_with_r() {return getInstance().scale_viscosity_with_r;}
     static int get_boundary_reflux() {return getInstance().boundary_reflux;}
     static int get_radial_refinement() {return getInstance().radial_refinement;}
@@ -267,6 +269,7 @@ public:
         args.add("divergence_cleaning", divergence_cleaning);
         args.add("linear_viscosity", linear_viscosity);
         args.add("nonlinear_viscosity", nonlinear_viscosity);
+        args.add("viscosity_order", viscosity_order);
         args.add("scale_viscosity_with_r", scale_viscosity_with_r);
         args.add("boundary_reflux", boundary_reflux);
         args.add("radial_refinement", radial_refinement);
@@ -306,6 +309,9 @@ public:
         args.add("CME_a1", CME_a1);
         args.add("CME_shift", CME_shift);
         args.parse(argc, argv);
+        if (viscosity_order != 3 && viscosity_order != 5) {
+            throw std::invalid_argument("viscosity_order must be 3 or 5.");
+        }
         auto geometry = cubedSphereShellGeometry();
         auto parseGeometryValue = [](const string& raw, const char* name,
                                      double defaultValue) {
@@ -394,6 +400,7 @@ public:
         pout(0) << "divergence_cleaning: " << divergence_cleaning << endl;
         pout(0) << "linear_viscosity: " << linear_viscosity << endl;
         pout(0) << "nonlinear_viscosity: " << nonlinear_viscosity << endl;
+        pout(0) << "viscosity_order: " << viscosity_order << endl;
         pout(0) << "scale_viscosity_with_r: " << scale_viscosity_with_r << endl;
         pout(0) << "boundary_reflux: " << boundary_reflux << endl;
         pout(0) << "radial_refinement: " << radial_refinement << endl;
