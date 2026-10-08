@@ -116,7 +116,7 @@ $(DEPDIR):
 #compile non-main sources
 $(OBJDIR)/%.o : %.cpp   $(OBJDIR) $(DEPDIR)
 	$(CXX) -c -o $@ $< $(CXXFLAGS) $(CPPFLAGS)
-	$(DEP) $<   $(CPPFLAGS) > $(DEPDIR)/$*.d
+	$(DEP) $< $(CPPFLAGS) -MT $@ > $(DEPDIR)/$*.d
 
 
 
