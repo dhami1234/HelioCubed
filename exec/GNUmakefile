@@ -28,6 +28,10 @@ GIT_MESSAGE := $(subst $(space),_,$(GIT_MESSAGE))
 LAPACK_LIB=-lblas -llapack
 #CXXOPTFLAGS=-g
 CXXOPTFLAGS=-O3 -g
+# Disable assertions in optimized builds to reduce iteration overhead.
+# Requires the HDF5 assertion fixes in both Proto and MHDReader.
+# For assertion-enabled debugging, remove -DNDEBUG and do a clean rebuild.
+CXXOPTFLAGS+= -DNDEBUG
 CXXOPTFLAGS+=-DmemoryFootPrint
 #CXXOPTFLAGS+=-DPR_AMR
 CXXOPTFLAGS+= -DPR_DISABLE_INIT_CHECKS

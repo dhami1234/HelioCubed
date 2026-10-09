@@ -2,11 +2,27 @@
 #include "Proto.H"
 #include "hdf5.h"
 #include "Inputs_Parsing.H"
+#include <cstdio>
+#include <cstdlib>
 
 using namespace Proto;
 
 class MHDReader
 {
+private:
+	// HDF5 operations must execute exactly once, even when NDEBUG is defined.
+	static inline void checkHDF5(bool a_success, const char* a_operation)
+	{
+		if (a_success) return;
+		std::fprintf(stderr, "MHDReader: HDF5 operation failed: %s\n", a_operation);
+		std::fflush(stderr);
+	#ifdef PR_MPI
+		// A root-only read failure must also stop ranks waiting for its data.
+		MPI_Abort(MPI_COMM_WORLD, 1);
+	#endif
+		std::abort();
+	}
+
 public:
 	inline MHDReader() {}
 
@@ -391,10 +407,10 @@ public:
 		if (parallel_open) {
 			// collective open on WORLD (call this ONLY when all ranks participate)
 			hid_t p_access = H5Pcreate(H5P_FILE_ACCESS);
-			assert(p_access >= 0);
-			assert(H5Pset_fapl_mpio(p_access, MPI_COMM_WORLD, MPI_INFO_NULL) >= 0);
+			checkHDF5(p_access >= 0, "H5Pcreate");
+			checkHDF5(H5Pset_fapl_mpio(p_access, MPI_COMM_WORLD, MPI_INFO_NULL) >= 0, "H5Pset_fapl_mpio");
 			*a_file = H5Fopen(a_filename.c_str(), H5F_ACC_RDONLY, p_access);
-			assert(H5Pclose(p_access) >= 0);
+			checkHDF5(H5Pclose(p_access) >= 0, "H5Pclose");
 		} else {
 			// serial open (safe to call on rank 0 only)
 			*a_file = H5Fopen(a_filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -434,8 +450,9 @@ public:
 		// READ DOMAIN SIZES
 		int domainSize[2];
 		auto att_domain = H5Aopen(*a_file, "domain", H5P_DEFAULT);
-		assert(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0);
-		assert(H5Aclose(att_domain) >= 0);
+		checkHDF5(att_domain >= 0, "H5Aopen");
+		checkHDF5(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0, "H5Aread");
+		checkHDF5(H5Aclose(att_domain) >= 0, "H5Aclose");
 
 		int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
 		int thetaCoord = (rCoord + 1) % 3;
@@ -458,7 +475,7 @@ public:
 		readFile(&file, a_filename, a_params...);
 		Box domainBox = _readDomain(&file);
 		barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 		return domainBox;
 	}
 
@@ -470,19 +487,20 @@ public:
 		hid_t H5T_T;
 		HDF5Handler::getH5DataType<T>(&H5T_T);
 		auto ds_data = H5Dopen2(*a_file, ("/data" + std::to_string(a_index)).c_str(), H5P_DEFAULT);
+		checkHDF5(ds_data >= 0, "H5Dopen2");
 		if (MEM == HOST)
 		{
-			assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data.data()) >= 0);
+			checkHDF5(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, a_data.data()) >= 0, "H5Dread");
 		}
 		else
 		{
 			int dataSize = a_data.size();
 			T *rawData = (T *)proto_malloc<HOST>(dataSize);
-			assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawData) >= 0);
+			checkHDF5(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, rawData) >= 0, "H5Dread");
 			proto_memcpy<HOST, MEM>(rawData, a_data.data(), dataSize);
 			proto_free<HOST>(rawData);
 		}
-		assert(H5Dclose(ds_data) >= 0);
+		checkHDF5(H5Dclose(ds_data) >= 0, "H5Dclose");
 	}
 
 	template <typename T, unsigned int C, MemType MEM, typename... Args>
@@ -497,7 +515,7 @@ public:
 		a_data.define(domainBox);
 		readDataset(&file, a_data, 0);
 		// barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 	}
 
 	template <typename T, unsigned int C, MemType MEM, typename... Args>
@@ -512,8 +530,9 @@ public:
 
 		int numDatasets;
 		auto att_domain = H5Aopen(file, "num_datasets", H5P_DEFAULT);
-		assert(H5Aread(att_domain, H5T_STD_I32LE, &numDatasets) >= 0);
-		assert(H5Aclose(att_domain) >= 0);
+		checkHDF5(att_domain >= 0, "H5Aopen");
+		checkHDF5(H5Aread(att_domain, H5T_STD_I32LE, &numDatasets) >= 0, "H5Aread");
+		checkHDF5(H5Aclose(att_domain) >= 0, "H5Aclose");
 
 		a_data.clear();
 		a_data.resize(numDatasets);
@@ -523,7 +542,7 @@ public:
 			readDataset(&file, a_data[ii], ii);
 		}
 		// barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 	}
 
 	template <typename T, typename... Args>
@@ -545,23 +564,25 @@ public:
 		// READ DOMAIN SIZES
 		int domainSize[2];
 		auto att_domain = H5Aopen(file, "domain", H5P_DEFAULT);
-		assert(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0);
-		assert(H5Aclose(att_domain) >= 0);
+		checkHDF5(att_domain >= 0, "H5Aopen");
+		checkHDF5(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0, "H5Aread");
+		checkHDF5(H5Aclose(att_domain) >= 0, "H5Aclose");
 
 		// READ DATA
 		int dataSize = domainSize[1];
 		auto ds_data = H5Dopen2(file, "/geometry/dtheta", H5P_DEFAULT);
+		checkHDF5(ds_data >= 0, "H5Dopen2");
 
 		// DEFINE VECTOR
 		a_data.resize(dataSize);
 
 		// READ DATA
-		assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0);
+		checkHDF5(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0, "H5Dread");
 
 		// CLEAN UP
-		assert(H5Dclose(ds_data) >= 0);
+		checkHDF5(H5Dclose(ds_data) >= 0, "H5Dclose");
 		barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 	}
 
 	template <typename T, typename... Args>
@@ -583,23 +604,25 @@ public:
 		// READ DOMAIN SIZES
 		int domainSize[2];
 		auto att_domain = H5Aopen(file, "domain", H5P_DEFAULT);
-		assert(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0);
-		assert(H5Aclose(att_domain) >= 0);
+		checkHDF5(att_domain >= 0, "H5Aopen");
+		checkHDF5(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0, "H5Aread");
+		checkHDF5(H5Aclose(att_domain) >= 0, "H5Aclose");
 
 		// READ DATA
 		int dataSize = domainSize[1];
 		auto ds_data = H5Dopen2(file, "/geometry/theta", H5P_DEFAULT);
+		checkHDF5(ds_data >= 0, "H5Dopen2");
 
 		// DEFINE VECTOR
 		a_data.resize(dataSize);
 
 		// READ DATA
-		assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0);
+		checkHDF5(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0, "H5Dread");
 
 		// CLEAN UP
-		assert(H5Dclose(ds_data) >= 0);
+		checkHDF5(H5Dclose(ds_data) >= 0, "H5Dclose");
 		barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 	}
 
 	template <typename T, typename... Args>
@@ -621,22 +644,24 @@ public:
 		// READ DOMAIN SIZES
 		int domainSize[2];
 		auto att_domain = H5Aopen(file, "domain", H5P_DEFAULT);
-		assert(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0);
-		assert(H5Aclose(att_domain) >= 0);
+		checkHDF5(att_domain >= 0, "H5Aopen");
+		checkHDF5(H5Aread(att_domain, H5T_STD_I32LE, domainSize) >= 0, "H5Aread");
+		checkHDF5(H5Aclose(att_domain) >= 0, "H5Aclose");
 
 		// READ DATA
 		int dataSize = domainSize[0];
 		auto ds_data = H5Dopen2(file, "/geometry/phi", H5P_DEFAULT);
+		checkHDF5(ds_data >= 0, "H5Dopen2");
 
 		// DEFINE VECTOR
 		a_data.resize(dataSize);
 
 		// READ DATA
-		assert(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0);
+		checkHDF5(H5Dread(ds_data, H5T_T, H5S_ALL, H5S_ALL, H5P_DEFAULT, &a_data[0]) >= 0, "H5Dread");
 
 		// CLEAN UP
-		assert(H5Dclose(ds_data) >= 0);
+		checkHDF5(H5Dclose(ds_data) >= 0, "H5Dclose");
 		barrier();
-		assert(H5Fclose(file) >= 0);
+		checkHDF5(H5Fclose(file) >= 0, "H5Fclose");
 	}
 };
