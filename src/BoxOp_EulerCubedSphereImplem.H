@@ -146,7 +146,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   
   for (int dir = 0; dir < DIM; dir++)
     {
-      PR_TIME("BoxOp_Euler::operator()::directional flux calculation");   
+      PR_TIME("BoxOp_Euler::operator()::directional flux calculation");
+      // Flux outputs and persistent background caches are outside this scope.
+      Proto::ScopedHostStack<MEM> scratch;
       
       State WFace_L = Stencil<T>::CellToFace(dir)(W);   
       State WFace_R(WFace_L.box());
@@ -248,22 +250,62 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       // Fluxes on dir face.
       // Average of advective fluxes in spherical variables at the
       // face center, given point values of W.
-      BoxData<T,NUMCOMPS> physFlux_L,physFlux_R;
-      primToFlux(physFlux_L,WFace_L,WFaceBar,adjDrDir,a_block,dir);
-      primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir);
-      Box bxface0 = a_fluxes[dir].box();
-      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss(bxface);
-      
-      primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
-      primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);
-      if (ParseInputs::get_Riemann_solver_type() == 2)
+      // All face mutations are complete. Reuse these values only within
+      // this direction and stage; repair's earlier point states may be stale.
+      State facePoint_L = _deconvolveFace(WFace_L,WFaceBar,dir);
+      State facePoint_R = _deconvolveFace(WFace_R,WFaceBar,dir);
+      BoxData<T,1,MEM> radialPoint;
+      if (dir == 0)
       {
-        fluxdir_Diss.define(bxface0);
-        primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,dir);
+        radialPoint.define(adjDrDir.box());
+        adjDrDir.copyTo(radialPoint);
       }
       else
       {
-        primToMappedRusanovFlux(fluxdir_Diss,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir);
+        radialPoint = (1.0*Shift(Point::Zeros())
+            - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(adjDrDir);
+      }
+      // The pointwise coordinate basis is identical for all three states.
+      // Cover their full boxes so sharing does not crop any calculation.
+      auto energyBasis = pointwiseSphericalBasis(
+          WFaceBar.box()+facePoint_L.box()+facePoint_R.box(),a_block,dir);
+      auto energy_L = faceEnergies(facePoint_L,a_block,dir,&energyBasis);
+      auto energy_R = faceEnergies(facePoint_R,a_block,dir,&energyBasis);
+      auto energyBar = faceEnergies(WFaceBar,a_block,dir,&energyBasis);
+      // Both physical fluxes use exactly the same auxiliary face state.
+      State commonFluxBar = forall<T,NUMCOMPS>(f_primflux,WFaceBar,
+          energyBar.kinetic,energyBar.magnetic,energyBar.velocityDotMagnetic,
+          radialPoint,m_gamma,a_block,dir);
+      BoxData<T,NUMCOMPS> physFlux_L,physFlux_R;
+      primToFlux(physFlux_L,WFace_L,WFaceBar,adjDrDir,a_block,dir,
+          &facePoint_L,&radialPoint,&energy_L,&commonFluxBar);
+      primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir,
+          &facePoint_R,&radialPoint,&energy_R,&commonFluxBar);
+      Box bxface0 = a_fluxes[dir].box();
+      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss(bxface);
+      
+      // det(A) A is shared by both face states and both vector fluxes.
+      // Keep its differences within the directional scratch lifetime.
+      std::array<BoxData<T,DIM,MEM,DIM>,2> metricDifferences;
+      if constexpr (MEM == HOST && DIM == 3)
+      {
+        const int firstDir = (dir == 0) ? 1 : 0;
+        const int secondDir = (dir == 2) ? 1 : 2;
+        metricDifferences[0] = (0.5*Shift::Basis(firstDir,1)
+            - 0.5*Shift::Basis(firstDir,-1))(deta_a);
+        metricDifferences[1] = (0.5*Shift::Basis(secondDir,1)
+            - 0.5*Shift::Basis(secondDir,-1))(deta_a);
+      }
+      primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_L,&metricDifferences,&energy_L.magnetic,&energyBar.magnetic);
+      primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_R,&metricDifferences,&energy_R.magnetic,&energyBar.magnetic);
+      if (ParseInputs::get_Riemann_solver_type() == 2)
+      {
+        fluxdir_Diss.define(bxface0);
+        primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,dir,&facePoint_L,&facePoint_R,&radialPoint);
+      }
+      else
+      {
+        primToMappedRusanovFlux(fluxdir_Diss,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir,&facePoint_L,&facePoint_R,&radialPoint,&energy_L,&energy_R);
       }
       
       forallInPlace([ ] PROTO_LAMBDA
@@ -332,20 +374,24 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
                                           const BoxData<T,1,MEM>& a_deta,
                                           const BoxData<T,DIM,MEM>& a_ntrow,
                                           uint a_block,
-                                          uint a_dir) const
+                                          uint a_dir,
+                                          const State* a_point,
+                                          const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences,
+                                          const BoxData<T,1,MEM>* a_magneticPoint,
+                                          const BoxData<T,1,MEM>* a_magneticBar) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::primToMappedFlux()");
   // Multiply momentum and B fluxes by det(A) A.
   BoxData<T,DIM,MEM> fluxdirMom = slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iMOMX);
   BoxData<T,DIM,MEM> physFluxMom = slice<T,NUMCOMPS,DIM,MEM>(a_physFlux,iMOMX);
   BoxData<T,DIM,MEM> tmp =
-    Operator::_faceMatrixProductAB(a_deta_a,physFluxMom,a_deta_a,physFluxMom,a_dir);
+    Operator::_faceMatrixProductAB(a_deta_a,physFluxMom,a_deta_a,physFluxMom,a_dir,a_metricDifferences);
   tmp.copyTo(fluxdirMom);
 
   BoxData<T,DIM,MEM> fluxdirB = slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iBX);
   BoxData<T,DIM,MEM> physFluxB = slice<T,NUMCOMPS,DIM,MEM>(a_physFlux,iBX);
   BoxData<T,DIM,MEM> tmp2 =
-    Operator::_faceMatrixProductAB(a_deta_a,physFluxB,a_deta_a,physFluxB,a_dir);
+    Operator::_faceMatrixProductAB(a_deta_a,physFluxB,a_deta_a,physFluxB,a_dir,a_metricDifferences);
   tmp2.copyTo(fluxdirB);
 
   // Both factors are face averages. Include their transverse covariance,
@@ -364,19 +410,32 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
         "Scalar metric product does not cover the required flux stencil");
   }
 
-  for (int comp = 0; comp < NUMCOMPS;comp++)
-    {
-      BoxData<T,1,MEM> advfluxcomp = slice(a_fluxdir,comp);
-      BoxData<T,1,MEM> advfluxprod = faceProduct(advfluxcomp,a_adjDrDir,a_dir);
-      advfluxprod.copyTo(advfluxcomp);
-    }
+  // Apply the radial metric to all components together so its transverse
+  // differences are computed once. The product is separate from a_fluxdir
+  // until every component has been evaluated.
+  auto advfluxprod = Operator::_faceTensorProduct(
+      a_fluxdir,a_adjDrDir,a_fluxdir,a_adjDrDir,a_dir);
+  advfluxprod.copyTo(a_fluxdir);
 
   //adding pressure forces to momentum fluxes.
    BoxData<T,1,MEM> pslice = slice(a_WFace,iP);
    BoxData<T,1,MEM> psliceBar = slice(a_WFaceBar,iP);
-   BoxData<T,NUMCOMPS,MEM> WPoint = _deconvolveFace(a_WFace,a_WFaceBar,a_dir);
-   auto meBar = magneticEnergyW(a_WFaceBar,a_block,a_dir);
-   auto mePoint = magneticEnergyW(WPoint,a_block,a_dir);
+   State ownedPoint;
+   if (!a_point) { ownedPoint = _deconvolveFace(a_WFace,a_WFaceBar,a_dir); a_point = &ownedPoint; }
+   const State& WPoint = *a_point;
+   BoxData<T,1,MEM> ownedMagneticBar,ownedMagneticPoint;
+   if (!a_magneticBar)
+   {
+     ownedMagneticBar = magneticEnergyW(a_WFaceBar,a_block,a_dir);
+     a_magneticBar = &ownedMagneticBar;
+   }
+   if (!a_magneticPoint)
+   {
+     ownedMagneticPoint = magneticEnergyW(WPoint,a_block,a_dir);
+     a_magneticPoint = &ownedMagneticPoint;
+   }
+   const auto& meBar = *a_magneticBar;
+   const auto& mePoint = *a_magneticPoint;
    auto me = _convolveFace(mePoint,meBar,a_dir);
    BoxData<T,1,MEM> p0 = pslice + me;
    BoxData<T,1,MEM> p0Bar = psliceBar + meBar;
@@ -412,7 +471,12 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRusanovFlux(
                                   const BoxData<T,DIM,MEM,DIM>& a_A,
                                   const BoxData<T,DIM,MEM>& a_ntrow,
                                   uint a_block,
-                                  uint a_dir) const
+                                  uint a_dir,
+                                  const State* a_leftPoint,
+                                  const State* a_rightPoint,
+                                  const BoxData<T,1,MEM>* a_radialPoint,
+                                  const FaceEnergies* a_leftEnergy,
+                                  const FaceEnergies* a_rightEnergy) const
 {
 
   // Compute fluxes at face centers.
@@ -420,24 +484,36 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRusanovFlux(
   Stencil<T> deconvolveStencilRadial = (1.0*Shift(Point::Zeros())
                                     - (1.0/24.0)*Stencil<T>::Derivative(2,0,2));
   // Deconvolve W to obtain point values.
-  BoxData<T,NUMCOMPS,MEM> WFacePoint_L = _deconvolveFace(a_WFace_L,a_WFaceBar_L,a_dir);  
-  // BoxData<T,1,MEM> kePoint_L = kineticEnergyW(WFacePoint_L,a_block,a_dir);
-  // BoxData<T,1,MEM> mePoint_L = magneticEnergyW(WFacePoint_L,a_block,a_dir);
-  BoxData<T,1,MEM> kePoint_L(WFacePoint_L.box());
-  BoxData<T,1,MEM> mePoint_L(WFacePoint_L.box());
-  EnergyW(kePoint_L,mePoint_L,WFacePoint_L,a_block,a_dir);
+  State ownedLeft;
+  if (!a_leftPoint) { ownedLeft = _deconvolveFace(a_WFace_L,a_WFaceBar_L,a_dir); a_leftPoint = &ownedLeft; }
+  const State& WFacePoint_L = *a_leftPoint;
+  FaceEnergies ownedEnergy_L;
+  if (!a_leftEnergy)
+  {
+    ownedEnergy_L.kinetic.define(WFacePoint_L.box());
+    ownedEnergy_L.magnetic.define(WFacePoint_L.box());
+    EnergyW(ownedEnergy_L.kinetic,ownedEnergy_L.magnetic,WFacePoint_L,a_block,a_dir);
+    a_leftEnergy = &ownedEnergy_L;
+  }
+  const auto& kePoint_L = a_leftEnergy->kinetic;
+  const auto& mePoint_L = a_leftEnergy->magnetic;
 
-  BoxData<T,1,MEM> adjDdirPoint;
-  if (a_dir != 0)
+  BoxData<T,1,MEM> ownedRadial;
+  if (!a_radialPoint)
   {
-    adjDdirPoint = deconvolveStencilRadial(a_adjDdir);
+    if (a_dir != 0)
+    {
+      ownedRadial = deconvolveStencilRadial(a_adjDdir);
+    }
+    else
+    {
+      ownedRadial.define(a_adjDdir.box());
+      a_adjDdir.copyTo(ownedRadial);
+    }
+    a_radialPoint = &ownedRadial;
   }
-  else
-  {
-    adjDdirPoint.define(a_adjDdir.box());
-    a_adjDdir.copyTo(adjDdirPoint);
-  }
- 
+  const auto& adjDdirPoint = *a_radialPoint;
+
   State q_L = forall<T,NUMCOMPS>
     ([ ] PROTO_LAMBDA
      (
@@ -464,12 +540,19 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRusanovFlux(
 
 
   // Deconvolve W to obtain point values.
-  BoxData<T,NUMCOMPS,MEM> WFacePoint_R = _deconvolveFace(a_WFace_R,a_WFaceBar_R,a_dir);  
-  // BoxData<T,1,MEM> kePoint_R = kineticEnergyW(WFacePoint_R,a_block,a_dir);
-  // BoxData<T,1,MEM> mePoint_R = magneticEnergyW(WFacePoint_R,a_block,a_dir);
-  BoxData<T,1,MEM> kePoint_R(WFacePoint_R.box());
-  BoxData<T,1,MEM> mePoint_R(WFacePoint_R.box());
-  EnergyW(kePoint_R,mePoint_R,WFacePoint_R,a_block,a_dir);
+  State ownedRight;
+  if (!a_rightPoint) { ownedRight = _deconvolveFace(a_WFace_R,a_WFaceBar_R,a_dir); a_rightPoint = &ownedRight; }
+  const State& WFacePoint_R = *a_rightPoint;
+  FaceEnergies ownedEnergy_R;
+  if (!a_rightEnergy)
+  {
+    ownedEnergy_R.kinetic.define(WFacePoint_R.box());
+    ownedEnergy_R.magnetic.define(WFacePoint_R.box());
+    EnergyW(ownedEnergy_R.kinetic,ownedEnergy_R.magnetic,WFacePoint_R,a_block,a_dir);
+    a_rightEnergy = &ownedEnergy_R;
+  }
+  const auto& kePoint_R = a_rightEnergy->kinetic;
+  const auto& mePoint_R = a_rightEnergy->magnetic;
 
   State q_R = forall<T,NUMCOMPS>
     ([ ] PROTO_LAMBDA
@@ -581,7 +664,11 @@ primToFlux(
            const State& a_WFaceBar,
            const BoxData<T,1,MEM>& a_adjDdir,
            uint a_block,
-           uint a_centering) const
+           uint a_centering,
+           const State* a_point,
+           const BoxData<T,1,MEM>* a_radialPoint,
+           const FaceEnergies* a_pointEnergy,
+           const State* a_fluxBar) const
 {
   // Compute fluxes at face centers.
   PR_TIMERS("BoxOp_EulerCubedSphere::primToFlux()");
@@ -589,33 +676,47 @@ primToFlux(
   Stencil<T> deconvolveStencilRadial = (1.0*Shift(Point::Zeros())
                                     - (1.0/24.0)*Stencil<T>::Derivative(2,0,2));
   // Deconvolve W to obtain point values.
-  BoxData<T,NUMCOMPS,MEM> WFacePoint = _deconvolveFace(a_WFace,a_WFaceBar,a_centering);  
-  // BoxData<T,1,MEM> kePoint = kineticEnergyW(WFacePoint,a_block,a_centering);
-  // BoxData<T,1,MEM> mePoint = magneticEnergyW(WFacePoint,a_block,a_centering);
-  // BoxData<T,1,MEM> vbPoint = vdotbW(WFacePoint,a_block,a_centering);
-  BoxData<T,1,MEM> kePoint(WFacePoint.box());
-  BoxData<T,1,MEM> mePoint(WFacePoint.box());
-  BoxData<T,1,MEM> vbPoint(WFacePoint.box());
-  EnergyW(kePoint,mePoint,vbPoint,WFacePoint,a_block,a_centering);
-   BoxData<T,1,MEM> keBar(a_WFaceBar.box());
-  BoxData<T,1,MEM> meBar(a_WFaceBar.box());
-  BoxData<T,1,MEM> vbBar(a_WFaceBar.box());
-  EnergyW(keBar,meBar,vbBar,a_WFaceBar,a_block,a_centering);
- 
-  BoxData<T,1,MEM> adjDdirPoint;
-  if (a_centering != 0)
-    {
-      adjDdirPoint = deconvolveStencilRadial(a_adjDdir);
-    }
-  else
-    {
-      adjDdirPoint.define(a_adjDdir.box());
-      a_adjDdir.copyTo(adjDdirPoint);
-    }
-  State fluxPoint = forall<T,NUMCOMPS>(f_primflux,WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
-  State fluxBar = forall<T,NUMCOMPS>(f_primflux,a_WFaceBar,keBar,meBar,vbBar,adjDdirPoint,m_gamma,a_block,a_centering);
+  State ownedPoint;
+  if (!a_point) { ownedPoint = _deconvolveFace(a_WFace,a_WFaceBar,a_centering); a_point = &ownedPoint; }
+  const State& WFacePoint = *a_point;
+  FaceEnergies ownedPointEnergy;
+  if (!a_pointEnergy)
+  {
+    ownedPointEnergy = faceEnergies(WFacePoint,a_block,a_centering);
+    a_pointEnergy = &ownedPointEnergy;
+  }
+  const auto& kePoint = a_pointEnergy->kinetic;
+  const auto& mePoint = a_pointEnergy->magnetic;
+  const auto& vbPoint = a_pointEnergy->velocityDotMagnetic;
 
-  a_physFlux = _convolveFace(fluxPoint,fluxBar,a_centering); 
+  BoxData<T,1,MEM> ownedRadial;
+  if (!a_radialPoint)
+  {
+    if (a_centering != 0)
+      {
+        ownedRadial = deconvolveStencilRadial(a_adjDdir);
+      }
+    else
+      {
+        ownedRadial.define(a_adjDdir.box());
+        a_adjDdir.copyTo(ownedRadial);
+      }
+    a_radialPoint = &ownedRadial;
+  }
+  const auto& adjDdirPoint = *a_radialPoint;
+
+  State fluxPoint = forall<T,NUMCOMPS>(f_primflux,WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
+  State ownedFluxBar;
+  if (!a_fluxBar)
+  {
+    auto energyBar = faceEnergies(a_WFaceBar,a_block,a_centering);
+    ownedFluxBar = forall<T,NUMCOMPS>(f_primflux,a_WFaceBar,
+        energyBar.kinetic,energyBar.magnetic,energyBar.velocityDotMagnetic,
+        adjDdirPoint,m_gamma,a_block,a_centering);
+    a_fluxBar = &ownedFluxBar;
+  }
+
+  a_physFlux = _convolveFace(fluxPoint,*a_fluxBar,a_centering);
   // Compute Average fluxes from pointwise values.
   //a_physFlux = (1.0*Shift(Point::Zeros()) +
   //             (1.0/24.0)*Stencil<T>::LaplacianFace(a_centering))(fluxPoint);
@@ -661,22 +762,9 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
   PR_TIMERS("BoxOp_EulerCubedSphere::dtCFL()");
   auto layout = a_JU.layout();
   
-  // Old method without static cache
-  // auto map = CubedSphereShell::Map(layout, ghost());
-  // auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
-
-  // New faster method with static cache
-  static const LayoutT*        s_layoutPtr = nullptr;
-  static std::unique_ptr<MapT> s_map;
-  static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0)  // In conv test, grid changes size.
-  {
-      s_layoutPtr = &layout;
-      s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
-      s_eulerOp = std::make_unique<OpT>(CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(*s_map));
-  }
-  auto& map     = *s_map;
-  auto& eulerOp = *s_eulerOp;
+  auto& geometry = levelGeometry(layout);
+  auto& map = *geometry.map;
+  auto& eulerOp = *geometry.op;
 
 
 
@@ -758,22 +846,9 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
   PR_TIMERS("BoxOp_EulerCubedSphere::StageLevel()");
   auto layout = a_UStage.layout();
 
-  // Old method without static cache
-  // auto map = CubedSphereShell::Map(layout, ghost());
-  // auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
-
-  // New faster method with static cache
-  static const LayoutT*        s_layoutPtr = nullptr;
-  static std::unique_ptr<MapT> s_map;
-  static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0) // In conv test, grid changes size.
-  {
-      s_layoutPtr = &layout;
-      s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
-      s_eulerOp = std::make_unique<OpT>(CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(*s_map));
-  }
-  auto& map     = *s_map;
-  auto& eulerOp = *s_eulerOp;
+  auto& geometry = levelGeometry(layout);
+  auto& map = *geometry.map;
+  auto& eulerOp = *geometry.op;
 
   T wgtxdt = a_weight*a_dt;
   for (auto dit : a_UStage.layout())

@@ -410,20 +410,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::vdotbW(
 }
 
 
-template<
-  typename T,
-  typename MAP,
-  MemType MEM>
-void
-BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
-                                              BoxData<T,1,MEM>& a_ke,
-                                              BoxData<T,1,MEM>& a_me,
-                                              BoxData<T,1,MEM>& a_vb,
-                                              const State& a_WPoint, 
-                                              uint a_block,
-                                              uint a_centering) const
+template<typename T, typename MAP, MemType MEM>
+BoxData<T,DIM,MEM,DIM>
+BoxOp_EulerCubedSphere<T,MAP,MEM>::pointwiseSphericalBasis(
+    const Box& a_box, uint a_block, uint a_centering) const
 {
-  PR_TIMERS("BoxOp_EulerCubedSphere::EnergyW()");
   Array<Array<uint,DIM>,6>
      permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
   Array<Array<int,DIM>,6>
@@ -432,7 +423,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
   
   // Compute Cartesian UPoint.
   T dxiPerp = this->dx()[1];
-  Box bx = a_WPoint.box();
+  Box bx = a_box;
   Point high = bx.high();
   Point low = bx.low();
   high[0] = low[0];
@@ -452,6 +443,34 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
   forallInPlace_p(f_Amatrix,bx0,Amat,permute[a_block],sign[a_block],
                   dxiPerp,offseta,offsetb);
   spreadSlice(Amat);
+
+  return Amat;
+}
+
+template<
+  typename T,
+  typename MAP,
+  MemType MEM>
+void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
+                                              BoxData<T,1,MEM>& a_ke,
+                                              BoxData<T,1,MEM>& a_me,
+                                              BoxData<T,1,MEM>& a_vb,
+                                              const State& a_WPoint,
+                                              uint a_block,
+                                              uint a_centering,
+                                              const BoxData<T,DIM,MEM,DIM>* a_basis) const
+{
+  PR_TIMERS("BoxOp_EulerCubedSphere::EnergyW()");
+  BoxData<T,DIM,MEM,DIM> ownedBasis;
+  if (!a_basis)
+  {
+    ownedBasis = pointwiseSphericalBasis(a_WPoint.box(),a_block,a_centering);
+    a_basis = &ownedBasis;
+  }
+  PROTO_ASSERT(a_basis->box().containsBox(a_WPoint.box()),
+      "EnergyW: shared basis must cover the complete input state");
+  const auto& Amat = *a_basis;
 
   forallInPlace([]PROTO_LAMBDA(
                               Var<T,1,MEM>& l_ke,

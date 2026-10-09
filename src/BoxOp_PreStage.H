@@ -346,22 +346,9 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   double gamma = ParseInputs::get_gamma();
   auto layout = a_UStage.layout();
 
-  // Old method without static cache
-  // auto map = CubedSphereShell::Map(a_UStage.layout(), ghost());
-  // auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
-
-  // New faster method with static cache
-  static const LayoutT*        s_layoutPtr = nullptr;
-  static std::unique_ptr<MapT> s_map;
-  static std::unique_ptr<OpT>  s_eulerOp;
-  if (!s_map || s_layoutPtr != &layout || ParseInputs::get_convTestType() > 0) // In conv test, grid changes size.
-  {
-      s_layoutPtr = &layout;
-      s_map    = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
-      s_eulerOp = std::make_unique<OpT>(CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(*s_map));
-  }
-  auto& map     = *s_map;
-  auto& eulerOp = *s_eulerOp;
+  auto& geometry = levelGeometry(layout);
+  auto& map = *geometry.map;
+  auto& eulerOp = *geometry.op;
 
   // Transform JU -> USph.
   CubedSphereShell::consToSphInterpEuler(a_UStage,a_iop,a_dVolrLev, 4, 0);
@@ -371,8 +358,13 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
   int thetaCoord = (rCoord + 1) % DIM;
   int phiCoord = (rCoord + 2) % DIM;
-  MBLevelBoxData<double, 8, HOST> dstData(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-  if (init_condition_type == 0) BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
+  MBLevelBoxData<double, 8, HOST> dstData;
+  BoxData<T,NUMCOMPS,MEM> unusedBoundary;
+  if (init_condition_type == 0)
+  {
+    dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+    BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
+  }
 
   for (auto dit : a_UStage.layout())
   {
@@ -381,7 +373,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    eulerOp[dit].PreStagePatch(USph_i,dstData[dit],a_dVolrLev[dit],blockBox, a_time);
+    eulerOp[dit].PreStagePatch(USph_i,init_condition_type == 0 ? dstData[dit] : unusedBoundary,a_dVolrLev[dit],blockBox, a_time);
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     const bool viscosityEnabled =

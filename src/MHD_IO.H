@@ -1001,10 +1001,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   h5.setIter(iter);
   typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell<HOST>, HOST> OP;
   auto layout = a_JU.layout();
-  auto map = CubedSphereShell::Map(layout, OP::ghost());
-  MBLevelBoxData<double, NUMCOMPS+2, HOST> Wout(layout, Point::Zeros());
-  MBLevelBoxData<double, NUMCOMPS, HOST> Uout(layout, Point::Zeros());
-  MBLevelBoxData<double, NUMCOMPS, HOST> W_cart_out(layout, Point::Zeros());
+  const auto& map = *OP::levelGeometry(layout).map;
   MBLevelBoxData<double, NUMCOMPS, HOST> W_sph_out(layout, Point::Zeros());
   MBLevelBoxData<double, 1, HOST> dVolrLev(layout, OP::ghost() + Point::Basis(0, 2));
   MBLevelBoxData<double, 1, HOST> radiusLev(layout, OP::ghost() + 2);
@@ -1037,7 +1034,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     auto& JU_i = a_JU[dit];
     BoxData<double,1,HOST> deta = CubedSphereShell::detA<double,HOST>(JU_i.box(),dxiPerp,0); 
     BoxData<double,NUMCOMPS+2,HOST> USemiSph(layout[dit].grow(Point::Basis(0,2)));
-    auto& Wout_i = Wout[dit];
+    BoxData<double,NUMCOMPS+2,HOST> Wout_i(layout[dit]);
     USemiSph.setToZero();
     unsigned int block = layout.block(dit);
     Box blockBox = layout.getBlock(block).domain().box();
@@ -1128,7 +1125,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
         a_W_sph_out(iBZ) = a_W_sph_out(iBZ)*(a_radius(0)/c_AU)*1e6; // microGauss
       }
       
-    }, Wout[dit], W_sph_out[dit], USemiSph, gamma, radiusLev[dit], XCart,
+    }, Wout_i, W_sph_out[dit], USemiSph, gamma, radiusLev[dit], XCart,
        scale_data_with_r, magneticTest, testBx0);
 
 #if 0    
@@ -1146,12 +1143,12 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 #endif
 
 #ifndef PR_DISABLE_INIT_CHECKS
-    // bool infOrNanBlock = Wout[dit].containsInfOrNAN();
+    // bool infOrNanBlock = Wout_i.containsInfOrNAN();
     // if (infOrNanBlock)
     //   {
-    //     h5.writePatch(1.0,Wout[dit],"MHD_IO_InfOrNAN"+to_string(block));
+    //     h5.writePatch(1.0,Wout_i,"MHD_IO_InfOrNAN"+to_string(block));
     //     infOrNan = infOrNan || infOrNanBlock;
-    //     cout << "Inf or Nan at Point " << Wout[dit].findInfOrNAN()
+    //     cout << "Inf or Nan at Point " << Wout_i.findInfOrNAN()
     //          << ", block = " << block << endl;
     //   }
 #endif
@@ -1177,13 +1174,13 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
               double r = (radiusLev[dit](ptindex,0) + radiusLev[dit](ptindex_p,0))*.5;
               if (comp < NUMCOMPS+2)
                 {
-                  double val = Wout[dit](ptindex,comp);
+                  double val = Wout_i(ptindex,comp);
                   ofs << r << " " << val << endl;
                 }
               else if (comp == NUMCOMPS+2)
                 {
-                  double p = Wout[dit](ptindex,4);
-                  double rho = Wout[dit](ptindex,0);
+                  double p = Wout_i(ptindex,4);
+                  double rho = Wout_i(ptindex,0);
                   double val = p/pow(rho,gamma);
                   ofs << r << " " << val << endl;
                 }
@@ -1206,13 +1203,13 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
   int thetaCoord = (rCoord + 1) % DIM;
   int phiCoord = (rCoord + 2) % DIM;
-  MBLevelBoxData<double, NUMCOMPS, HOST> dstData(
-      layout,
-      Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
-                           + NGHOST*Point::Basis(phiCoord));
-  dstData.setVal(0.0);
+  MBLevelBoxData<double, NUMCOMPS, HOST> dstData;
+  BoxData<double,NUMCOMPS,HOST> unusedBoundary;
   if (init_condition_type == 0)
   {
+    dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
+                                             + NGHOST*Point::Basis(phiCoord));
+    dstData.setVal(0.0);
     BC_global.BoxData_to_BC<double,HOST>(dstData,map,time);
   }
 
@@ -1221,7 +1218,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     unsigned int block = layout.block(dit);
     Box blockBox = layout.getBlock(block).domain().box();
     eulerOp[dit].PreStagePatch(
-        USphEvolution[dit],dstData[dit],dVolrLev[dit],blockBox,time);
+        USphEvolution[dit],init_condition_type == 0 ? dstData[dit] : unusedBoundary,dVolrLev[dit],blockBox,time);
     BoxData<double,NUMCOMPS,HOST> W;
     BoxData<double,NUMCOMPS,HOST> WBar;
     eulerOp[dit].sphToPrim(W,WBar,USphEvolution[dit],block);

@@ -36,23 +36,34 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
     const BoxData<T,DIM,MEM,DIM>& a_detA_A,
     const BoxData<T,1,MEM>& a_detA,
     const BoxData<T,DIM,MEM,DIM>& a_A,
-    uint a_dir) const
+    uint a_dir,
+    const State* a_leftPoint,
+    const State* a_rightPoint,
+    const BoxData<T,1,MEM>* a_radialPoint) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::primToMappedRoeFlux()");
-  // Use the same average-to-point conversion as the standard physical flux.
-  State left = _deconvolveFace(a_WFace_L,a_WFaceBar,a_dir);
-  State right = _deconvolveFace(a_WFace_R,a_WFaceBar,a_dir);
-  BoxData<T,1,MEM> radialAreaPoint;
-  if (a_dir == 0)
+  // Standalone callers can still supply face averages only.
+  State ownedLeft,ownedRight;
+  if (!a_leftPoint) { ownedLeft = _deconvolveFace(a_WFace_L,a_WFaceBar,a_dir); a_leftPoint = &ownedLeft; }
+  if (!a_rightPoint) { ownedRight = _deconvolveFace(a_WFace_R,a_WFaceBar,a_dir); a_rightPoint = &ownedRight; }
+  const State& left = *a_leftPoint;
+  const State& right = *a_rightPoint;
+  BoxData<T,1,MEM> ownedRadial;
+  if (!a_radialPoint)
   {
-    radialAreaPoint.define(a_adjDdir.box());
-    a_adjDdir.copyTo(radialAreaPoint);
+    if (a_dir == 0)
+    {
+      ownedRadial.define(a_adjDdir.box());
+      a_adjDdir.copyTo(ownedRadial);
+    }
+    else
+    {
+      ownedRadial = (1.0*Shift(Point::Zeros())
+          - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(a_adjDdir);
+    }
+    a_radialPoint = &ownedRadial;
   }
-  else
-  {
-    radialAreaPoint = (1.0*Shift(Point::Zeros())
-        - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(a_adjDdir);
-  }
+  const auto& radialAreaPoint = *a_radialPoint;
 
   const int direction = a_dir;
   const double entropyFix = ParseInputs::get_entropy_fix_coeff();

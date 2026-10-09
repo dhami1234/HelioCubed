@@ -281,6 +281,50 @@ public:
   using LayoutT = MBDisjointBoxLayout;
   using MapT = decltype(CubedSphereShell::Map(std::declval<const LayoutT&>(),Point()));
   using OpT = decltype(CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(std::declval<MapT&>()));
+
+  // Short-lived derived values from one final face state. The caller owns
+  // these inside the current patch/direction/stage scratch scope.
+  struct FaceEnergies
+  {
+    BoxData<T,1,MEM> kinetic, magnetic, velocityDotMagnetic;
+  };
+
+  inline BoxData<T,DIM,MEM,DIM> pointwiseSphericalBasis(
+      const Box& a_box, uint a_block, uint a_centering) const;
+
+  inline FaceEnergies faceEnergies(
+      const State& a_point, uint a_block, uint a_dir,
+      const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const
+  {
+    FaceEnergies values;
+    values.kinetic.define(a_point.box());
+    values.magnetic.define(a_point.box());
+    values.velocityDotMagnetic.define(a_point.box());
+    EnergyW(values.kinetic,values.magnetic,values.velocityDotMagnetic,a_point,a_block,a_dir,a_basis);
+    return values;
+  }
+
+  struct LevelGeometry
+  {
+    std::unique_ptr<MapT> map;
+    std::unique_ptr<OpT> op;
+  };
+
+  // All stages use the same immutable grid geometry. The partition remains
+  // owned by the cached map; its identity also detects a new convergence grid.
+  static LevelGeometry& levelGeometry(const LayoutT& layout)
+  {
+    static LevelGeometry cached;
+    if (!cached.map || &cached.map->layout().partition() != &layout.partition())
+    {
+      cached.op.reset();
+      cached.map = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
+      cached.op = std::make_unique<OpT>(
+          CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(*cached.map));
+    }
+    return cached;
+  }
+
   using MBBoxOp<T, MAP, NUMCOMPS,0,MEM>::MBBoxOp;
 
   T m_gamma = ParseInputs::get_gamma();
@@ -394,13 +438,18 @@ public:
                          uint a_block,
                          uint a_dir) const;
 
+  // Optional point data must be prepared from the final face states in this stage.
   inline void primToFlux(
                          State& a_physFlux,
                          const State& a_WFace,
                          const State& a_WFaceBar,
                          const BoxData<T,1,MEM>& a_adjDdir,
                          uint a_block,
-                         uint a_centering) const;
+                         uint a_centering,
+                         const State* a_point = nullptr,
+                         const BoxData<T,1,MEM>* a_radialPoint = nullptr,
+                         const FaceEnergies* a_pointEnergy = nullptr,
+                         const State* a_fluxBar = nullptr) const;
   // Implemented.
   inline void sphToPrim(
                          State& a_W,
@@ -468,7 +517,8 @@ public:
                                 BoxData<T,1,MEM>& a_vb,
                                 const State& a_WPoint,
                                 uint a_block,
-                                uint a_centering) const;
+                                uint a_centering,
+                                const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const;
                                 
   inline void EnergyW(
                                 BoxData<T,1,MEM>& a_ke,
@@ -494,7 +544,11 @@ public:
                               const BoxData<T,1,MEM>& a_deta,
                               const BoxData<T,DIM,MEM>& a_ntrow,
                               uint a_block,
-                              uint a_dir) const; 
+                              uint a_dir,
+                              const State* a_point = nullptr,
+                              const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr,
+                              const BoxData<T,1,MEM>* a_magneticPoint = nullptr,
+                              const BoxData<T,1,MEM>* a_magneticBar = nullptr) const;
 
   inline void primToMappedRusanovFlux(
                               State& a_fluxdir,
@@ -508,7 +562,12 @@ public:
                               const BoxData<T,DIM,MEM,DIM>& a_A,
                               const BoxData<T,DIM,MEM>& a_ntrow,
                               uint a_block,
-                              uint a_dir) const;
+                              uint a_dir,
+                              const State* a_leftPoint = nullptr,
+                              const State* a_rightPoint = nullptr,
+                              const BoxData<T,1,MEM>* a_radialPoint = nullptr,
+                              const FaceEnergies* a_leftEnergy = nullptr,
+                              const FaceEnergies* a_rightEnergy = nullptr) const;
 
   /// Repair invalid reconstructed states before either part of the Roe flux.
   inline void repairRoeFaceStates(
@@ -528,7 +587,10 @@ public:
                               const BoxData<T,DIM,MEM,DIM>& a_detA_A,
                               const BoxData<T,1,MEM>& a_detA,
                               const BoxData<T,DIM,MEM,DIM>& a_A,
-                              uint a_dir) const;
+                              uint a_dir,
+                              const State* a_leftPoint = nullptr,
+                              const State* a_rightPoint = nullptr,
+                              const BoxData<T,1,MEM>* a_radialPoint = nullptr) const;
 
   // End new factorization of operator().
   // Viscosity starts here.

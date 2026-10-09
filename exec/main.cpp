@@ -177,14 +177,12 @@ int main(int argc, char *argv[])
       pout(0) << "proc_id: " << procID() << ";      num boxes: " << count << std::endl;
 
       // initialize data and map
-      auto map = CubedSphereShell::Map(layout, OP::ghost());
+      auto& geometry = OP::levelGeometry(layout);
+      auto& map = *geometry.map;
       MBLevelBoxData<double, NUMCOMPS, HOST> JU(layout, OP::ghost());
-      MBLevelBoxData<double, NUMCOMPS, HOST> USph(layout, OP::ghost());
-      MBLevelBoxData<double, NUMCOMPS, HOST> rhs(layout, Point::Zeros());
       MBLevelBoxData<double, 1, HOST> dVolrLev(layout, OP::ghost() + Point::Basis(0, 2));
       Array<double, DIM> dx;
-      auto eulerOp = CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(map);
-      USph.setVal(0.);
+      auto& eulerOp = *geometry.op;
       double dxradius = 1.0 / thickness;
       auto C2C = Stencil<double>::CornersToCells(4);
 
@@ -192,8 +190,13 @@ int main(int argc, char *argv[])
       int thetaCoord = (rCoord + 1) % 3;
       int phiCoord = (rCoord + 2) % 3;
 
-      MBLevelBoxData<double, 8, HOST> dstData(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-      if (init_condition_type == 0) BC_global.BoxData_to_BC(dstData, map, time);
+      MBLevelBoxData<double, 8, HOST> dstData;
+      BoxData<double, NUMCOMPS, HOST> unusedBoundary;
+      if (init_condition_type == 0)
+      {
+        dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+        BC_global.BoxData_to_BC(dstData, map, time);
+      }
 
       MBInterpOp iop;
       // MHDInterpOp's specialized radial-zero path reserves two angular
@@ -217,7 +220,6 @@ int main(int argc, char *argv[])
         {
         Reduction<double,Operation::Max,HOST> dtinv;
         dtinv.reset();
-        MBLevelBoxData<double, NUMCOMPS, HOST> Wout(layout, Point::Zeros());
         for (auto dit : layout)
           {
             dx = eulerOp[dit].dx();
@@ -232,7 +234,7 @@ int main(int argc, char *argv[])
             double half = 0.5;
             BoxData<double, DIM, HOST> XCart = forall_p<double,DIM,HOST>
               (f_cubedSphereMap3,radius.box(),radius,dx,half,half,block);  
-            eulerOp[dit].initialize(WPoint_i, dstData[dit], radius, XCart, gamma, thickness, dx[2], block);
+            eulerOp[dit].initialize(WPoint_i, init_condition_type == 0 ? dstData[dit] : unusedBoundary, radius, XCart, gamma, thickness, dx[2], block);
             eulerOp[dit].dtInv(dtinv,WPoint_i);
             eulerOp[dit].primToCons(JUTemp, WPoint_i, dVolrLev[dit], gamma, dx[2], block);
             if (isConstantMagneticFieldTest(init_condition_type))
@@ -264,7 +266,6 @@ int main(int argc, char *argv[])
                   a_JU(iBZ) -= a_background(iBZ);
                 },JUTemp,JUBackground);
             }
-            WPoint_i.copyTo(Wout[dit]);
             JU_i.setVal(0.);
             JUTemp.copyTo(JU_i, layout[dit]);
           }
