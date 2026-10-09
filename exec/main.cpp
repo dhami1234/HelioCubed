@@ -196,7 +196,13 @@ int main(int argc, char *argv[])
       if (init_condition_type == 0) BC_global.BoxData_to_BC(dstData, map, time);
 
       MBInterpOp iop;
-      iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(),OP::ghost() ,4);
+      // MHDInterpOp's specialized radial-zero path reserves two angular
+      // ghost layers for stencil sources.
+      // Match consToSphInterpEuler's source padding to fill every destination
+      // ghost layer needed by the spatial reconstruction.
+      Point interpSourceGhost = OP::ghost();
+      if (radialDir == 0) { interpSourceGhost += Point(0, 2, 2); }
+      iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(), interpSourceGhost, 4);
 
       // Set input solution.
       for (auto dit : layout)

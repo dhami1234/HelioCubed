@@ -348,17 +348,22 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
     Operator::_faceMatrixProductAB(a_deta_a,physFluxB,a_deta_a,physFluxB,a_dir);
   tmp2.copyTo(fluxdirB);
 
-  // Scale rho, rho E fluxes by det(A),
-  forallInPlace([ ] PROTO_LAMBDA
-                (Var<T,NUMCOMPS,MEM>& a_advflux,
-                  const Var<T,NUMCOMPS,MEM>& a_fluxin,
-                  const Var<T,1,MEM>& a_deta,
-                  const Var<T,1,MEM>& a_adjddir)
-                {                    
-                  a_advflux(iRHO) = a_deta(0)*a_fluxin(iRHO);
-                  a_advflux(iE) = a_deta(0)*a_fluxin(iE);  
-                },a_fluxdir,a_physFlux,a_deta,a_adjDrDir);
-    
+  // Both factors are face averages. Include their transverse covariance,
+  // as the momentum and magnetic matrix products above already do.
+  for (int comp : {iRHO, iE})
+  {
+    auto physical = slice(a_physFlux,comp);
+    auto mapped = Operator::_faceProduct(a_deta,physical,a_deta,physical,a_dir);
+    auto destination = slice(a_fluxdir,comp);
+    // Only the covered stencil contributes to owned faces. Initialize the
+    // unused margin before the subsequent radial metric product reads it.
+    destination.setVal(0.);
+    mapped.copyTo(destination);
+    Box needed = this->box().extrude(a_dir).grow(1).grow(a_dir,-1);
+    PROTO_ASSERT((mapped.box() & needed) == needed,
+        "Scalar metric product does not cover the required flux stencil");
+  }
+
   for (int comp = 0; comp < NUMCOMPS;comp++)
     {
       BoxData<T,1,MEM> advfluxcomp = slice(a_fluxdir,comp);
