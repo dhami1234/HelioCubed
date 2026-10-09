@@ -199,12 +199,11 @@ int main(int argc, char *argv[])
       }
 
       MBInterpOp iop;
-      // MHDInterpOp's specialized radial-zero path reserves two angular
-      // ghost layers for stencil sources.
-      // Match consToSphInterpEuler's source padding to fill every destination
-      // ghost layer needed by the spatial reconstruction.
+      // The vector metric product and quotient need two interpolated angular
+      // layers beyond the reconstruction halo. MHDInterpOp reserves another
+      // two layers for interpolation sources. Match consToSphInterpEuler.
       Point interpSourceGhost = OP::ghost();
-      if (radialDir == 0) { interpSourceGhost += Point(0, 2, 2); }
+      if (radialDir == 0) { interpSourceGhost += Point(0, 4, 4); }
       iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(), interpSourceGhost, 4);
 
       // Set input solution.
