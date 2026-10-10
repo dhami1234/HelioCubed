@@ -297,9 +297,10 @@ public:
       const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const
   {
     FaceEnergies values;
-    values.kinetic.define(a_point.box());
-    values.magnetic.define(a_point.box());
-    values.velocityDotMagnetic.define(a_point.box());
+    // EnergyW initializes and assigns all three outputs over the full state box.
+    values.kinetic.defineForOverwrite(a_point.box());
+    values.magnetic.defineForOverwrite(a_point.box());
+    values.velocityDotMagnetic.defineForOverwrite(a_point.box());
     EnergyW(values.kinetic,values.magnetic,values.velocityDotMagnetic,a_point,a_block,a_dir,a_basis);
     return values;
   }

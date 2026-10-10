@@ -287,10 +287,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
     State W_ave_ahead2 = alias(a_W_ave,Point::Basis(a_d)*(-2));
     State W_ave_behind = alias(a_W_ave,Point::Basis(a_d)*(1));
     State W_ave_behind2 = alias(a_W_ave,Point::Basis(a_d)*(2));
-    State del2_W_c  = forall<double,NUMCOMPS,MEM>( del2_W_c_calc, a_W_ave, W_ave_behind, W_ave_ahead);
+    State del2_W_c  = forallOverwrite<double,NUMCOMPS,MEM>( del2_W_c_calc, a_W_ave, W_ave_behind, W_ave_ahead);
     State del2_W_c_ahead = alias(del2_W_c,Point::Basis(a_d)*(-1));
     State del2_W_c_behind = alias(del2_W_c,Point::Basis(a_d)*(1));
-    State del3_W = forall<double,NUMCOMPS,MEM>( del3_W_calc, del2_W_c, del2_W_c_behind);
+    State del3_W = forallOverwrite<double,NUMCOMPS,MEM>( del3_W_calc, del2_W_c, del2_W_c_behind);
     // These third differences are already available at the same or shifted cells.
     State del3_W_L = alias(del3_W);
     State del3_W_R = alias(del3_W,Point::Basis(a_d)*(-1));
@@ -325,7 +325,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
       Scalar eta_d = forall<double,1,MEM>( eta_d_calc, eta_tilde_d, eta_tilde_d_ahead, eta_tilde_d_behind);
      
       if (d>0) {
-        eta = forall<double,1,MEM>(eta_calc, eta_d, eta_old);
+        eta = forallOverwrite<double,1,MEM>(eta_calc, eta_d, eta_old);
         
       } else {
         eta = m_copy(eta_d);
@@ -338,7 +338,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
     if (leftBox == rightBox)
     {
       // Share the cell average and flattening factor; slices retain the allocation.
-      auto paired = forall<double,2*(NUMCOMPS),MEM>(Flat_pair_calc,
+      auto paired = forallOverwrite<double,2*(NUMCOMPS),MEM>(Flat_pair_calc,
           W_ave_L_ahead_limited, W_ave_R_limited, a_W_ave, eta);
       W_ave_L_ahead_lim_flat = slice<double,2*(NUMCOMPS),NUMCOMPS,MEM>(paired,0);
       a_W_ave_R_lim_flat = slice<double,2*(NUMCOMPS),NUMCOMPS,MEM>(paired,NUMCOMPS);
@@ -346,8 +346,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
     else
     {
       // Preserve both output boxes when the face inputs have different coverage.
-      W_ave_L_ahead_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_L_ahead_limited, a_W_ave, eta, a_d);
-      a_W_ave_R_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_R_limited, a_W_ave, eta, a_d);
+      W_ave_L_ahead_lim_flat = forallOverwrite<double,NUMCOMPS,MEM>(Flat_calc, W_ave_L_ahead_limited, a_W_ave, eta, a_d);
+      a_W_ave_R_lim_flat = forallOverwrite<double,NUMCOMPS,MEM>(Flat_calc, W_ave_R_limited, a_W_ave, eta, a_d);
     }
     a_W_ave_L_lim_flat = alias(W_ave_L_ahead_lim_flat,Point::Basis(a_d)*(1));
     //Slope flattening ends here

@@ -72,10 +72,8 @@ viscFlux(
       Stencil<double> D3 = D1 * D2;
       Stencil<double> D5 = D3 * D2;
       Box bxface = a_Rhs.box().extrude(Point::Basis(dir));
-      State physFlux(bxface);
-      physFlux.setToZero();
-      State fluxdir(bxface);
-      fluxdir.setToZero();
+      State physFlux(bxface, T(0));
+      State fluxdir(bxface, T(0));
       
       //Required mapping variables.
       BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,block,dir);
@@ -120,8 +118,7 @@ viscFlux(
         }
       if (linearViscosityEnabled)
         {
-          State fluxtemp(bxface);
-          fluxtemp.setToZero();
+          State fluxtemp(bxface, T(0));
           if (viscosityOrder == 3)
             {
               linearViscFlux = D3(a_USph, bxface, -1.0/96);
@@ -165,8 +162,7 @@ viscFlux(
         }
       if (nonlinearViscosityEnabled)
         {
-          State fluxtemp(bxface);
-          fluxtemp.setToZero();
+          State fluxtemp(bxface, T(0));
           NLViscFlux = D1(a_USph, bxface);
           primToMappedViscFlux(fluxtemp,NLViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
@@ -244,13 +240,13 @@ primToMappedViscFlux(
   // Multiply momentum and B fluxes by det(A) A.
   BoxData<T,DIM,MEM> fluxdirMom = slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iMOMX);
   BoxData<T,DIM,MEM> physFluxMom = slice<T,NUMCOMPS,DIM,MEM>(a_physFlux,iMOMX);
-  BoxData<T,DIM,MEM> tmp = forall<T,DIM,MEM>(f_matVecProd,a_deta_a,physFluxMom,one);
+  BoxData<T,DIM,MEM> tmp = forallOverwrite<T,DIM,MEM>(f_matVecProd,a_deta_a,physFluxMom,one);
 
   tmp.copyTo(fluxdirMom);
 
   BoxData<T,DIM,MEM> fluxdirB = slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iBX);
   BoxData<T,DIM,MEM> physFluxB = slice<T,NUMCOMPS,DIM,MEM>(a_physFlux,iBX);
-  BoxData<T,DIM,MEM> tmp2 = forall<T,DIM,MEM>(f_matVecProd,a_deta_a,physFluxB,one);
+  BoxData<T,DIM,MEM> tmp2 = forallOverwrite<T,DIM,MEM>(f_matVecProd,a_deta_a,physFluxB,one);
 
   tmp2.copyTo(fluxdirB);
 
@@ -433,7 +429,7 @@ NonLinearViscCoef(
   BoxData<T,1,MEM> dvft1dtan1 = faceToCorner1(dvoldn[dirtan1]);
   BoxData<T,1,MEM> dvft1dtan2 = faceToCorner2(dvoldn[dirtan2]);
   BoxData<T,1,MEM> divu =
-    forall<T,1,MEM>([] PROTO_LAMBDA(
+    forallOverwrite<T,1,MEM>([] PROTO_LAMBDA(
                                     Var<T,1,MEM>&            a_divu,
                                     Var<T,1,MEM>&            a_dvolfndn,
                                     Var<T,1,MEM>&            a_dvolft1dt1,
@@ -451,7 +447,7 @@ NonLinearViscCoef(
     T beta = .3;
     const Box speedBox = a_NLViscCoef.box().grow(a_dir,2)
         & a_W.box() & a_A.box();
-    BoxData<T,1,MEM> csq = forall<T,1,MEM>(f_csq,speedBox,a_W,a_A,m_gamma);
+    BoxData<T,1,MEM> csq = forallOverwrite<T,1,MEM>(f_csq,speedBox,a_W,a_A,m_gamma);
     BoxData<T,1,MEM> csqshiftr = alias(csq,Point::Basis(a_dir));
     BoxData<T,1,MEM> csqshiftr2 = alias(csq,Point::Basis(a_dir,2));
     BoxData<T,1,MEM> csqshiftl = alias(csq,Point::Basis(a_dir,-1));

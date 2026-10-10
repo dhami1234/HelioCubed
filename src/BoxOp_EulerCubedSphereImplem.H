@@ -146,7 +146,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       Proto::ScopedHostStack<MEM> scratch;
       
       State WFace_L = Stencil<T>::CellToFace(dir)(W);   
-      State WFace_R(WFace_L.box());
+      State WFace_R;
+      WFace_R.defineForOverwrite(WFace_L.box());
       WFace_L.copyTo(WFace_R);
       // Two transverse layers feed the two metric products; one more
       // supplies the face convolution/deconvolution. No normal halo is used.
@@ -254,7 +255,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       BoxData<T,1,MEM> radialPoint;
       if (dir == 0)
       {
-        radialPoint.define(adjDrDir.box());
+        radialPoint.defineForOverwrite(adjDrDir.box());
         adjDrDir.copyTo(radialPoint);
       }
       else
@@ -270,7 +271,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       auto energy_R = faceEnergies(facePoint_R,a_block,dir,&energyBasis);
       auto energyBar = faceEnergies(WFaceBar,a_block,dir,&energyBasis);
       // Both physical fluxes use exactly the same auxiliary face state.
-      State commonFluxBar = forall<T,NUMCOMPS>(f_primflux,WFaceBar,
+      State commonFluxBar = forallOverwrite<T,NUMCOMPS>(f_primflux,WFaceBar,
           energyBar.kinetic,energyBar.magnetic,energyBar.velocityDotMagnetic,
           radialPoint,m_gamma,a_block,dir);
       BoxData<T,NUMCOMPS> physFlux_L,physFlux_R;
@@ -455,8 +456,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
    BoxData<T,1,MEM> p0 = pslice + me;
    BoxData<T,1,MEM> p0Bar = psliceBar + meBar;
    BoxData<T,1,MEM> tmp4 = p0Bar * a_adjDrDir;
-   BoxData<T,DIM,MEM> pforce(a_ntrow.box());
-   pforce.setVal(0.);
+   BoxData<T,DIM,MEM> pforce(a_ntrow.box(), T(0));
    BoxData<T,1,MEM> tmp3 =
      _faceProduct(a_adjDrDir,p0,a_adjDrDir,p0Bar,a_dir);
    for (int dirvec = 0; dirvec < DIM; dirvec++)
@@ -720,12 +720,12 @@ primToFlux(
   }
   const auto& adjDdirPoint = *a_radialPoint;
 
-  State fluxPoint = forall<T,NUMCOMPS>(f_primflux,WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
+  State fluxPoint = forallOverwrite<T,NUMCOMPS>(f_primflux,WFacePoint,kePoint,mePoint,vbPoint,adjDdirPoint,m_gamma,a_block,a_centering);
   State ownedFluxBar;
   if (!a_fluxBar)
   {
     auto energyBar = faceEnergies(a_WFaceBar,a_block,a_centering);
-    ownedFluxBar = forall<T,NUMCOMPS>(f_primflux,a_WFaceBar,
+    ownedFluxBar = forallOverwrite<T,NUMCOMPS>(f_primflux,a_WFaceBar,
         energyBar.kinetic,energyBar.magnetic,energyBar.velocityDotMagnetic,
         adjDdirPoint,m_gamma,a_block,a_centering);
     a_fluxBar = &ownedFluxBar;
@@ -803,8 +803,7 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
          ,deta);
       BoxData<T,DIM,MEM,DIM> deta_amat =
         CubedSphereShell::detA_A<T,MEM>(bx0,dx,block,0);
-      BoxData<T,DIM,MEM,DIM> invcoef(bx0);
-      invcoef.setToZero();
+      BoxData<T,DIM,MEM,DIM> invcoef(bx0, T(0));
       forallInPlace(f_matinv3by3,invcoef,deta_amat);
 
       BoxData<T,1,MEM> JRho = slice(USph[dit],0);
@@ -916,12 +915,10 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
   BoxData<T,1,MEM> radius(bxRadius);
   BoxData<T,DIM,MEM> adjDr(bxRadius);
   BoxData<T,1,MEM> dVolr(bxRadius);
-  BoxData<T,1,MEM> speedMax(bxRadius);
-  speedMax.setToZero();
+  BoxData<T,1,MEM> speedMax(bxRadius, T(0));
   radialMetrics(radius,Dr,adjDr,dVolr,bxRadius);
   T half = .5;
-  BoxData<T,1,MEM> visccoef(bx.grow(2));
-  visccoef.setToZero();
+  BoxData<T,1,MEM> visccoef(bx.grow(2), T(0));
   for (int dir = 0 ; dir < DIM; dir++)
     {
       Box bxface = bx;
@@ -973,8 +970,7 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
                     dVolr,Dr,dxiPerp,dxiR,dir);
       if (linearViscosityEnabled)
         {
-          BoxData<T,1,MEM> linvisccoef(bxface);
-          linvisccoef.setToZero();
+          BoxData<T,1,MEM> linvisccoef(bxface, T(0));
           LinearViscCoef(linvisccoef,WFace,deta,A_matrix,ntrow,block,dir);
           if (scaleViscosityWithR && dir == 0)
             {
@@ -993,8 +989,7 @@ dtInv(Reduction<T,Operation::Max,MEM>& a_dtInv,
         }
       if (nonlinearViscosityEnabled)
         {
-          BoxData<T,1,MEM> nlvisccoef(bxface);
-          nlvisccoef.setToZero();
+          BoxData<T,1,MEM> nlvisccoef(bxface, T(0));
           NonLinearViscCoef(nlvisccoef,WFace,Dr,adjDr,A_matrix,ntrow,dVolr,deta,dxi,block,dir);
           if (scaleViscosityWithR && dir == 0)
             {

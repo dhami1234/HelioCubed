@@ -170,8 +170,6 @@ public:
 		Point eLow  = bx1.low();  eLow [phiCoord] = -1;
 		Box bx2(eLow, eHigh);     // was: BC_data_extended[0].box()
 		BoxData<double, 8, HOST> data_0(bx1);
-		BoxData<double, 8, HOST> BC_data_temp1(bx1);
-		BoxData<double, 8, HOST> BC_data_temp2(bx1);
 
 		Point high = bx1.high();
 		int domainSizez = high[phiCoord] + 1;
@@ -251,7 +249,7 @@ public:
 					auto& frame = get_broadcast_frame(0, /*useLowSlot=*/true);
 					apply_frac_shift_phi<T, MEM>(data_0, frame, phiCoord, cells_to_rotate, needed_fraction);
 				}
-				if (low_frame_now >= num_frames - 1)
+				else if (low_frame_now >= num_frames - 1)
 				{
 					auto& frame = get_broadcast_frame(num_frames - 1, /*useLowSlot=*/true);
 					apply_frac_shift_phi<T, MEM>(data_0, frame, phiCoord, cells_to_rotate, needed_fraction);
@@ -264,6 +262,9 @@ public:
 		}
 		else
 		{
+			// Only temporal interpolation needs two rotated frame buffers.
+			BoxData<double, 8, HOST> BC_data_temp1(bx1);
+			BoxData<double, 8, HOST> BC_data_temp2(bx1);
 			double h5_cadence = ParseInputs::get_BC_cadence();
 			double time_temp = a_time;
 			int low_frame = time_temp / (h5_cadence * 3600);

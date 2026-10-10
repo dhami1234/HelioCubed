@@ -95,7 +95,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
   BoxData<T,1,MEM> me = magneticEnergyW(a_WPoint,a_block,-1);
   
   BoxData<T,NUMCOMPS,MEM> UPoint =
-    forall<T,NUMCOMPS,MEM>([ ] PROTO_LAMBDA
+    forallOverwrite<T,NUMCOMPS,MEM>([ ] PROTO_LAMBDA
                            (Var<T,NUMCOMPS,MEM>& a_upoint,
                             const Var<T,NUMCOMPS>& a_wpoint,
                             const Var<T,1,MEM>& a_dvolpoint,
@@ -153,11 +153,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
       BoxData<T,DIM,MEM,DIM> damat = Stencil<T>::Derivative(1,dir,2)(amat);
       BoxData<T,DIM,MEM> dumom =
         CubedSphereShell::deriv3case(UMom,bxOut,blockBox,dir);
-      BoxData<T,DIM,MEM> produ = forall<T,DIM,MEM>(f_matVecProd,damat,dumom,twelveth);
+      BoxData<T,DIM,MEM> produ = forallOverwrite<T,DIM,MEM>(f_matVecProd,damat,dumom,twelveth);
       JUMom += produ;
       BoxData<T,DIM,MEM> dub =
         CubedSphereShell::deriv3case(UB,bxOut,blockBox,dir);
-      BoxData<T,DIM,MEM> prodb = forall<T,DIM,MEM>(f_matVecProd,damat,dub,twelveth);
+      BoxData<T,DIM,MEM> prodb = forallOverwrite<T,DIM,MEM>(f_matVecProd,damat,dub,twelveth);
       JUB += prodb;
     }
   // I'm not sure these copies are necessary.
@@ -212,7 +212,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::kineticEnergyW(
   Point low = bx.low();
   high[0] = low[0];
   Box bx0(low,high);
-  BoxData<T,DIM,MEM,DIM> Amat(bx);
+  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
+  BoxData<T,DIM,MEM,DIM> Amat;
+  Amat.defineForOverwrite(bx);
   T half = .5;
   T offseta = half;
   T offsetb = half;
@@ -228,7 +230,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::kineticEnergyW(
                   dxiPerp,offseta,offsetb);
   spreadSlice(Amat);
   BoxData<T,1,MEM> ke =
-    forall<T,1,MEM>([ ] PROTO_LAMBDA
+    forallOverwrite<T,1,MEM>([ ] PROTO_LAMBDA
                     (                
                      Var<T,1,MEM> a_ke,
                      const Var<T,DIM,MEM,DIM>& a_amat,
@@ -283,7 +285,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::magneticEnergyW(
   Point low = bx.low();
   high[0] = low[0];
   Box bx0(low,high);
-  BoxData<T,DIM,MEM,DIM> Amat(bx);
+  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
+  BoxData<T,DIM,MEM,DIM> Amat;
+  Amat.defineForOverwrite(bx);
   T half = .5;
   T offseta = half;
   T offsetb = half;
@@ -299,7 +303,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::magneticEnergyW(
                   dxiPerp,offseta,offsetb);
   spreadSlice(Amat);
   BoxData<T,1,MEM> me =
-    forall<T,1,MEM>([ ] PROTO_LAMBDA
+    forallOverwrite<T,1,MEM>([ ] PROTO_LAMBDA
                     (                
                      Var<T,1,MEM> a_me,
                      const Var<T,DIM,MEM,DIM>& a_amat,
@@ -353,7 +357,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::vdotbW(
   Point low = bx.low();
   high[0] = low[0];
   Box bx0(low,high);
-  BoxData<T,DIM,MEM,DIM> Amat(bx);
+  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
+  BoxData<T,DIM,MEM,DIM> Amat;
+  Amat.defineForOverwrite(bx);
   T half = .5;
   T offseta = half;
   T offsetb = half;
@@ -369,7 +375,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::vdotbW(
                   dxiPerp,offseta,offsetb);
   spreadSlice(Amat);
   BoxData<T,1,MEM> vb =
-    forall<T,1,MEM>([ ] PROTO_LAMBDA
+    forallOverwrite<T,1,MEM>([ ] PROTO_LAMBDA
                     (                
                      Var<T,1,MEM> a_vb,
                      const Var<T,DIM,MEM,DIM>& a_amat,
@@ -428,7 +434,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::pointwiseSphericalBasis(
   Point low = bx.low();
   high[0] = low[0];
   Box bx0(low,high);
-  BoxData<T,DIM,MEM,DIM> Amat(bx);
+  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
+  BoxData<T,DIM,MEM,DIM> Amat;
+  Amat.defineForOverwrite(bx);
   T half = .5;
   T offseta = half;
   T offsetb = half;
@@ -541,7 +549,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::EnergyW(
   Point low = bx.low();
   high[0] = low[0];
   Box bx0(low,high);
-  BoxData<T,DIM,MEM,DIM> Amat(bx);
+  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
+  BoxData<T,DIM,MEM,DIM> Amat;
+  Amat.defineForOverwrite(bx);
   T half = .5;
   T offseta = half;
   T offsetb = half;
@@ -622,8 +632,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
       MHD_Reconstruction::useCellAverageForInvalidDensity<NUMCOMPS>(
           a_point,a_cell,RHO00);
     },UPoint,a_USph);
-  a_WBar = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
-  a_W = forall<T,NUMCOMPS,MEM>(f_sphToPrim,UPoint);
+  a_WBar = forallOverwrite<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
+  a_W = forallOverwrite<T,NUMCOMPS,MEM>(f_sphToPrim,UPoint);
   const bool magneticTest =
       isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
   BoxData<T,1,MEM> deltaMeBar(a_WBar.box());
@@ -708,7 +718,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(
   // Get radial conserved variables.
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim_2O()");
    
-  a_W = forall<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
+  a_W = forallOverwrite<T,NUMCOMPS,MEM>(f_sphToPrim,a_USph);
   const bool magneticTest =
       isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
   BoxData<T,1,MEM> deltaMe(a_W.box());
