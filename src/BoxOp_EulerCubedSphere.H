@@ -4,6 +4,7 @@
 
 #include "Proto.H"
 #include "Inputs_Parsing.H"
+#include "MHD_StateConversion.H"
 #include "MHD_Reconstruction.H"
 
 #define NUMCOMPS 2*DIM+2

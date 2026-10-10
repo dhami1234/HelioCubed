@@ -61,6 +61,8 @@ private:
     double max_time; // Maximum simulation time in seconds
     double CFL;
     int limiter; // 1:4th order, 2: Minmod
+    // 0: preserve spherical symmetry (default); 1: interpolate Cartesian U.
+    int state_conversion = 0;
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
     int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard operator only)
     double entropy_fix_coeff = 0.3; // FullSphere entropy-fix coefficient; 0 disables it
@@ -165,6 +167,7 @@ public:
     static double get_max_time() {return getInstance().max_time;}
     static double get_CFL() {return getInstance().CFL;}
     static int get_limiter() {return getInstance().limiter;}
+    static int get_state_conversion() {return getInstance().state_conversion;}
     static int get_spatial_operator() {return getInstance().spatial_operator;}
     static int get_Riemann_solver_type() {return getInstance().Riemann_solver_type;}
     static double get_entropy_fix_coeff() {return getInstance().entropy_fix_coeff;}
@@ -244,6 +247,7 @@ public:
         args.add("max_time", max_time);
         args.add("CFL", CFL);
         args.add("limiter", limiter);
+        args.add("state_conversion", state_conversion);
         args.add("spatial_operator", spatial_operator);
         args.add("Riemann_solver_type", Riemann_solver_type);
         args.add("entropy_fix_coeff", entropy_fix_coeff);
@@ -309,6 +313,12 @@ public:
         args.add("CME_a1", CME_a1);
         args.add("CME_shift", CME_shift);
         args.parse(argc, argv);
+        if (state_conversion != 0 && state_conversion != 1) {
+            throw std::invalid_argument("state_conversion must be 0 (symmetry preserving) or 1 (Cartesian).");
+        }
+        if (state_conversion == 1 && CUBED_SPHERE_SHELL_RADIAL_COORD != 0) {
+            throw std::invalid_argument("Cartesian state_conversion requires radial coordinate 0.");
+        }
         if (viscosity_order != 3 && viscosity_order != 5) {
             throw std::invalid_argument("viscosity_order must be 3 or 5.");
         }
@@ -375,6 +385,7 @@ public:
         pout(0) << "max_time: " << max_time << endl;
         pout(0) << "CFL: " << CFL << endl;
         pout(0) << "limiter: " << limiter << endl;
+        pout(0) << "state_conversion: " << state_conversion << endl;
         pout(0) << "spatial_operator: " << spatial_operator << endl;
         pout(0) << "Riemann_solver_type: " << Riemann_solver_type << endl;
         pout(0) << "entropy_fix_coeff: " << entropy_fix_coeff << endl;

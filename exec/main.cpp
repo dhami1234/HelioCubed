@@ -199,11 +199,14 @@ int main(int argc, char *argv[])
       }
 
       MBInterpOp iop;
-      // The vector metric product and quotient need two interpolated angular
-      // layers beyond the reconstruction halo. MHDInterpOp reserves another
-      // two layers for interpolation sources. Match consToSphInterpEuler.
+      // Symmetry-preserving conversion needs two extra angular output layers;
+      // Cartesian conversion needs one. Interpolation sources need two more.
       Point interpSourceGhost = OP::ghost();
-      if (radialDir == 0) { interpSourceGhost += Point(0, 4, 4); }
+      if (radialDir == 0)
+      {
+        const int padding = ParseInputs::get_state_conversion() == 1 ? 3 : 4;
+        interpSourceGhost += Point(0,padding,padding);
+      }
       iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(), interpSourceGhost, 4);
 
       // Set input solution.
@@ -285,7 +288,7 @@ int main(int argc, char *argv[])
         HDF5Handler h5;
         MBLevelBoxData<double, NUMCOMPS, HOST> JUTemp(JU.layout(), OP::ghost());
         JU.copyTo(JUTemp);
-        CubedSphereShell::consToSphInterpEuler(JUTemp,iop,dVolrLev,4);
+        HelioCubed::consToSphInterpEuler(JUTemp,iop,dVolrLev,4);
         
         for (auto dit : JUTemp.layout())
           {

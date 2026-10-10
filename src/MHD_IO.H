@@ -1197,7 +1197,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   // pressure recovery from its cell averages is inaccurate in low-beta MHD.
   MBLevelBoxData<double, NUMCOMPS, HOST> USphEvolution(layout, OP::ghost());
   a_JU.copyTo(USphEvolution);
-  CubedSphereShell::consToSphInterpEuler(
+  HelioCubed::consToSphInterpEuler(
       USphEvolution,a_iop,dVolrLev,4);
 
   int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;

@@ -356,7 +356,7 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   auto& eulerOp = *geometry.op;
 
   // Transform JU -> USph.
-  CubedSphereShell::consToSphInterpEuler(a_UStage,a_iop,a_dVolrLev, 4, 0);
+  HelioCubed::consToSphInterpEuler(a_UStage,a_iop,a_dVolrLev, 4, 0);
 
   // initialize a_k to zero. 
   a_k.setVal(0.);

@@ -3,6 +3,10 @@
 #-inner_radius                   1.4964e12
 #-outer_radius                   1.61124e13
 #-radial_stretch                 1.5
+# State conversion: 0 = preserve spherical symmetry (default).
+# Set to 1 for JU -> Cartesian U -> exchange/interpolate -> cubed-spherical U.
+# Both use fourth-order averages; option 1 does not preserve radial symmetry exactly.
+-state_conversion                0
 ## See Inputs_Parsing.H file for supported input values
 -convTestType                    1
 -convergence_level              -1
