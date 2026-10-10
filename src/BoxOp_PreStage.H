@@ -159,27 +159,37 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   if (a_blockBox.low()[0] > bxGhosted.low()[0])
   {
 
-    // Calculate A_matrix
-    BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(bdryBoxLow,a_h,a_block,0);
-    BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bdryBoxLow,a_h,0);
-    forallInPlace([ ] PROTO_LAMBDA
-      (Var<T, DIM, MEM, DIM> &a_amat,
-      Var<T, 1, MEM> &a_deta)
-      {
-        double inv_deta = 1.0 / a_deta(0);
-        for (int i = 0; i < DIM; i++){
-          for (int j = 0; j < DIM; j++){
-            a_amat(i,j) = a_amat(i,j) * inv_deta;
+    BoxData<T,DIM,MEM,DIM> A_matrix_inv;
+    if (init_condition_type == 0)
+    {
+      // Calculate A_matrix
+      BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(bdryBoxLow,a_h,a_block,0);
+      BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bdryBoxLow,a_h,0);
+      forallInPlace([ ] PROTO_LAMBDA
+        (Var<T, DIM, MEM, DIM> &a_amat,
+        Var<T, 1, MEM> &a_deta)
+        {
+          double inv_deta = 1.0 / a_deta(0);
+          for (int i = 0; i < DIM; i++){
+            for (int j = 0; j < DIM; j++){
+              a_amat(i,j) = a_amat(i,j) * inv_deta;
+            }
           }
-        }
-      },amat,deta);
-    BoxData<T,DIM,MEM,DIM> A_matrix_inv(bdryBoxLow, T(0));
-    forallInPlace(f_matinv3by3,A_matrix_inv,amat);
+        },amat,deta);
+      A_matrix_inv.define(bdryBoxLow, T(0));
+      forallInPlace(f_matinv3by3,A_matrix_inv,amat);
+
+    }
 
     // Find X_cart
     double half = 0.5;
-    BoxData<double, DIM, HOST> XCart = forall_p<double,DIM,HOST>
-    (f_cubedSphereMap3,radius.box(),radius,dx,half,half,a_block);
+    BoxData<double, DIM, HOST> XCart;
+    if (init_condition_type == 0 || init_condition_type == 1)
+    {
+      // Only the inner radial ghost cells consume these coordinates.
+      XCart = forall_p<double,DIM,HOST>
+        (f_cubedSphereMap3,bdryBoxLow,radius,dx,half,half,a_block);
+    }
 
     if (init_condition_type == 2
         || init_condition_type == 4
@@ -373,7 +383,13 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    eulerOp[dit].PreStagePatch(USph_i,init_condition_type == 0 ? dstData[dit] : unusedBoundary,a_dVolrLev[dit],blockBox, a_time);
+    // Conversion requires the fixed volume metrics initialized before stepping.
+    // Only halos crossing a physical radial boundary need boundary work.
+    if (USph_i.box().low()[0] < blockBox.low()[0]
+        || USph_i.box().high()[0] > blockBox.high()[0])
+    {
+      eulerOp[dit].PreStagePatch(USph_i,init_condition_type == 0 ? dstData[dit] : unusedBoundary,a_dVolrLev[dit],blockBox, a_time);
+    }
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     const bool viscosityEnabled =

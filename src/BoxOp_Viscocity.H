@@ -1,9 +1,12 @@
 template<typename T, typename MAP, MemType MEM>
 inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
-    const State& a_W, uint a_dir) const
+    const State& a_W, uint a_dir, const Box& a_faceBox) const
 {
-  State face = Stencil<T>::CellToFace(a_dir)(a_W);
-  State left = (1.0*Shift(Point::Basis(a_dir,-1)))(a_W);
+  const auto interpolate = Stencil<T>::CellToFace(a_dir);
+  const Box faceBox = a_faceBox.empty() ? interpolate.range(a_W.box())
+      : (a_faceBox & interpolate.range(a_W.box()));
+  State face = interpolate(a_W,faceBox);
+  State left = (1.0*Shift(Point::Basis(a_dir,-1)))(a_W,faceBox);
   forallInPlace([] PROTO_LAMBDA(
       Var<T,NUMCOMPS,MEM>& a_face,
       const Var<T,NUMCOMPS,MEM>& a_left,
@@ -60,7 +63,8 @@ viscFlux(
     {
       PR_TIME("BoxOp_Euler::viscous operator");
       // high order linear viscosity.
-      State WFace = viscosityFaceState(W,dir);
+      const Box requiredFaces = a_Rhs.box().extrude(dir);
+      State WFace = viscosityFaceState(W,dir,requiredFaces);
       // BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       Stencil<double> D2 = 1.0*Shift(Point::Basis(dir)) + (-2.0)*Shift(Point::Zeros())
         + 1.0*Shift(Point::Basis(dir,-1));
@@ -120,11 +124,11 @@ viscFlux(
           fluxtemp.setToZero();
           if (viscosityOrder == 3)
             {
-              linearViscFlux = D3(a_USph, -1.0/96);
+              linearViscFlux = D3(a_USph, bxface, -1.0/96);
             }
           else
             {
-              linearViscFlux = D5(a_USph, 1.0/384); // more stable at short wavelengths
+              linearViscFlux = D5(a_USph, bxface, 1.0/384); // more stable at short wavelengths
             }
           primToMappedViscFlux(fluxtemp,linearViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
@@ -163,7 +167,7 @@ viscFlux(
         {
           State fluxtemp(bxface);
           fluxtemp.setToZero();
-          NLViscFlux = D1(a_USph);
+          NLViscFlux = D1(a_USph, bxface);
           primToMappedViscFlux(fluxtemp,NLViscFlux,WFace,adjDrDir,
                                deta_a,deta,A_matrix,ntrow,block,dir);
           BoxData<T,1,MEM> nlvisccoef(bxface);
@@ -385,17 +389,18 @@ NonLinearViscCoef(
   HDF5Handler h5;
   a_NLViscCoef.setToZero();
   // Compute divergence of the velocity.
-  BoxData<T,DIM,MEM> volflow(a_W.box());
+  // The divergence uses one neighboring cell around each requested face.
+  const Box flowBox = a_W.box() & a_NLViscCoef.box().grow(1);
   BoxData<T,1,MEM> jac(a_deta.box());
   a_deta.copyTo(jac);
   jac *= a_dVolr;
   BoxData<T,DIM,MEM> vel = slice<T,NUMCOMPS,DIM,MEM>(a_W,iVX);
   Array<BoxData<T,1,MEM>,DIM> dvoldn;
-  BoxData<T,1,MEM> deta0 = CubedSphereShell::detA<T,MEM>(a_W.box(),a_dxi[1],0);
+  BoxData<T,1,MEM> deta0 = CubedSphereShell::detA<T,MEM>(flowBox,a_dxi[1],0);
   for (int dir = 0; dir < DIM; dir++)
     {
       BoxData<T,1,MEM> veldir = slice(vel,dir);
-      BoxData<T,1,MEM> volflowdir(veldir.box());
+      BoxData<T,1,MEM> volflowdir(flowBox);
       veldir.copyTo(volflowdir);
       auto adjDrdir = slice(a_adjDr,dir);
       BoxData<T,1,MEM> adjDrdircen(a_adjDr.box());
@@ -444,7 +449,9 @@ NonLinearViscCoef(
   // cout << "divu = " << divu.absMax() << endl; 
     T alpha = .3;
     T beta = .3;
-    BoxData<T,1,MEM> csq = forall<T,1,MEM>(f_csq,a_W,a_A,m_gamma);
+    const Box speedBox = a_NLViscCoef.box().grow(a_dir,2)
+        & a_W.box() & a_A.box();
+    BoxData<T,1,MEM> csq = forall<T,1,MEM>(f_csq,speedBox,a_W,a_A,m_gamma);
     BoxData<T,1,MEM> csqshiftr = alias(csq,Point::Basis(a_dir));
     BoxData<T,1,MEM> csqshiftr2 = alias(csq,Point::Basis(a_dir,2));
     BoxData<T,1,MEM> csqshiftl = alias(csq,Point::Basis(a_dir,-1));

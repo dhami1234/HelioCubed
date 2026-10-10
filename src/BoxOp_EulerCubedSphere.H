@@ -595,7 +595,8 @@ public:
   // End new factorization of operator().
   // Viscosity starts here.
 
-  inline State viscosityFaceState(const State& a_W, uint a_dir) const;
+  inline State viscosityFaceState(const State& a_W, uint a_dir,
+                                 const Box& a_faceBox = Box()) const;
 
   inline void
   viscFlux(

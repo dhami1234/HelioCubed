@@ -226,6 +226,22 @@ PROTO_KERNEL_END(Flat_calcF, Flat_calc)
 
 template<typename T,MemType MEM>
 PROTO_KERNEL_START
+void Flat_pair_calcF(Var<T,2*(NUMCOMPS),MEM>& output,
+                    const Var<T,NUMCOMPS,MEM>& leftIn,
+                    const Var<T,NUMCOMPS,MEM>& rightIn,
+                    const Var<T,NUMCOMPS,MEM>& average,
+                    const Var<double,1>& eta)
+{
+  for (int i=0; i<NUMCOMPS; ++i)
+  {
+    output(i) = eta(0)*leftIn(i) + (1. - eta(0))*average(i);
+    output(i+NUMCOMPS) = eta(0)*rightIn(i) + (1. - eta(0))*average(i);
+  }
+}
+PROTO_KERNEL_END(Flat_pair_calcF, Flat_pair_calc)
+
+template<typename T,MemType MEM>
+PROTO_KERNEL_START
 void compare_calcF(const Point& a_pt,
         Var<T,NUMCOMPS,MEM>& a_W_diff,
                 const Var<T,NUMCOMPS,MEM>& a_W_ave_R_limited,
@@ -256,8 +272,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
                   const double a_dz) const
 {
   PR_TIMERS("limiters_4O");
-  static Stencil<double> m_copy;
-  m_copy = 1.0*Shift(Point::Zeros());
+  static const Stencil<double> m_copy = 1.0*Shift(Point::Zeros());
   //Limiter Starts here
   State W_ave_L_ahead = alias(a_W_ave_L,Point::Basis(a_d)*(-1));
   State W_ave_L_ahead_limited = alias(W_ave_L_ahead);  // This works, but won't be able to compare diffrences as if W_ave_L_ahead_limited changes, so does W_ave_L_ahead
@@ -276,8 +291,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
     State del2_W_c_ahead = alias(del2_W_c,Point::Basis(a_d)*(-1));
     State del2_W_c_behind = alias(del2_W_c,Point::Basis(a_d)*(1));
     State del3_W = forall<double,NUMCOMPS,MEM>( del3_W_calc, del2_W_c, del2_W_c_behind);
-    State del3_W_L = forall<double,NUMCOMPS,MEM>( del3_W_calc, del2_W_c, del2_W_c_behind);
-    State del3_W_R = forall<double,NUMCOMPS,MEM>( del3_W_calc, del2_W_c_ahead, del2_W_c);
+    // These third differences are already available at the same or shifted cells.
+    State del3_W_L = alias(del3_W);
+    State del3_W_R = alias(del3_W,Point::Basis(a_d)*(-1));
     State del3_W_behind = alias(del3_W,Point::Basis(a_d)*(1));
     State del3_W_ahead = alias(del3_W,Point::Basis(a_d)*(-1));
     State del3_W_ahead2 = alias(del3_W,Point::Basis(a_d)*(-2));
@@ -316,9 +332,23 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
       }
       eta_old = m_copy(eta);
     }
-    State W_ave_L_ahead_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_L_ahead_limited, a_W_ave, eta, a_d);
-    
-    a_W_ave_R_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_R_limited, a_W_ave, eta, a_d);
+    const Box leftBox = W_ave_L_ahead_limited.box() & a_W_ave.box() & eta.box();
+    const Box rightBox = W_ave_R_limited.box() & a_W_ave.box() & eta.box();
+    State W_ave_L_ahead_lim_flat;
+    if (leftBox == rightBox)
+    {
+      // Share the cell average and flattening factor; slices retain the allocation.
+      auto paired = forall<double,2*(NUMCOMPS),MEM>(Flat_pair_calc,
+          W_ave_L_ahead_limited, W_ave_R_limited, a_W_ave, eta);
+      W_ave_L_ahead_lim_flat = slice<double,2*(NUMCOMPS),NUMCOMPS,MEM>(paired,0);
+      a_W_ave_R_lim_flat = slice<double,2*(NUMCOMPS),NUMCOMPS,MEM>(paired,NUMCOMPS);
+    }
+    else
+    {
+      // Preserve both output boxes when the face inputs have different coverage.
+      W_ave_L_ahead_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_L_ahead_limited, a_W_ave, eta, a_d);
+      a_W_ave_R_lim_flat = forall<double,NUMCOMPS,MEM>(Flat_calc, W_ave_R_limited, a_W_ave, eta, a_d);
+    }
     a_W_ave_L_lim_flat = alias(W_ave_L_ahead_lim_flat,Point::Basis(a_d)*(1));
     //Slope flattening ends here
   } else {
@@ -397,8 +427,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_minmod
   PR_TIMERS("BoxOp_EulerCubedSphere::Limiters_minmod()");
   static Stencil<double> m_difference;
   m_difference = -1.0*Shift(Point::Zeros()) + 1.0*Shift(Point::Basis(a_d)); 
-  static Stencil<double> m_copy;
-  m_copy = 1.0*Shift(Point::Zeros());
+  static const Stencil<double> m_copy = 1.0*Shift(Point::Zeros());
 
   State W_low_ahead = alias(a_W,Point::Basis(a_d)*(-1));
   State W_low_ahead_limited = m_copy(W_low_ahead);

@@ -148,7 +148,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       State WFace_L = Stencil<T>::CellToFace(dir)(W);   
       State WFace_R(WFace_L.box());
       WFace_L.copyTo(WFace_R);
-      State WFaceBar = Stencil<T>::CellToFace(dir,Side::Lo,2)(WBar);    
+      // Two transverse layers feed the two metric products; one more
+      // supplies the face convolution/deconvolution. No normal halo is used.
+      const Box faceBarBox = a_fluxes[dir].box().grow(
+          3*(Point::Ones()-Point::Basis(dir)));
+      State WFaceBar = Stencil<T>::CellToFace(dir,Side::Lo,2)(WBar,faceBarBox);
       
       //Required mapping variables.
       Box bxface = WFace_L.box().grow(-2);  
@@ -275,7 +279,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir,
           &facePoint_R,&radialPoint,&energy_R,&commonFluxBar);
       Box bxface0 = a_fluxes[dir].box();
-      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss;
+      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir,fluxdir_Diss;
       
       // det(A) A is shared by both face states and both vector fluxes.
       // Keep its differences within the directional scratch lifetime.
@@ -302,6 +306,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         primToMappedRusanovFlux(fluxdir_Diss,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir,&facePoint_L,&facePoint_R,&radialPoint,&energy_L,&energy_R);
       }
       
+      // Write directly into the caller-owned flux array when every output
+      // cell is covered. It outlives the directional scratch arena.
+      const bool fullFlux = MEM == HOST && (fluxdir_L.box() & fluxdir_R.box() & fluxdir_Diss.box()).containsBox(bxface0);
+      if (fullFlux) { fluxdir = alias(a_fluxes[dir]); }
+      else { fluxdir.define(bxface0); }
       forallInPlace([ ] PROTO_LAMBDA
         (Var<T,NUMCOMPS,MEM>& a_fluxout,
           const Var<T,NUMCOMPS,MEM>& a_fluxin_L,
@@ -315,21 +324,34 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         },fluxdir,fluxdir_L,fluxdir_R,fluxdir_Diss);
 
       // Save fluxes, update RHS.
-      fluxdir.copyTo(a_fluxes[dir]);
-      BoxData<T,NUMCOMPS,MEM> rhsIncr;
+      if (!fullFlux) { fluxdir.copyTo(a_fluxes[dir]); }
       T dxInv = -a_scale/(this->dx()[dir]);
-
-      rhsIncr = Stencil<T>::FluxDivergence(dir)(fluxdir,dxInv);
-
-      forallInPlace([ ] PROTO_LAMBDA
-        (Var<T,NUMCOMPS,MEM>& a_rhs,
-          const Var<T,NUMCOMPS,MEM>& a_rhsIncr)
-        {  
-          for (int comp = 0; comp < NUMCOMPS;comp++)
-          {                  
-            a_rhs(comp) += a_rhsIncr(comp);
+      if constexpr (MEM == HOST)
+      {
+        auto ahead = alias(fluxdir,Point::Basis(dir,-1));
+        const T lowCoefficient = T(-1)*dxInv;
+        const T highCoefficient = T(1)*dxInv;
+        const Box region = a_Rhs.box() & fluxdir.box() & ahead.box();
+        for (int c=0; c<NUMCOMPS; ++c)
+        for (auto p : region.flatten(0))
+        {
+          T* __restrict rhs = a_Rhs.data(p,c);
+          const T* lo = fluxdir.data(p,c);
+          const T* hi = ahead.data(p,c);
+          for (int i=0; i<region.size(0); ++i)
+          {
+            T increment = 0;
+            increment += lowCoefficient*lo[i];
+            increment += highCoefficient*hi[i];
+            rhs[i] += increment;
           }
-        },a_Rhs, rhsIncr);
+        }
+      }
+      else
+      {
+        State rhsIncr = Stencil<T>::FluxDivergence(dir)(fluxdir,dxInv);
+        a_Rhs += rhsIncr;
+      }
 
     }
 
@@ -853,9 +875,14 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
     fluxes[0].define(k_i.box().extrude(0));
     fluxes[1].define(k_i.box().extrude(1));
     fluxes[2].define(k_i.box().extrude(2));    
-    fluxes[0].setToZero();
-    fluxes[1].setToZero();
-    fluxes[2].setToZero();
+    // The standard operator overwrites or copies every flux cell. Preserve
+    // the existing initialization for the separate Berta operator.
+    if (MEM != HOST || ParseInputs::get_spatial_operator() == 2)
+    {
+      fluxes[0].setToZero();
+      fluxes[1].setToZero();
+      fluxes[2].setToZero();
+    }
     unsigned int block = layout.block(dit);
     eulerOp[dit](k_i, fluxes, USph_i, 1.0);
     auto dx = eulerOp[dit].dx();
