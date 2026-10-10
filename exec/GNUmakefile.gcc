@@ -15,6 +15,12 @@ CXXOPTFLAGS=-O3
 # Requires the HDF5 assertion fixes in both Proto and MHDReader.
 # For assertion-enabled debugging, remove -DNDEBUG and do a clean rebuild.
 CXXOPTFLAGS+= -DNDEBUG
+
+# Uncomment to omit HOST-to-HOST Copier packing barriers (default: enabled).
+# GPU synchronization and MPI completion waits are retained.
+# Rebuild all objects after changing this flag (make -B or a clean rebuild).
+CXXOPTFLAGS += -DPR_DISABLE_HOST_COPIER_BARRIERS
+
 CXXOPTFLAGS+=-DmemoryFootPrint
 #CXXOPTFLAGS+=-DPR_AMR
 CXXOPTFLAGS+=-DPR_MMB
