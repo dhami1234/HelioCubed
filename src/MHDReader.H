@@ -230,7 +230,6 @@ public:
 		if (num_frames == 1 || low_frame_now >= num_frames - 1)
 		{
 
-			BoxData<double, 8, HOST> data_a(bx2);
 			// Rotate the data
 			double carr_rot_time = 25.38 * 24 * 60 * 60; // Seconds
 			// We should use sidereal time for this. 25.38 days. That's the rotation time from a fixed location.
@@ -273,8 +272,6 @@ public:
 									 "MHD_Set_Boundary_Values::interpolate_h5_BC | Error: next BC frame not available. %i >= %lu", low_frame, num_frames);
 			double needed_fraction = (time_temp - (low_frame * h5_cadence * 3600)) / (h5_cadence * 3600);
 
-			BoxData<double, 8, HOST> data_a(bx2);
-			BoxData<double, 8, HOST> data_b(bx2);
                      
 			// Rotate the data
 			double carr_rot_time = 25.38 * 24 * 60 * 60; // Seconds

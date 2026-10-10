@@ -39,6 +39,11 @@ CXXOPTFLAGS+= -DNDEBUG
 # Rebuild all objects after changing this flag (make -B or a clean rebuild).
 CXXOPTFLAGS += -DPR_DISABLE_HOST_COPIER_BARRIERS
 
+# Use temporary HOST cubed-sphere conversion storage to reduce peak memory.
+# Comment out to retain conversion buffers/plans for faster iterations.
+# Rebuild all objects after changing this flag (make -B or a clean rebuild).
+CXXOPTFLAGS += -DPR_DISABLE_CUBED_SPHERE_CONVERSION_CACHE
+
 CXXOPTFLAGS+=-DmemoryFootPrint
 #CXXOPTFLAGS+=-DPR_AMR
 CXXOPTFLAGS+= -DPR_DISABLE_INIT_CHECKS

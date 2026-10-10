@@ -173,8 +173,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
           }
         }
       },amat,deta);
-    BoxData<T,DIM,MEM,DIM> A_matrix_inv(bdryBoxLow);
-    A_matrix_inv.setToZero();
+    BoxData<T,DIM,MEM,DIM> A_matrix_inv(bdryBoxLow, T(0));
     forallInPlace(f_matinv3by3,A_matrix_inv,amat);
 
     // Find X_cart
@@ -249,8 +248,6 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       // Convert from cartesian to cubed-spherical Primitive variables w=A_inv*u
       BoxData<T,DIM,MEM> V_sph = slice<T,NUMCOMPS,DIM,MEM>(a_USphStage,iVX);
       BoxData<T,DIM,MEM> V_cart = slice<T,NUMCOMPS,DIM,MEM>(USph_stage_temp,iVX);
-      BoxData<T,DIM,MEM> V_cart_temp(V_cart.box());
-      V_cart.copyTo(V_cart_temp);
       BoxData<T,DIM,MEM> tmpV(USph_stage_temp.box());
       T one = 1.0;  
       forallInPlace(f_matVecProd,tmpV,A_matrix_inv,V_cart,one);
@@ -258,8 +255,6 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
 
       BoxData<T,DIM,MEM> B_sph = slice<T,NUMCOMPS,DIM,MEM>(a_USphStage,iBX);
       BoxData<T,DIM,MEM> B_cart = slice<T,NUMCOMPS,DIM,MEM>(USph_stage_temp,iBX);
-      BoxData<T,DIM,MEM> B_cart_temp(B_cart.box());
-      B_cart.copyTo(B_cart_temp);
       BoxData<T,DIM,MEM> tmpB(USph_stage_temp.box());
       forallInPlace(f_matVecProd,tmpB,A_matrix_inv,B_cart,one);
       tmpB.copyTo(B_sph);
@@ -362,7 +357,12 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   BoxData<T,NUMCOMPS,MEM> unusedBoundary;
   if (init_condition_type == 0)
   {
-    dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+    // The BC interpolation writes patch storage directly; this temporary is
+    // never exchanged and needs no interblock boundary buffers.
+    Array<Point,DIM+1> bcGhost;
+    bcGhost.fill(Point::Zeros());
+    bcGhost[0] = Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord);
+    dstData.define(layout, bcGhost);
     BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time);
   }
 
@@ -386,12 +386,9 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         Box blockBox = layout.getBlock(block).domain().box();
         // auto mbdata = a_blockreg.bounds(dit);
         Array<BoxData<double, NUMCOMPS>, DIM> fluxes;
-        fluxes[0].define(rhs_i.box().extrude(0));
-        fluxes[0].setToZero();
-        fluxes[1].define(rhs_i.box().extrude(1));
-        fluxes[1].setToZero();
-        fluxes[2].define(rhs_i.box().extrude(2));
-        fluxes[2].setToZero();
+        fluxes[0].define(rhs_i.box().extrude(0), 0.0);
+        fluxes[1].define(rhs_i.box().extrude(1), 0.0);
+        fluxes[2].define(rhs_i.box().extrude(2), 0.0);
         if (viscosityEnabled) eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i,a_dt);
         if (ParseInputs::get_Sun_gravity() == 1) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
         // viscFlux updates the state with +div(Fvisc). The register and

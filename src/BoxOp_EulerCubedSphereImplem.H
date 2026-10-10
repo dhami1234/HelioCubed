@@ -135,14 +135,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   T half = 0.5;
   T dxiR = this->dx()[0];
   
-  BoxData<T,1,MEM> deta0(bx);
-  BoxData<T,DIM,MEM> ntrow0(bx);
   BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
-  BoxData<T,1,MEM>speedMax(this->box());
-  speedMax.setVal(0.0);
 
-  BoxData<T,1,MEM> minusJDivB(a_Rhs.box());
-  minusJDivB.setVal(0.0);
+  BoxData<T,1,MEM> minusJDivB(a_Rhs.box(), T(0));
   
   for (int dir = 0; dir < DIM; dir++)
     {
@@ -166,11 +161,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);  
       BoxData<T,DIM,MEM,DIM> deta_a = CubedSphereShell::detA_A<T,MEM>(bxface,dxiPerp,a_block,dir);
       BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir); 
-      if (dir ==0) deta.copyTo(deta0);
       Box bx = W.box();
       Box bxdir = bx.extrude(Point::Basis(dir));
       BoxData<T,DIM,MEM> ntrow = CubedSphereShell::adjA<T,MEM>(bxdir,dxiPerp,a_block,dir);
-      if (dir == 0) ntrow.copyTo(ntrow0);
       Array<Array<uint,DIM>,6> permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
       Array<Array<int,DIM>,6> sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}}; 
       Point high = bx.high();
@@ -282,7 +275,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       primToFlux(physFlux_R,WFace_R,WFaceBar,adjDrDir,a_block,dir,
           &facePoint_R,&radialPoint,&energy_R,&commonFluxBar);
       Box bxface0 = a_fluxes[dir].box();
-      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss(bxface);
+      State fluxdir_L(bxface),fluxdir_R(bxface),fluxdir(bxface0),fluxdir_Diss;
       
       // det(A) A is shared by both face states and both vector fluxes.
       // Keep its differences within the directional scratch lifetime.
@@ -305,6 +298,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       }
       else
       {
+        fluxdir_Diss.define(bxface);
         primToMappedRusanovFlux(fluxdir_Diss,WFace_L,WFaceBar,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,ntrow,a_block,dir,&facePoint_L,&facePoint_R,&radialPoint,&energy_L,&energy_R);
       }
       
@@ -355,7 +349,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
   }
 
-  // if (ParseInputs::get_Sun_gravity() == 1) Gravity(a_Rhs, W, radius, A_matrix0, deta0, dVolr);
     
 }
 // primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir);

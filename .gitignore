@@ -34,3 +34,6 @@ myjob.e*
 *.html
 *.csv
 visitlog.py
+
+# Local investigation and regression helpers.
+/local_tests/

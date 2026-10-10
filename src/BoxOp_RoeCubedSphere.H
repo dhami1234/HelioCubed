@@ -66,6 +66,11 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
   const auto& radialAreaPoint = *a_radialPoint;
 
   const int direction = a_dir;
+  // Convolution and the face products need one transverse layer around the
+  // requested flux. Avoid solving the Riemann problem in unused outer layers.
+  const Box available = left.box() & right.box() & a_A.box() & radialAreaPoint.box();
+  const Box needed = a_fluxdir.box().grow(Point::Ones()-Point::Basis(a_dir));
+  const Box pointBox = a_fluxdir.box().empty() ? available : (needed & available);
   const double entropyFix = ParseInputs::get_entropy_fix_coeff();
   State dissPoint = forall<T,NUMCOMPS,MEM>(
       [] PROTO_LAMBDA(
@@ -88,7 +93,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
         MHD_Riemann_Solvers::factoredRoe8WaveDissipation(
             diss,wL,wR,matrix,radialArea(0),dir,gamma,entropyFix,RHO00);
         for (int c = 0; c < 8; ++c) out(c) = diss[c];
-      },left,right,a_A,radialAreaPoint,direction,m_gamma,entropyFix);
+      },pointBox,left,right,a_A,radialAreaPoint,direction,m_gamma,entropyFix);
 
   // Average the coefficients before applying the angular metric averages.
   // For radial hydro flow these coefficients are constant across each

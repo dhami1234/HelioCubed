@@ -285,10 +285,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Limiters_4O(BoxData<double,NUMCOMPS>& a_W_ave
                       a_W_ave,W_ave_ahead, W_ave_ahead2, W_ave_behind, W_ave_behind2, del2_W_c, del2_W_c_ahead, del2_W_c_behind, del3_W,
                       del3_W_L, del3_W_R, del3_W_behind, del3_W_ahead, del3_W_ahead2, a_d, a_dx, a_dy, a_dz);
   }
-  Box dbx0 = W_ave_L_ahead_limited.box();
-  Box dbx1 = W_ave_L_ahead.box();
-  State W_diff(dbx0);
-  //forallInPlace_p(compare_calc, W_diff, W_ave_R_limited, a_W_ave_R);
   // Slope flattening starts here
   if (slope_flattening_apply == 1) {
     PR_TIMERS("flattening");
