@@ -342,6 +342,9 @@ public:
   inline static constexpr int order() { return 4; }
 
   // Initialization
+  inline void solarWindPrimitive(State& a_W, const State& a_BC,
+      const Scalar& a_radius, T a_gamma, uint a_block) const;
+
   inline void initialize( State& a_W,
                         const State& a_BC,
                         const Scalar& a_radius,
@@ -458,7 +461,8 @@ public:
                          State& a_WBar,
                          const State& a_USph,
                          uint a_block,
-                         bool a_restoreTestBackground = true) const;
+                         bool a_restoreTestBackground = true,
+                         BoxData<T,1,MEM>* a_magneticBar = nullptr) const;
 
   // Implemented.
   inline void sphToPrim_2O(
@@ -501,12 +505,14 @@ public:
   inline BoxData<T,1,MEM> kineticEnergyW(
                                          const State& a_WPoint,
                                          uint a_block,
-                                         uint a_centering) const;
+                                         uint a_centering,
+                                         const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const;
 
   inline BoxData<T,1,MEM> magneticEnergyW(
                                          const State& a_WPoint,
                                          uint a_block,
-                                         uint a_centering) const;
+                                         uint a_centering,
+                                         const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const;
 
   inline BoxData<T,1,MEM> vdotbW(
                                 const State& a_WPoint,
@@ -550,7 +556,9 @@ public:
                               const State* a_point = nullptr,
                               const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr,
                               const BoxData<T,1,MEM>* a_magneticPoint = nullptr,
-                              const BoxData<T,1,MEM>* a_magneticBar = nullptr) const;
+                              const BoxData<T,1,MEM>* a_magneticBar = nullptr,
+                              const BoxData<T,1,MEM>* a_pressureBar = nullptr,
+                              const BoxData<T,1,MEM>* a_radialPressureBar = nullptr) const;
 
   inline void primToMappedRusanovFlux(
                               State& a_fluxdir,
@@ -592,7 +600,8 @@ public:
                               uint a_dir,
                               const State* a_leftPoint = nullptr,
                               const State* a_rightPoint = nullptr,
-                              const BoxData<T,1,MEM>* a_radialPoint = nullptr) const;
+                              const BoxData<T,1,MEM>* a_radialPoint = nullptr,
+                              const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr) const;
 
   // End new factorization of operator().
   // Viscosity starts here.

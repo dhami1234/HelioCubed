@@ -249,7 +249,10 @@ inline ACCEL_DECORATION bool roe8WaveDissipation(
       eigen7 = U + as;
       eigen8 = U - as;
 
-      eigmax = fabs( U ) + fabs( V ) + fabs( W ) + af;
+      // The normal eigensystem has spectral radius |U|+af. Tangential
+      // advection must not strengthen its entropy correction: doing so makes
+      // magnetic diffusion depend on the tangential frame and wind speed.
+      eigmax = fabs( U ) + af;
 
       del    = del2*eigmax;
       dell2  = del*del;

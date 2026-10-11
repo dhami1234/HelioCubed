@@ -196,39 +196,19 @@ BoxData<T,1,MEM>
 BoxOp_EulerCubedSphere<T,MAP,MEM>::kineticEnergyW(
                                               const State& a_WPoint, 
                                               uint a_block,
-                                              uint a_centering) const
+                                              uint a_centering,
+                                              const BoxData<T,DIM,MEM,DIM>* a_basis) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::kineticEnergyW()");
-  Array<Array<uint,DIM>,6>
-     permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
-  Array<Array<int,DIM>,6>
-    sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};  
-  // Compute fluxes at face centers.
-  
-  // Compute Cartesian UPoint.
-  T dxiPerp = this->dx()[1];
-  Box bx = a_WPoint.box();
-  Point high = bx.high();
-  Point low = bx.low();
-  high[0] = low[0];
-  Box bx0(low,high);
-  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
-  BoxData<T,DIM,MEM,DIM> Amat;
-  Amat.defineForOverwrite(bx);
-  T half = .5;
-  T offseta = half;
-  T offsetb = half;
-  if (a_centering == 1)
-    {
-      offseta = 0.0;
-    }
-  if (a_centering == 2)
-    {
-      offsetb = 0.0;
-    }
-  forallInPlace_p(f_Amatrix,bx0,Amat,permute[a_block],sign[a_block],
-                  dxiPerp,offseta,offsetb);
-  spreadSlice(Amat);
+  BoxData<T,DIM,MEM,DIM> ownedBasis;
+  if (!a_basis)
+  {
+    ownedBasis = pointwiseSphericalBasis(a_WPoint.box(),a_block,a_centering);
+    a_basis = &ownedBasis;
+  }
+  PROTO_ASSERT(a_basis->box().containsBox(a_WPoint.box()),
+      "Energy calculation requires complete basis coverage");
+  const auto& Amat = *a_basis;
   BoxData<T,1,MEM> ke =
     forallOverwrite<T,1,MEM>([ ] PROTO_LAMBDA
                     (                
@@ -269,39 +249,19 @@ BoxData<T,1,MEM>
 BoxOp_EulerCubedSphere<T,MAP,MEM>::magneticEnergyW(
                                               const State& a_WPoint, 
                                               uint a_block,
-                                              uint a_centering) const
+                                              uint a_centering,
+                                              const BoxData<T,DIM,MEM,DIM>* a_basis) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::magneticEnergyW()");
-  Array<Array<uint,DIM>,6>
-     permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
-  Array<Array<int,DIM>,6>
-    sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};  
-  // Compute fluxes at face centers.
-  
-  // Compute Cartesian UPoint.
-  T dxiPerp = this->dx()[1];
-  Box bx = a_WPoint.box();
-  Point high = bx.high();
-  Point low = bx.low();
-  high[0] = low[0];
-  Box bx0(low,high);
-  // f_Amatrix assigns the low radial plane; spreadSlice fills the rest.
-  BoxData<T,DIM,MEM,DIM> Amat;
-  Amat.defineForOverwrite(bx);
-  T half = .5;
-  T offseta = half;
-  T offsetb = half;
-  if (a_centering == 1)
-    {
-      offseta = 0.0;
-    }
-  if (a_centering == 2)
-    {
-      offsetb = 0.0;
-    }
-  forallInPlace_p(f_Amatrix,bx0,Amat,permute[a_block],sign[a_block],
-                  dxiPerp,offseta,offsetb);
-  spreadSlice(Amat);
+  BoxData<T,DIM,MEM,DIM> ownedBasis;
+  if (!a_basis)
+  {
+    ownedBasis = pointwiseSphericalBasis(a_WPoint.box(),a_block,a_centering);
+    a_basis = &ownedBasis;
+  }
+  PROTO_ASSERT(a_basis->box().containsBox(a_WPoint.box()),
+      "Energy calculation requires complete basis coverage");
+  const auto& Amat = *a_basis;
   BoxData<T,1,MEM> me =
     forallOverwrite<T,1,MEM>([ ] PROTO_LAMBDA
                     (                
@@ -617,7 +577,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
                                           State& a_WBar,
                                           const State& a_USph,
                                           uint a_block,
-                                          bool a_restoreTestBackground) const
+                                          bool a_restoreTestBackground,
+                                          BoxData<T,1,MEM>* a_magneticBar) const
 {
   // Get radial conserved variables.
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim()");
@@ -651,10 +612,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
     }
   }
   // Compute pressure.
-  BoxData<T,1,MEM> keBar = kineticEnergyW(a_WBar,a_block,-1);
-  BoxData<T,1,MEM> kePoint = kineticEnergyW(a_W,a_block,-1);
-  BoxData<T,1,MEM> meBar = magneticEnergyW(a_WBar,a_block,-1);
-  BoxData<T,1,MEM> mePoint = magneticEnergyW(a_W,a_block,-1);
+  auto basis = pointwiseSphericalBasis(a_WBar.box()+a_W.box(),a_block,-1);
+  BoxData<T,1,MEM> keBar = kineticEnergyW(a_WBar,a_block,-1,&basis);
+  BoxData<T,1,MEM> kePoint = kineticEnergyW(a_W,a_block,-1,&basis);
+  BoxData<T,1,MEM> meBar = magneticEnergyW(a_WBar,a_block,-1,&basis);
+  BoxData<T,1,MEM> mePoint = magneticEnergyW(a_W,a_block,-1,&basis);
     forallInPlace([ ] PROTO_LAMBDA
                 (Var<T,NUMCOMPS>& a_w,
                  const Var<T,1,MEM>& a_ke,
@@ -702,6 +664,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
     },a_W,a_WBar);
   T coef = 1.0/24.0;
   a_W += Stencil<T>::Laplacian()(a_WBar,coef);
+  // Pressure recovery leaves WBar's magnetic components unchanged.
+  if (a_magneticBar) { *a_magneticBar = std::move(meBar); }
   
 }
 

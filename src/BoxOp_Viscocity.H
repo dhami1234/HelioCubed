@@ -1,3 +1,5 @@
+#include "MHD_WaveSpeeds.H"
+
 template<typename T, typename MAP, MemType MEM>
 inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
     const State& a_W, uint a_dir, const Box& a_faceBox) const
@@ -288,78 +290,17 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::LinearViscCoef(
                                                   uint a_dir) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::LinearViscCoef()");
-  const int scaleViscosityWithR =
-    ParseInputs::get_scale_viscosity_with_r();
-  forallInPlace([ ] PROTO_LAMBDA
-                (Var<T,1,MEM>& a_linfluxcoef,
-                 const Var<T,NUMCOMPS>& a_wface,
-                 const Var<T,DIM,MEM>& a_ntrow,
-                 const Var<T,DIM,MEM,DIM>& a_Amatrix,
-                 const Var<T,1,MEM>& a_deta,
-                 T a_gamma,
-                 int a_d,
-                 int a_scaleViscosityWithR)
-                {        
-                  double rho = a_wface(iRHO);
-                  double w_d = a_wface(iVX+a_d);
-                  double B_x = a_wface(iBX);
-                  double B_y = a_wface(iBY);
-                  double B_z = a_wface(iBZ);
-                  double p = a_wface(iP);
-                  if (p < 0.0) p = 0.0;
-                  rho = max(rho,RHO00);
-                  vecType bSph;
-                  vecType bCart;
-              
-                  bSph[0] = B_x;       
-                  bSph[1] = B_y;
-                  bSph[2] = B_z;
-                  bCart[0] = 0.;       
-                  bCart[1] = 0.;
-                  bCart[2] = 0.;
-                  double B_n = 0.;
-                  double B_mag = 0.;
-                  for (int dir0 = 0; dir0 < DIM; dir0++)
-                    {
-                      for (int dir1 = 0; dir1 < DIM; dir1++)
-                        {
-                          bCart[dir0] += a_Amatrix(dir0,dir1)*bSph[dir1];
-                        }
-                        B_n += a_Amatrix(dir0,0)*bCart[dir0];
-                        B_mag += bCart[dir0]*bCart[dir0];
-                    }
-                  B_mag = sqrt(B_mag);
-    
-                  double ce = sqrt(a_gamma*p/rho);
-                  double a = ce*ce + B_mag*B_mag/4.0/M_PI/rho;
-                  double b = abs(B_n)*ce/sqrt(M_PI*rho);
-                  double af = 0.5*(sqrt(a + b) + sqrt(a - b));
-                  double A_d_mag = sqrt(a_Amatrix(0,a_d)*a_Amatrix(0,a_d) + a_Amatrix(1,a_d)*a_Amatrix(1,a_d) + a_Amatrix(2,a_d)*a_Amatrix(2,a_d));
-                  double adjA_d_mag = 0.;
-                  for (int dir =0; dir < DIM; dir++)
-                    {
-                      adjA_d_mag += a_ntrow(dir)*a_ntrow(dir);
-                    }
-                  adjA_d_mag = sqrt(adjA_d_mag);
-                  if (a_scaleViscosityWithR == 1)
-                    {
-                      // adjA and detA are independently averaged geometric
-                      // quantities. Their ratio is not exactly angle-independent
-                      // on radial cubed-sphere faces, so this radius-scaled form
-                      // can seed small non-radial velocities in a radial flow.
-                      a_linfluxcoef(0) =
-                        abs(w_d) + af*adjA_d_mag/a_deta(0);
-                    }
-                  else
-                    {
-                      // Historical formulation. In the radial direction,
-                      // |A(:,0)| = 1, which preserves a spherical viscosity
-                      // coefficient to roundoff.
-                      a_linfluxcoef(0) = abs(w_d) + af*A_d_mag;
-                    }
-                    
-                },a_LNViscCoef,a_WFace,a_ntrow,a_A,a_detA,m_gamma,a_dir,
-                scaleViscosityWithR);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,1,MEM>& coefficient,
+      const Var<T,NUMCOMPS,MEM>& state,
+      const Var<T,DIM,MEM,DIM>& basis, T gamma, int dir)
+    {
+      double w[8], A[3][3];
+      for (int c = 0; c < 8; ++c) w[c] = state(c);
+      for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) A[i][j] = basis(i,j);
+      coefficient(0) = MHD_Riemann_Solvers::mappedFastSpeed(w,A,dir,gamma,RHO00);
+    },a_LNViscCoef,a_WFace,a_A,m_gamma,a_dir);
 }
 template<
   typename T,
@@ -483,12 +424,10 @@ NonLinearViscCoef(
                       {
                         lambda /= a_adjDrDir(0);
                       }
-                    lambda *= a_dx*abs(a_divu(0));
-                    a_coef(0) = a_alpha*lambda*
-                    min(1.,lambda*lambda/
-                        (min(a_csql(0),min(a_csqr(0),
-                                           min(a_csql2(0),a_csqr2(0))))
-                         *a_beta));
+                    const T speedSquared = min(a_csql(0),min(a_csqr(0),
+                        min(a_csql2(0),a_csqr2(0))));
+                    a_coef(0) = MHD_Riemann_Solvers::compressionViscosity(
+                        lambda*a_dx,a_divu(0),speedSquared,a_alpha,a_beta);
                   },a_NLViscCoef,a_ntrow,
                   jac,DrDir,adjDrDir,divu,csq,csqshiftr,csqshiftl,csqshiftr2,
                   a_dxi[a_dir],a_dir,alpha,beta);

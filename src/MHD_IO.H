@@ -1207,10 +1207,10 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   BoxData<double,NUMCOMPS,HOST> unusedBoundary;
   if (init_condition_type == 0)
   {
-    dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
-                                             + NGHOST*Point::Basis(phiCoord));
+    dstData.define(layout, Point::Basis(rCoord) + (NGHOST+1)*Point::Basis(thetaCoord)
+                                             + (NGHOST+1)*Point::Basis(phiCoord));
     dstData.setVal(0.0);
-    BC_global.BoxData_to_BC<double,HOST>(dstData,map,time);
+    BC_global.BoxData_to_BC<double,HOST>(dstData,map,time,NGHOST+1);
   }
 
   for (auto dit : layout)

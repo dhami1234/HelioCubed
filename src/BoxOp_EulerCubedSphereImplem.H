@@ -102,7 +102,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   // single face representation of the analytic background is added below so
   // that the dissipative jump cannot contain two independently reconstructed
   // copies of the same constant Cartesian field.
-  sphToPrim(W,WBar,a_USph,a_block,!magneticTest);
+  BoxData<T,1,MEM> me;
+  sphToPrim(W,WBar,a_USph,a_block,!magneticTest,magneticTest ? nullptr : &me);
 
   State testBackgroundW;
   State testBackgroundWBar;
@@ -123,8 +124,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     WBarForLimiter += testBackgroundWBar;
   }
 
-  BoxData<T,1,MEM> me = magneticEnergyW(
-      magneticTest ? WBarForLimiter : WBar,a_block,0);
+  if (magneticTest) { me = magneticEnergyW(WBarForLimiter,a_block,0); }
   // Compute Fluxes, rhs.
   // a_Rhs.setVal(0.0);
   T dxiPerp = this->dx()[1];
@@ -304,12 +304,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
         metricDifferences[1] = (0.5*Shift::Basis(secondDir,1)
             - 0.5*Shift::Basis(secondDir,-1))(deta_a);
       }
-      primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_L,&metricDifferences,&energy_L.magnetic,&energyBar.magnetic);
-      primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_R,&metricDifferences,&energy_R.magnetic,&energyBar.magnetic);
+      // Auxiliary pressure is identical for the final left and right states.
+      auto pressureBar = slice(WFaceBar,iP) + energyBar.magnetic;
+      auto radialPressureBar = pressureBar * adjDrDir;
+      primToMappedFlux(fluxdir_L,physFlux_L,WFace_L,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_L,&metricDifferences,&energy_L.magnetic,&energyBar.magnetic,&pressureBar,&radialPressureBar);
+      primToMappedFlux(fluxdir_R,physFlux_R,WFace_R,WFaceBar,adjDrDir,deta_a,deta,ntrow,a_block,dir,&facePoint_R,&metricDifferences,&energy_R.magnetic,&energyBar.magnetic,&pressureBar,&radialPressureBar);
       if (ParseInputs::get_Riemann_solver_type() == 2)
       {
         fluxdir_Diss.define(bxface0);
-        primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,dir,&facePoint_L,&facePoint_R,&radialPoint);
+        primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFaceBar,adjDrDir,deta_a,deta,A_matrix,dir,&facePoint_L,&facePoint_R,&radialPoint,&metricDifferences);
       }
       else
       {
@@ -404,7 +407,9 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
                                           const State* a_point,
                                           const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences,
                                           const BoxData<T,1,MEM>* a_magneticPoint,
-                                          const BoxData<T,1,MEM>* a_magneticBar) const
+                                          const BoxData<T,1,MEM>* a_magneticBar,
+                                          const BoxData<T,1,MEM>* a_pressureBar,
+                                          const BoxData<T,1,MEM>* a_radialPressureBar) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::primToMappedFlux()");
   // Multiply momentum and B fluxes by det(A) A.
@@ -464,18 +469,54 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedFlux(
    const auto& mePoint = *a_magneticPoint;
    auto me = _convolveFace(mePoint,meBar,a_dir);
    BoxData<T,1,MEM> p0 = pslice + me;
-   BoxData<T,1,MEM> p0Bar = psliceBar + meBar;
-   BoxData<T,1,MEM> tmp4 = p0Bar * a_adjDrDir;
+   BoxData<T,1,MEM> ownedPressureBar, ownedRadialPressureBar;
+   if (!a_pressureBar)
+   {
+     ownedPressureBar = psliceBar + meBar;
+     a_pressureBar = &ownedPressureBar;
+   }
+   const auto& p0Bar = *a_pressureBar;
+   if (!a_radialPressureBar)
+   {
+     ownedRadialPressureBar = p0Bar * a_adjDrDir;
+     a_radialPressureBar = &ownedRadialPressureBar;
+   }
+   const auto& tmp4 = *a_radialPressureBar;
    BoxData<T,DIM,MEM> pforce(a_ntrow.box(), T(0));
    BoxData<T,1,MEM> tmp3 =
      _faceProduct(a_adjDrDir,p0,a_adjDrDir,p0Bar,a_dir);
-   for (int dirvec = 0; dirvec < DIM; dirvec++)
+   if constexpr (MEM == HOST && DIM == 3)
+   {
+     // The same pressure derivative serves all three momentum components.
+     // Retain the scalar products' factor and accumulation order.
+     for (int transverse = 0; transverse < DIM; ++transverse)
      {
-       BoxData<T> ntSlice = slice(a_ntrow,dirvec);
-       BoxData<T> pforceSlice = slice(pforce,dirvec);
-       _faceProduct(pforceSlice,tmp3,ntSlice,tmp4,ntSlice,a_dir);
-        
-     }    
+       if (transverse == a_dir) { continue; }
+       const Stencil<T> difference = 0.5*Shift::Basis(transverse,1)
+           - 0.5*Shift::Basis(transverse,-1);
+       BoxData<T,1,MEM> dp = difference(tmp4);
+       BoxData<T,DIM,MEM> dn = difference(a_ntrow);
+       for (int component = 0; component < DIM; ++component)
+       {
+         auto output = slice(pforce,component);
+         output.incrementProduct(dp,slice(dn,component),T(1.0/12.0));
+       }
+     }
+     for (int component = 0; component < DIM; ++component)
+     {
+       auto output = slice(pforce,component);
+       output.incrementProduct(tmp3,slice(a_ntrow,component));
+     }
+   }
+   else
+   {
+     for (int component = 0; component < DIM; ++component)
+     {
+       auto normal = slice(a_ntrow,component);
+       auto output = slice(pforce,component);
+       _faceProduct(output,tmp3,normal,tmp4,normal,a_dir);
+     }
+   }
     fluxdirMom += pforce;   
 }
 

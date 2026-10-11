@@ -284,22 +284,10 @@ int main(int argc, char *argv[])
       MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell<HOST>, double> rk4(map, iop);
       // OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
       Write_W(JU, eulerOp, iop, restart_step, time, dt, true, true);            
-      {
-        HDF5Handler h5;
-        MBLevelBoxData<double, NUMCOMPS, HOST> JUTemp(JU.layout(), OP::ghost());
-        JU.copyTo(JUTemp);
-        HelioCubed::consToSphInterpEuler(JUTemp,iop,dVolrLev,4);
-        
-        for (auto dit : JUTemp.layout())
-          {
-            unsigned int block = layout.block(dit);
-            Box blockBox = layout.getBlock(block).domain().box();           
-            auto &USph_i = JUTemp[dit];
-            eulerOp[dit].PreStagePatch(USph_i,JU[dit],dVolrLev[dit],blockBox, time);
-          }
-      }
-    
-  
+      // Write_W and preStageLevel fill their own boundary states. The former
+      // throwaway JUTemp fill passed mapped JU as if it were primitive file
+      // data and discarded the result.
+
     bool give_space_in_probe_file = true;
     int probe_trigger_count_temp = -1;
     int write_trigger_count_temp = -1;

@@ -1,6 +1,7 @@
 /.vscode
 /.venv/
 build
+build.nosync
 blis
 blt
 *.hdf5
@@ -37,3 +38,5 @@ visitlog.py
 
 # Local investigation and regression helpers.
 /local_tests/
+
+/.venv.nosync/

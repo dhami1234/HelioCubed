@@ -39,7 +39,8 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
     uint a_dir,
     const State* a_leftPoint,
     const State* a_rightPoint,
-    const BoxData<T,1,MEM>* a_radialPoint) const
+    const BoxData<T,1,MEM>* a_radialPoint,
+    const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::primToMappedRoeFlux()");
   // Standalone callers can still supply face averages only.
@@ -117,7 +118,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
     auto avg = slice<T,NUMCOMPS,DIM,MEM>(dissAvg,c);
     auto point = slice<T,NUMCOMPS,DIM,MEM>(dissPoint,c);
     auto mapped = Operator::_faceMatrixProductAB(
-        a_detA_A,avg,a_detA_A,point,a_dir);
+        a_detA_A,avg,a_detA_A,point,a_dir,a_metricDifferences);
     PROTO_ASSERT(mapped.box().containsBox(a_fluxdir.box()),
         "primToMappedRoeFlux | Insufficient vector face stencil coverage.");
     auto out = slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,c);
