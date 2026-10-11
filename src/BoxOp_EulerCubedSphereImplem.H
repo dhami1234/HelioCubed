@@ -137,7 +137,10 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
   
   BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
 
-  BoxData<T,1,MEM> minusJDivB(a_Rhs.box(), T(0));
+  const bool powellEnabled = ParseInputs::get_divergence_cleaning() == 1;
+  // One source halo supplies the cell-average product in DivBPowell2.
+  // The existing primitive ghosts cover its face reconstruction/products.
+  BoxData<T,1,MEM> minusJDivB(a_Rhs.box().grow(1), T(0));
   
   for (int dir = 0; dir < DIM; dir++)
     {
@@ -185,7 +188,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
       spreadSlice(A_matrix);
       if (dir == 0) A_matrix.copyTo(A_matrix0);
 
-      DivBPowell1(minusJDivB, WFace_L, deta, adjDrDir, dir, bxface);
+      if (powellEnabled)
+      {
+        const Box powellMetricBox = minusJDivB.box().extrude(dir).grow(
+            2*(Point::Ones()-Point::Basis(dir)));
+        auto powellDetA = CubedSphereShell::detA<T,MEM>(
+            powellMetricBox,dxiPerp,dir);
+        DivBPowell1(minusJDivB,WFace_L,powellDetA,adjDrDir,dir,powellMetricBox);
+      }
       
       
 
@@ -357,7 +367,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
 
   // Multiply -J*div(B) by the remaining Powell terms for the mapped RHS.
-  if (ParseInputs::get_divergence_cleaning() == 1)
+  if (powellEnabled)
   {
     if (magneticTest) W += testBackgroundW;
     DivBPowell2(a_Rhs, minusJDivB, W, A_matrix0);

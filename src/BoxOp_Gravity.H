@@ -1,94 +1,70 @@
 #include "MHD_Constants.H"
 
-template<
-    typename T,
-    typename MAP,
-    MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
-                        State& a_Rhs,
-                        const State& a_W,
-                        const BoxData<T,1,MEM>& a_radius,
-                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0,
-                        const BoxData<T,1,MEM>& a_deta0,
-                        const BoxData<T,1,MEM>& a_dVolr) const
+    State& a_Rhs,
+    const State& a_USph,
+    const BoxData<T,1,MEM>& a_drDxi,
+    const BoxData<T,DIM,MEM,DIM>& a_detA_A,
+    const BoxData<T,1,MEM>& a_detA) const
 {
-    PR_TIME("BoxOp_EulerCubedSphere::Gravity()");
+  PR_TIME("BoxOp_EulerCubedSphere::Gravity()");
+  // J = det(A) r^2 dr/dxi and g = -GM/r^2 e_r. Cancel r^2
+  // analytically before averaging. This also preserves the angular metric
+  // factorization of a radial state. USph stores <rho> and <rho V_r>.
+  const Box inputBox = a_Rhs.box().grow(2);
+  PROTO_ASSERT(a_USph.box().containsBox(inputBox)
+      && a_drDxi.box().containsBox(inputBox),
+      "Gravity radial product lacks stencil coverage");
+  const Box angularBox = a_Rhs.box().grow(Point(0,1,1));
+  PROTO_ASSERT(a_detA_A.box().containsBox(angularBox)
+      && a_detA.box().containsBox(angularBox),
+      "Gravity angular product lacks stencil coverage");
 
-    BoxData<T,DIM,MEM> Gsph(a_W.box());
-    forallInPlace([ ] PROTO_LAMBDA
-    (Var<T,DIM,MEM>& a_Gsph,
-    const Var<T,1,MEM>& a_radius)
-    {  
-        a_Gsph(0) = -c_G*c_M0/pow(a_radius(0),2);
-        a_Gsph(1) = 0;
-        a_Gsph(2) = 0;
-    },Gsph,a_radius);
+  auto rho = slice(a_USph,iRHO);
+  auto radialMomentum = slice(a_USph,iMOMX);
+  auto radialDensity = cellProduct(a_drDxi,rho);
+  auto radialEnergyWork = cellProduct(a_drDxi,radialMomentum);
+  const T minusGM = -c_G*c_M0;
 
-    BoxData<T,1,MEM> rho = slice<T,NUMCOMPS,1,MEM>(a_W,iRHO);
-    BoxData<T,DIM,MEM> Vsph = slice<T,NUMCOMPS,DIM,MEM>(a_W,iVX);
-
-    BoxData<T,DIM,MEM> Gcart = Operator::_cellMatrixProductAB(a_A_matrix0,Gsph,a_A_matrix0,Gsph);
-  
-    forallInPlace([ ] PROTO_LAMBDA
-        (Var<T,NUMCOMPS,MEM>& a_rhs,
-        const Var<T,DIM,MEM>& a_Vsph,
-        const Var<T,DIM,MEM>& a_Gsph,
-        const Var<T,DIM,MEM>& a_Gcart,
-        const Var<T,1,MEM>& a_rho,
-        const Var<T,1,MEM>& l_deta0,
-        const Var<T,1,MEM>& l_dVolr)
-        {               
-          a_rhs(iMOMX) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(0);
-          a_rhs(iMOMY) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(1);
-          a_rhs(iMOMZ) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Gcart(2);
-          a_rhs(iE) += l_deta0(0)*l_dVolr(0)*a_rho(0)*a_Vsph(0)*a_Gsph(0);
-        },a_Rhs,Vsph,Gsph,Gcart,rho,a_deta0,a_dVolr);
+  for (int dir = 0; dir < DIM; ++dir)
+  {
+    // Column zero is the averaged det(A) times the radial unit vector.
+    auto radialDirection = slice(a_detA_A,dir,0);
+    auto source = faceProduct(radialDirection,radialDensity,0);
+    PROTO_ASSERT(source.box().containsBox(a_Rhs.box()),
+        "Gravity momentum source does not cover the requested RHS");
+    source *= minusGM;
+    auto rhs = slice(a_Rhs,iMOMX+dir);
+    rhs += source;
+  }
+  // The angular metric is independent of radius, so only angular
+  // covariance is needed for this final product (face normal = radial).
+  auto energySource = faceProduct(a_detA,radialEnergyWork,0);
+  PROTO_ASSERT(energySource.box().containsBox(a_Rhs.box()),
+      "Gravity energy source does not cover the requested RHS");
+  energySource *= minusGM;
+  auto energyRhs = slice(a_Rhs,iE);
+  energyRhs += energySource;
 }
 
-template<
-    typename T,
-    typename MAP,
-    MemType MEM>
+template<typename T, typename MAP, MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity_Euler(
-                        State& a_Rhs,
-                        const State& a_USph) const
+    State& a_Rhs, const State& a_USph) const
 {
-    PR_TIME("BoxOp_EulerCubedSphere::Gravity_Euler()");
+  PR_TIME("BoxOp_EulerCubedSphere::Gravity_Euler()");
+  const Box radialBox = a_Rhs.box().grow(2);
+  BoxData<T,DIM,MEM> Dr(radialBox), adjDr(radialBox);
+  BoxData<T,1,MEM> radius(radialBox), dVolr(radialBox);
+  radialMetrics(radius,Dr,adjDr,dVolr,radialBox);
+  auto drDxi = slice(Dr,0);
 
-    int block = this->block();
-    Box bxRad = a_USph.box().grow(Point::Basis(0,2));
-    BoxData<T,DIM,MEM> Dr(bxRad);
-    BoxData<T,1,MEM> radius(bxRad);
-    BoxData<T,DIM,MEM> adjDr(bxRad);
-    BoxData<T,1,MEM> dVolr(bxRad);
-    radialMetrics(radius,Dr,adjDr,dVolr,bxRad);
-
-    State W;
-    State WBar;
-    sphToPrim(W,WBar,a_USph,block);
-
-    Box bx = a_USph.box();
-    T dxiPerp = this->dx()[1];
-    BoxData<T,1,MEM> deta0(bx);
-    BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
-    T half = 0.5;
-
-    BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bx,dxiPerp,0);
-    deta.copyTo(deta0);
-
-    Array<Array<uint,DIM>,6> permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
-    Array<Array<int,DIM>,6> sign = {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
-    Point high = bx.high();
-    Point low = bx.low();
-    high[0] = low[0];
-    Box bx0(low,high);
-    BoxData<T,DIM,MEM,DIM> A_matrix(bx);
-    forallInPlace_p(f_Amatrix,bx0,A_matrix,permute[block],sign[block],
-                    dxiPerp,half,half);
-    spreadSlice(A_matrix);
-    A_matrix.copyTo(A_matrix0);
-
-    Gravity(a_Rhs,W,radius,A_matrix0,deta0,dVolr);
+  const Box angularBox = a_Rhs.box().grow(Point(0,1,1));
+  const T h = this->dx()[1];
+  auto detA = CubedSphereShell::detA<T,MEM>(angularBox,h,0);
+  auto detA_A = CubedSphereShell::detA_A<T,MEM>(
+      angularBox,h,this->block(),0);
+  Gravity(a_Rhs,a_USph,drDxi,detA_A,detA);
 }

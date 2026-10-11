@@ -647,18 +647,22 @@ public:
 
   // DivB cleaning starts here.
   // Accumulate -J*div(B), where J is the cell mapping Jacobian.
+  // The standard operator supplies face averages; Berta supplies face points.
   inline void DivBPowell1(BoxData<T,1,MEM>& a_minusJDivB,
                         const State& a_WFace,
                         const BoxData<T,1,MEM>& a_deta,
                         const BoxData<T,1,MEM>& a_adjDrDir,
                         int a_dir,
-                        const Box& a_bxface) const;
+                        const Box& a_bxface,
+                        bool a_faceAverages = true) const;
   
-  // Multiply other Powell terms to get final RHS.
+  // Fourth-order cell average of the Powell source. The divergence average
+  // must include one ghost layer; A_matrix0 contains pointwise basis matrices.
   inline void DivBPowell2(State& a_Rhs,
                         const BoxData<T,1,MEM>& a_minusJDivB,
                         const State& a_W,
-                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0) const;
+                        const BoxData<T,DIM,MEM,DIM>& a_A_matrix0,
+                        bool a_cellAverages = true) const;
 
   // Compute physical div(B) from the same discrete operator used by Powell cleaning.
   inline void computeDivB(BoxData<T,1,MEM>& a_divB,
@@ -667,12 +671,13 @@ public:
   // End DivB cleaning.
 
   // Gravity starts here.
+  // Inputs are cubed-spherical conserved cell averages and averaged metrics.
+  // The radial r^2 Jacobian factor cancels the inverse-square gravity.
   inline void Gravity(State& a_Rhs,
-                      const State& a_W,
-                      const BoxData<T,1,MEM>& a_radius,
-                      const BoxData<T,DIM,MEM,DIM>& a_A_matrix0,
-                      const BoxData<T,1,MEM>& a_deta0,
-                      const BoxData<T,1,MEM>& a_dVolr) const; 
+                      const State& a_USph,
+                      const BoxData<T,1,MEM>& a_drDxi,
+                      const BoxData<T,DIM,MEM,DIM>& a_detA_A,
+                      const BoxData<T,1,MEM>& a_detA) const;
 
   inline void Gravity_Euler(State& a_Rhs,
                             const State& a_USph) const;

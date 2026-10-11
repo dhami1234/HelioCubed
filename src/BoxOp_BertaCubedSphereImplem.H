@@ -1456,7 +1456,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   BoxData<T,DIM,MEM>     ntrow0(bx);
   BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
 
-  BoxData<T,1,MEM> minusJDivB(a_Rhs.box());
+  // The final cell-average source product needs one divergence ghost layer.
+  BoxData<T,1,MEM> minusJDivB(a_Rhs.box().grow(1));
   minusJDivB.setVal(0.0);
 
   for (int dir = 0; dir < DIM; dir++)
@@ -1542,7 +1543,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
     WFace_C += WFace_R;
     WFace_C *= 0.5;
 
-    DivBPowell1(minusJDivB,WFace_C,deta,adjDrDir,dir,bxface);
+    DivBPowell1(minusJDivB,WFace_C,deta,adjDrDir,dir,bxface,false);
 
     // Physical fluxes:
     // pointwise primitive -> pointwise flux -> theta-aware face-average flux.
@@ -1658,7 +1659,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
 
   if (ParseInputs::get_divergence_cleaning() == 1)
   {
-    DivBPowell2(a_Rhs,minusJDivB,WPoint,A_matrix0);
+    DivBPowell2(a_Rhs,minusJDivB,WPoint,A_matrix0,false);
   }
 }
 
