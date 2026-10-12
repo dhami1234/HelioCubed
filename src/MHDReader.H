@@ -2,7 +2,6 @@
 #include "Proto.H"
 #include "hdf5.h"
 #include "Inputs_Parsing.H"
-#include "MHD_BoundaryInterpolation.H"
 #include <cstdio>
 #include <cstdlib>
 
@@ -157,7 +156,7 @@ public:
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
 							const MBLevelMap<MBMap_CubedSphereShell<MEM>, MEM> &a_map,
-							T a_time, int a_ghost = NGHOST)
+							T a_time)
 	{
 		PR_TIMERS("MHDReader::BoxData_to_BC");
 		HDF5Handler h5;
@@ -351,13 +350,12 @@ public:
 			MBDisjointBoxLayout srcLayout;
 			std::unique_ptr<MBLevelBoxData<double, 8, HOST>> srcData;
 			MBInterpOp BCOp;
-			int cachedGhost = -1;
 			int cachedNumProc = -1;
 		};
 
 		static BCCache s_cache;
 
-		if (!s_cache.initialized || s_cache.cachedNumProc != numProc() || s_cache.cachedGhost != a_ghost)
+		if (!s_cache.initialized || s_cache.cachedNumProc != numProc())
 		{
 			// Rebuild if first time, or if numProc() changed (paranoia)
 			MBProblemDomain srcDomain(numProc());
@@ -371,9 +369,8 @@ public:
 									s_cache.srcLayout, Point::Zeros());
 
 			// Build interpolation op once, based on the map + srcLayout geometry
-			s_cache.BCOp = HelioCubed::solarWindBoundaryOp(
-				a_map, s_cache.srcLayout, theta, phi, a_ghost);
-			s_cache.cachedGhost = a_ghost;
+			s_cache.BCOp = CubedSphereShell::BCBilinearOp(
+				a_map, s_cache.srcLayout, dtheta, theta, phi, Side::Lo, NGHOST);
 
 			s_cache.cachedNumProc = numProc();
 			s_cache.initialized   = true;

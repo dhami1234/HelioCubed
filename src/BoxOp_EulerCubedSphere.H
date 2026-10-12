@@ -342,9 +342,6 @@ public:
   inline static constexpr int order() { return 4; }
 
   // Initialization
-  inline void solarWindPrimitive(State& a_W, const State& a_BC,
-      const Scalar& a_radius, T a_gamma, uint a_block) const;
-
   inline void initialize( State& a_W,
                         const State& a_BC,
                         const Scalar& a_radius,

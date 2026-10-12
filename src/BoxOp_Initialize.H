@@ -148,9 +148,80 @@ initialize(State& a_W,
         innerRadius);
   }
 
-  if (init_condition_type == 0)
-  {
-    solarWindPrimitive(a_W,a_BC,a_radius,a_gamma,a_block);
+  if (init_condition_type == 0) {
+    Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
+    Point source_hi = Point(a_BC.box().low()[0],a_BC.box().high()[1],a_BC.box().high()[2]);
+    Box sourceBox(source_lo,source_hi);
+    int low_index = a_W.box().low()[0];
+    int high_index = a_W.box().high()[0];
+    for (int i = -NGHOST; i <= (high_index-low_index)-NGHOST; i++){
+      a_BC.copyTo(a_W,sourceBox,Point::Basis(0)*(i+1));
+    }
+
+    // Convert from classical spherical to Cartesian (confirmed correct)
+    forallInPlace([ ] PROTO_LAMBDA
+    (Var<double, NUMCOMPS, HOST> &a_W,
+    Var<double, DIM> &a_X_cart)
+    {
+      double x = a_X_cart(0);
+      double y = a_X_cart(1);
+      double z = a_X_cart(2);
+      double r = sqrt(x*x + y*y + z*z);
+      double theta = acos(z/r);
+      double phi = atan2(y,x);
+      // Convert spherical to Cartesian velocities
+      double u_r = a_W(iVX);
+      double u_theta = a_W(iVZ); //BC files are written as r,phi,theta
+      double u_phi = a_W(iVY);
+      a_W(iVX) = sin(theta)*cos(phi)*u_r + cos(theta)*cos(phi)*u_theta - sin(phi)*u_phi;
+      a_W(iVY) = sin(theta)*sin(phi)*u_r + cos(theta)*sin(phi)*u_theta + cos(phi)*u_phi;
+      a_W(iVZ) = cos(theta)*u_r - sin(theta)*u_theta;
+      // Convert spherical to Cartesian magnetic fields
+      double B_r = a_W(iBX);
+      double B_theta = a_W(iBZ); //BC files are written as r,phi,theta
+      double B_phi = a_W(iBY);
+      a_W(iBX) = sin(theta)*cos(phi)*B_r + cos(theta)*cos(phi)*B_theta - sin(phi)*B_phi;
+      a_W(iBY) = sin(theta)*sin(phi)*B_r + cos(theta)*sin(phi)*B_theta + cos(phi)*B_phi;
+      a_W(iBZ) = cos(theta)*B_r - sin(theta)*B_theta;
+    },a_W,a_Xcart);
+
+    // Convert from cartesian to cubed-spherical Primitive variables w=A_inv*u
+    BoxData<T,DIM,MEM> V_cart = slice<T,NUMCOMPS,DIM,MEM>(a_W,iVX);
+    BoxData<T,DIM,MEM> tmpV(a_W.box());
+    T one = 1.0;
+    forallInPlace(f_matVecProd,tmpV,A_matrix_inv,V_cart,one);
+    tmpV.copyTo(V_cart);
+
+    BoxData<T,DIM,MEM> B_cart = slice<T,NUMCOMPS,DIM,MEM>(a_W,iBX);
+    BoxData<T,DIM,MEM> tmpB(a_W.box());
+    forallInPlace(f_matVecProd,tmpB,A_matrix_inv,B_cart,one);
+    tmpB.copyTo(B_cart);
+
+    // In primitive spherical. To correct units. scale by radius.
+    forallInPlace([ ] PROTO_LAMBDA
+    (Var<double, NUMCOMPS, HOST> &a_WSph,
+    Var<double> &a_radius,
+    double a_gamma,
+    double r_BC)
+    {
+      double rad = a_radius(0);
+      double rho = a_WSph(0)*c_MP*pow(r_BC/rad,2.0);
+      double u = a_WSph(1);
+      double v = a_WSph(2);
+      double w = a_WSph(3);
+      double p = a_WSph(4)*1.0e-12*pow(r_BC/rad,2.0*a_gamma); // From picodyne to dyne
+      double Bx = a_WSph(5)*1.0e-6*pow(r_BC/rad,2.0); // MicroGauss to Gauss
+      double By = a_WSph(6)*1.0e-6*pow(r_BC/rad,1.0);
+      double Bz = a_WSph(7)*1.0e-6*pow(r_BC/rad,1.0);
+      a_WSph(0) = rho; //rho
+      a_WSph(1) = u; //V-x
+      a_WSph(2) = v; //V-y
+      a_WSph(3) = w; //V-z
+      a_WSph(4) = p; //Pressure
+      a_WSph(5) = Bx; //Bx
+      a_WSph(6) = By; //By
+      a_WSph(7) = Bz; //Bz
+    },a_W,a_radius,a_gamma,innerRadius);
   }
 
   if (init_condition_type == 6 || init_condition_type == 7)
@@ -169,50 +240,4 @@ initialize(State& a_W,
     }
   }
   
-}
-
-// One pointwise conversion for initialization and the boundary ghost fill.
-// The latter averages the resulting conserved state before it enters the
-// finite-volume stencil. Never invert <det(A) A>/<det(A)> at a point.
-template<typename T, typename MAP, MemType MEM>
-inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::solarWindPrimitive(
-    State& out, const State& boundary, const Scalar& radius, T gamma, uint block) const
-{
-  const T innerRadius = ParseInputs::get_inner_radius();
-  Point low = boundary.box().low(), high = boundary.box().high();
-  high[0] = low[0];
-  Point requiredLow = out.box().low(), requiredHigh = out.box().high();
-  requiredLow[0] = requiredHigh[0] = low[0];
-  PROTO_ASSERT(boundary.box().containsBox(Box(requiredLow,requiredHigh))
-      && radius.box().containsBox(out.box()),
-      "solarWindPrimitive | Insufficient boundary or radius coverage.");
-  for (int r = out.box().low()[0]; r <= out.box().high()[0]; ++r)
-    boundary.copyTo(out,Box(low,high),Point::Basis(0,r-low[0]));
-  auto basis = pointwiseSphericalBasis(out.box(),block,-1);
-  BoxData<T,DIM,MEM,DIM> inverse(out.box());
-  forallInPlace(f_matinv3by3,inverse,basis);
-  forallInPlace([] PROTO_LAMBDA(
-      Var<T,NUMCOMPS,MEM>& w, const Var<T,DIM,MEM,DIM>& A,
-      const Var<T,DIM,MEM,DIM>& invA, const Var<T,1,MEM>& rad, T r0, T gamma)
-    {
-      const double x = A(0,0), y = A(1,0), z = A(2,0);
-      const double s = hypot(x,y), cp = s > 0 ? x/s : 1.0, sp = s > 0 ? y/s : 0.0;
-      const double er[3] = {x,y,z}, et[3] = {z*cp,z*sp,-s}, ep[3] = {-sp,cp,0};
-      const double scale = r0/rad(0);
-      // File ordering is r, phi, theta. Cartesian rotation and the cubed
-      // basis are evaluated at exactly the same cell-center location.
-      for (int vector = 0; vector < 2; ++vector)
-      {
-        const int first = vector == 0 ? iVX : iBX;
-        double cart[3] = {}, local[3] = {};
-        for (int i = 0; i < 3; ++i)
-          cart[i] = er[i]*w(first)+ep[i]*w(first+1)+et[i]*w(first+2);
-        for (int i = 0; i < 3; ++i)
-          for (int j = 0; j < 3; ++j) local[i] += invA(i,j)*cart[j];
-        for (int i = 0; i < 3; ++i)
-          w(first+i) = local[i]*(first == iBX ? 1.e-6*scale*(i == 0 ? scale : 1.0) : 1.0);
-      }
-      w(iRHO) *= c_MP*scale*scale;
-      w(iP) *= 1.e-12*pow(scale,2.0*gamma);
-    },out,basis,inverse,radius,innerRadius,gamma);
 }

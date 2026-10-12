@@ -1,5 +1,3 @@
-#include <limits>
-
 template<typename T,MemType MEM>
 PROTO_KERNEL_START
 void del2_W_c_calcF(Var<T,NUMCOMPS,MEM>& del2_W_c,
@@ -165,7 +163,7 @@ void eta_tilde_d_calcF(Var<double,1>& a_eta_tilde_d,
                         const Var<T,1,MEM>& a_me_behind2,
                         int a_d)
 {
-  double z1=0.85, z0=0.75, delta = 0.33, si = 1.0;
+  double z1=0.85, z0=0.75, delta = 0.33, si;
   double p, p_ahead, p_ahead2, p_behind, p_behind2;
 
   p = a_W_ave(iP) + a_me(0);
@@ -181,19 +179,7 @@ void eta_tilde_d_calcF(Var<double,1>& a_eta_tilde_d,
   
   double lhs1 = a_W_ave_behind(1+a_d)-a_W_ave_ahead(1+a_d);
   double lhs2 = std::abs(p_ahead-p_behind)/std::min({p_ahead,p_behind});
-  // Converting a radial wind between Cartesian and panel coordinates leaves
-  // roundoff in its zero tangential velocity. A sign-only compression test
-  // turns that noise into an order-one change in flattening at pressure jumps.
-  // Use the full velocity and thermal/magnetic speed to bound cancellation
-  // error, including when the tested velocity component is physically zero.
-  double speedScale = sqrt(std::max(0.0, (p_ahead+p_behind)
-      / std::min(a_W_ave_ahead(iRHO),a_W_ave_behind(iRHO))));
-  for (int d=0; d<DIM; ++d)
-    speedScale = std::max({speedScale, std::abs(a_W_ave_ahead(1+d)),
-        std::abs(a_W_ave_behind(1+d))});
-  const double compressionRoundoff =
-      64.0*std::numeric_limits<double>::epsilon()*speedScale;
-  if ((lhs1 > compressionRoundoff) && (lhs2 > delta)) {
+  if ((lhs1 > 0.0) && (lhs2 > delta)) {
     a_eta_tilde_d(0) = si;
   } else {
     a_eta_tilde_d(0) = 1.0;
