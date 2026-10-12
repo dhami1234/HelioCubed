@@ -111,7 +111,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
         State U_ghost(bdryBoxHigh);
         Scalar radius_ghost(bdryBoxHigh);
         Stencil<double> m_exterp_f_2nd;
-        for (int i = 1; i <= NGHOST; i++ ) {
+        for (int i = 1; i <= bdryBoxHigh.sizes()[0]; i++ ) {
           a_USphStage.copyTo(U_ghost,sourceBox,Point::Basis(0)*(i));
           // Using shifting option of copyTo
           radius.copyTo(radius_ghost,sourceBox,Point::Basis(0)*(i));
@@ -148,7 +148,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       sourceLow[0] = a_blockBox.high()[0];
       sourceHigh[0] = a_blockBox.high()[0];
       const Box sourceBox(sourceLow, sourceHigh);
-      for (int ii = 1; ii <= NGHOST; ++ii)
+      for (int ii = 1; ii <= bdryBoxHigh.sizes()[0]; ++ii)
       {
         a_USphStage.copyTo(
             a_USphStage, sourceBox, Point::Basis(0)*ii);
@@ -209,7 +209,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
       sourceLow[0] = a_blockBox.low()[0];
       sourceHigh[0] = a_blockBox.low()[0];
       const Box sourceBox(sourceLow, sourceHigh);
-      for (int ii = 1; ii <= NGHOST; ++ii)
+      for (int ii = 1; ii <= bdryBoxLow.sizes()[0]; ++ii)
       {
         a_USphStage.copyTo(
             a_USphStage, sourceBox, Point::Basis(0)*(-ii));
@@ -241,32 +241,16 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
 {
   
   PR_TIMERS("BoxOp_EulerCubedSphere::PreStageLevel()");
-  int init_condition_type = ParseInputs::get_init_condition_type();
-  double gamma = ParseInputs::get_gamma();
   auto layout = a_UStage.layout();
 
   auto& geometry = levelGeometry(layout);
-  auto& map = *geometry.map;
   auto& eulerOp = *geometry.op;
 
-  // Transform JU -> USph.
-  HelioCubed::consToSphInterpEuler(a_UStage,a_iop,a_dVolrLev, 4, 0);
+  // Radial BCs must precede donor pressure recovery and seam correction.
+  prepareState(a_UStage,a_iop,a_dVolrLev,a_time);
 
   // initialize a_k to zero. 
   a_k.setVal(0.);
-  MBLevelBoxData<double, 8, HOST> dstData;
-  BoxData<T,NUMCOMPS,MEM> unusedBoundary;
-  if (init_condition_type == 0)
-  {
-    // The BC interpolation writes patch storage directly; this temporary is
-    // never exchanged and needs no interblock boundary buffers.
-    Array<Point,DIM+1> bcGhost;
-    bcGhost.fill(Point::Zeros());
-    bcGhost[0] = NGHOST*Point::Ones();
-    dstData.define(layout, bcGhost);
-    BC_global.BoxData_to_BC<T,MEM>(dstData, map, a_time, true);
-  }
-
   for (auto dit : a_UStage.layout())
   {
     unsigned int block = layout.block(dit);
@@ -274,13 +258,6 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
     auto &rhs_i = a_k[dit];
     auto &USph_i =a_UStage[dit];
     
-    // Conversion requires the fixed volume metrics initialized before stepping.
-    // Only halos crossing a physical radial boundary need boundary work.
-    if (USph_i.box().low()[0] < blockBox.low()[0]
-        || USph_i.box().high()[0] > blockBox.high()[0])
-    {
-      eulerOp[dit].PreStagePatch(USph_i,init_condition_type == 0 ? dstData[dit] : unusedBoundary,a_dVolrLev[dit],blockBox, a_time);
-    }
     auto dx = eulerOp[dit].dx();    
     // Compute viscous operators here, and increment a_rhsTotal.
     const bool viscosityEnabled =

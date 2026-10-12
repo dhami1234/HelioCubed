@@ -362,17 +362,11 @@ Insert_CME(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
         MBLevelBoxData<double, NUMCOMPS, HOST> Wout(a_layout, Point::Zeros());
         a_JU.exchange();
         a_JU.copyTo(USph_CME);
-        HelioCubed::consToSphInterpEuler(USph_CME,a_iop,a_dVolrLev, 4); // Transform a_JU -> USph.
-        int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
-        int thetaCoord = (rCoord + 1) % DIM;
-        int phiCoord = (rCoord + 2) % DIM;
-        MBLevelBoxData<double, 8, HOST> dstData(a_layout, NGHOST*Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-        if (ParseInputs::get_init_condition_type() == 0) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time, true);
+        prepareState(USph_CME,a_iop,a_dVolrLev,a_time);
         for (auto dit : a_layout)
         {
             auto block = a_layout.block(dit);
             Box blockBox = a_layout.getBlock(block).domain().box();
-            eulerOp[dit].PreStagePatch(USph_CME[dit],dstData[dit],a_dVolrLev[dit],blockBox, a_time);
             Array<double, DIM> dx = eulerOp[dit].dx();
             double dxiPerp = dx[2];
             BoxData<double> radius(a_dVolrLev[dit].box());

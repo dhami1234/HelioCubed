@@ -742,6 +742,24 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
                 T a_time);
   
   /// Exchange, block boundary conditions, transform from JU to USph. 
+  static inline void
+  prepareState(MBLevelBoxData<T,NUMCOMPS,MEM>& a_state,
+               MBInterpOp& a_iop,
+               MBLevelBoxData<T,1,MEM>& a_dVolr,
+               T a_time);
+
+  /// Fill physical radial ghosts of an already converted native state.
+  static inline void
+  fillRadialBoundaries(MBLevelBoxData<T,NUMCOMPS,MEM>& a_state,
+                       MBLevelBoxData<T,1,MEM>& a_dVolr,
+                       T a_time);
+
+  /// Requires radial BCs and one extra native-state halo for pressure recovery.
+  static inline void
+  correctSeamPressure(MBLevelBoxData<T,NUMCOMPS,MEM>& a_state,
+                       MBInterpOp& a_iop);
+
+  /// Prepare the state, then accumulate viscosity and gravity contributions.
   // Implemented.
   static inline void
   preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
@@ -785,6 +803,7 @@ private:
 #include "BoxOp_Limiters.H"
 #include "BoxOp_TestProblems.H"
 #include "BoxOp_PreStage.H"
+#include "BoxOp_SeamPressure.H"
 #include "BoxOp_RoeCubedSphere.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
 #include "BoxOp_BertaCubedSphereImplem.H"

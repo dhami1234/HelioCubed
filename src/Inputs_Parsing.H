@@ -63,6 +63,8 @@ private:
     int limiter; // 1:4th order, 2: Minmod
     // 0: preserve spherical symmetry (default); 1: interpolate Cartesian U.
     int state_conversion = 0;
+    // Transfer pressure separately and make angular ghost energy consistent.
+    int seam_pressure_correction = 1;
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
     int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard operator only)
     double entropy_fix_coeff = 0.3; // FullSphere entropy-fix coefficient; 0 disables it
@@ -168,6 +170,7 @@ public:
     static double get_CFL() {return getInstance().CFL;}
     static int get_limiter() {return getInstance().limiter;}
     static int get_state_conversion() {return getInstance().state_conversion;}
+    static int get_seam_pressure_correction() {return getInstance().seam_pressure_correction;}
     static int get_spatial_operator() {return getInstance().spatial_operator;}
     static int get_Riemann_solver_type() {return getInstance().Riemann_solver_type;}
     static double get_entropy_fix_coeff() {return getInstance().entropy_fix_coeff;}
@@ -248,6 +251,7 @@ public:
         args.add("CFL", CFL);
         args.add("limiter", limiter);
         args.add("state_conversion", state_conversion);
+        args.add("seam_pressure_correction", seam_pressure_correction);
         args.add("spatial_operator", spatial_operator);
         args.add("Riemann_solver_type", Riemann_solver_type);
         args.add("entropy_fix_coeff", entropy_fix_coeff);
@@ -315,6 +319,9 @@ public:
         args.parse(argc, argv);
         if (state_conversion != 0 && state_conversion != 1) {
             throw std::invalid_argument("state_conversion must be 0 (symmetry preserving) or 1 (Cartesian).");
+        }
+        if (seam_pressure_correction != 0 && seam_pressure_correction != 1) {
+            throw std::invalid_argument("seam_pressure_correction must be 0 or 1.");
         }
         if (state_conversion == 1 && CUBED_SPHERE_SHELL_RADIAL_COORD != 0) {
             throw std::invalid_argument("Cartesian state_conversion requires radial coordinate 0.");
@@ -386,6 +393,7 @@ public:
         pout(0) << "CFL: " << CFL << endl;
         pout(0) << "limiter: " << limiter << endl;
         pout(0) << "state_conversion: " << state_conversion << endl;
+        pout(0) << "seam_pressure_correction: " << seam_pressure_correction << endl;
         pout(0) << "spatial_operator: " << spatial_operator << endl;
         pout(0) << "Riemann_solver_type: " << Riemann_solver_type << endl;
         pout(0) << "entropy_fix_coeff: " << entropy_fix_coeff << endl;

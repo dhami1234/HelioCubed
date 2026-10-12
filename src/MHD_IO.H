@@ -1197,28 +1197,11 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   // pressure recovery from its cell averages is inaccurate in low-beta MHD.
   MBLevelBoxData<double, NUMCOMPS, HOST> USphEvolution(layout, OP::ghost());
   a_JU.copyTo(USphEvolution);
-  HelioCubed::consToSphInterpEuler(
-      USphEvolution,a_iop,dVolrLev,4);
-
-  int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
-  int thetaCoord = (rCoord + 1) % DIM;
-  int phiCoord = (rCoord + 2) % DIM;
-  MBLevelBoxData<double, NUMCOMPS, HOST> dstData;
-  BoxData<double,NUMCOMPS,HOST> unusedBoundary;
-  if (init_condition_type == 0)
-  {
-    dstData.define(layout, NGHOST*Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord)
-                                             + NGHOST*Point::Basis(phiCoord));
-    dstData.setVal(0.0);
-    BC_global.BoxData_to_BC<double,HOST>(dstData,map,time,true);
-  }
+  OP::prepareState(USphEvolution,a_iop,dVolrLev,time);
 
   for (auto dit : layout)
   {
     unsigned int block = layout.block(dit);
-    Box blockBox = layout.getBlock(block).domain().box();
-    eulerOp[dit].PreStagePatch(
-        USphEvolution[dit],init_condition_type == 0 ? dstData[dit] : unusedBoundary,dVolrLev[dit],blockBox,time);
     BoxData<double,NUMCOMPS,HOST> W;
     BoxData<double,NUMCOMPS,HOST> WBar;
     eulerOp[dit].sphToPrim(W,WBar,USphEvolution[dit],block);
