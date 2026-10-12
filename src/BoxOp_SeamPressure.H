@@ -19,6 +19,8 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialBoundaries(
     Array<Point,DIM+1> boundaryGhost;
     boundaryGhost.fill(Point::Zeros());
     boundaryGhost[0] = a_state.ghost()[0];
+    if (ParseInputs::get_BC_conserved_averages() == 0)
+      boundaryGhost[0][0] = 1; // The legacy reader supplies one primitive strip.
     boundary.define(layout,boundaryGhost);
     BC_global.BoxData_to_BC<T,MEM>(boundary,*geometry.map,a_time,true);
   }
@@ -45,10 +47,12 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::correctSeamPressure(
   const auto pressureGhost = a_state.ghost() + Point(0,padding,padding);
   MBLevelBoxData<T,1,MEM> pressure(layout,pressureGhost);
   MBLevelBoxData<T,1,MEM> target(layout,pressureGhost);
-  pressure.setVal(std::numeric_limits<T>::quiet_NaN());
-  target.setVal(std::numeric_limits<T>::quiet_NaN());
   for (auto index : layout)
   {
+    // Level setVal exchanges automatically. Initialize only local storage;
+    // source ghosts are exchanged once after donor pressure has been filled.
+    pressure[index].setVal(std::numeric_limits<T>::quiet_NaN());
+    target[index].setVal(std::numeric_limits<T>::quiet_NaN());
     State w,bar;
     ops[index].sphToPrim(w,bar,a_state[index],layout.block(index));
     auto p = slice(w,iP);
@@ -137,7 +141,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::prepareState(
     Vector dr(volume[index].box()),adj(volume[index].box());
     ops[index].radialMetrics(radius,dr,adj,volume[index],dr.box());
   }
-  native.setVal(T(0));
+  for (auto index : layout) native[index].setVal(T(0));
   a_state.copyTo(native);
   HelioCubed::consToSphInterpEuler(native,interpolation->op,volume,4,0);
   fillRadialBoundaries(native,volume,a_time);

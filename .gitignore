@@ -16,6 +16,7 @@ blt
 *.err
 *.out
 *.sh
+/tests/
 !scripts/run_test_problems.sh
 !scripts/run_test_problems_anvil.sh
 !scripts/run_convergence_test.sh

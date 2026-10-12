@@ -159,10 +159,33 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
   if (a_blockBox.low()[0] > bxGhosted.low()[0])
   {
 
+    BoxData<T,DIM,MEM,DIM> A_matrix_inv;
+    if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 0)
+    {
+      // Calculate A_matrix
+      BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(bdryBoxLow,a_h,a_block,0);
+      BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bdryBoxLow,a_h,0);
+      forallInPlace([ ] PROTO_LAMBDA
+        (Var<T, DIM, MEM, DIM> &a_amat,
+        Var<T, 1, MEM> &a_deta)
+        {
+          double inv_deta = 1.0 / a_deta(0);
+          for (int i = 0; i < DIM; i++){
+            for (int j = 0; j < DIM; j++){
+              a_amat(i,j) = a_amat(i,j) * inv_deta;
+            }
+          }
+        },amat,deta);
+      A_matrix_inv.define(bdryBoxLow, T(0));
+      forallInPlace(f_matinv3by3,A_matrix_inv,amat);
+
+    }
+
     // Find X_cart
     double half = 0.5;
     BoxData<double, DIM, HOST> XCart;
-    if (init_condition_type == 1)
+    if (init_condition_type == 1
+        || (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 0))
     {
       // Only the inner radial ghost cells consume these coordinates.
       XCart = forall_p<double,DIM,HOST>
@@ -193,7 +216,98 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
           strength,
           innerRadius);
     }
-    if (init_condition_type == 0)
+    // Legacy point sampling and averaged-basis conversion, retained for
+    // the default fast BC path. The optional pressure halo can be wider than NGHOST.
+    if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 0){
+      Point source_lo = Point(a_BC.box().low()[0],a_BC.box().low()[1],a_BC.box().low()[2]);
+      Point source_hi = Point(a_BC.box().low()[0],a_BC.box().high()[1],a_BC.box().high()[2]);
+      Box sourceBox(source_lo,source_hi);
+      for (int i = 0; i < bdryBoxLow.sizes()[0]; i++){
+        a_BC.copyTo(a_USphStage,sourceBox,Point::Basis(0)*(-i));
+      }
+
+      // Convert classical spherical vectors to Cartesian.
+      forallInPlace([ ] PROTO_LAMBDA
+      (Var<double, NUMCOMPS, HOST> &a_W,
+      Var<double, DIM> &a_X_cart)
+      {
+        double x = a_X_cart(0);
+        double y = a_X_cart(1);
+        double z = a_X_cart(2);
+        double r = sqrt(x*x + y*y + z*z);
+        double theta = acos(z/r);
+        double phi = atan2(y,x);
+        // Convert spherical to Cartesian velocities
+        double u_r = a_W(iVX);
+        double u_theta = a_W(iVZ); //BC files are written as r,phi,theta
+        double u_phi = a_W(iVY);
+        a_W(iVX) = sin(theta)*cos(phi)*u_r + cos(theta)*cos(phi)*u_theta - sin(phi)*u_phi;
+        a_W(iVY) = sin(theta)*sin(phi)*u_r + cos(theta)*sin(phi)*u_theta + cos(phi)*u_phi;
+        a_W(iVZ) = cos(theta)*u_r - sin(theta)*u_theta;
+        // Convert spherical to Cartesian magnetic fields
+        double B_r = a_W(iBX);
+        double B_theta = a_W(iBZ); //BC files are written as r,phi,theta
+        double B_phi = a_W(iBY);
+        a_W(iBX) = sin(theta)*cos(phi)*B_r + cos(theta)*cos(phi)*B_theta - sin(phi)*B_phi;
+        a_W(iBY) = sin(theta)*sin(phi)*B_r + cos(theta)*sin(phi)*B_theta + cos(phi)*B_phi;
+        a_W(iBZ) = cos(theta)*B_r - sin(theta)*B_theta;
+      },bdryBoxLow,a_USphStage,XCart);
+
+      BoxData<T,NUMCOMPS,MEM> USph_stage_temp(bdryBoxLow);
+      a_USphStage.copyTo(USph_stage_temp);
+
+      // Convert from cartesian to cubed-spherical Primitive variables w=A_inv*u
+      BoxData<T,DIM,MEM> V_sph = slice<T,NUMCOMPS,DIM,MEM>(a_USphStage,iVX);
+      BoxData<T,DIM,MEM> V_cart = slice<T,NUMCOMPS,DIM,MEM>(USph_stage_temp,iVX);
+      BoxData<T,DIM,MEM> tmpV(USph_stage_temp.box());
+      T one = 1.0;
+      forallInPlace(f_matVecProd,tmpV,A_matrix_inv,V_cart,one);
+      tmpV.copyTo(V_sph);
+
+      BoxData<T,DIM,MEM> B_sph = slice<T,NUMCOMPS,DIM,MEM>(a_USphStage,iBX);
+      BoxData<T,DIM,MEM> B_cart = slice<T,NUMCOMPS,DIM,MEM>(USph_stage_temp,iBX);
+      BoxData<T,DIM,MEM> tmpB(USph_stage_temp.box());
+      forallInPlace(f_matVecProd,tmpB,A_matrix_inv,B_cart,one);
+      tmpB.copyTo(B_sph);
+
+      // Convert to native conserved variables and apply the radial scaling.
+      forallInPlace_p([ ] PROTO_LAMBDA
+      (Point a_pt,
+       Var<T, NUMCOMPS, MEM> &a_USph,
+       Var<T, DIM, MEM> &a_V_cart,
+       Var<T, DIM, MEM> &a_B_cart,
+       Var<T> &a_radius,
+       T a_gamma,
+       double r_BC)
+      {
+        double rad = a_radius(0);
+        double rho = a_USph(0)*1.67262192e-24*pow(r_BC/rad,2.0);
+        double u = a_USph(1);
+        double v = a_USph(2);
+        double w = a_USph(3);
+        double p = a_USph(4)*1.0e-12*pow(r_BC/rad,2.0*a_gamma); // From picodyne to dyne
+        double Bx = a_USph(5)*1.0e-6*pow(r_BC/rad,2.0); // MicroGauss to Gauss
+        double By = a_USph(6)*1.0e-6*pow(r_BC/rad,1.0);
+        double Bz = a_USph(7)*1.0e-6*pow(r_BC/rad,1.0);
+        double V_cart_mag2 = a_V_cart(0)*a_V_cart(0) + a_V_cart(1)*a_V_cart(1) + a_V_cart(2)*a_V_cart(2);
+        double B_cart_mag2 = a_B_cart(0)*a_B_cart(0) + a_B_cart(1)*a_B_cart(1) + a_B_cart(2)*a_B_cart(2);
+        double B_rad_mag2 = a_USph(5)*a_USph(5);
+        double B_non_rad_mag2 = B_cart_mag2 - B_rad_mag2;
+        double B_mag2_scaled = 1.0e-12*B_non_rad_mag2*pow(r_BC/rad,2.0) + 1.0e-12*B_rad_mag2*pow(r_BC/rad,4.0);
+        double e = p/(a_gamma-1.0) + rho*(V_cart_mag2)/2.0 + (B_mag2_scaled)/8.0/M_PI;
+        a_USph(0) = rho; //rho
+        a_USph(1) = rho*u; //Momentum-x
+        a_USph(2) = rho*v; //Momentum-y
+        a_USph(3) = rho*w; //Momentum-z
+        a_USph(4) = e; //Energy
+        a_USph(5) = Bx; //Bx
+        a_USph(6) = By; //By
+        a_USph(7) = Bz; //Bz
+      },bdryBoxLow,a_USphStage,V_cart,B_cart,radius,m_gamma,
+        innerRadius);
+    }
+
+    if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 1)
     {
       // The reader supplies native conserved cell averages, including the
       // radial/angular corner ghosts required by reconstruction.

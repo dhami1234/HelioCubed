@@ -66,7 +66,7 @@ initialize(State& a_W,
   // File primitives are point samples. Use the basis at that same point;
   // an averaged basis is not the coordinate transform of a point vector.
   BoxData<T,DIM,MEM,DIM> A_matrix_inv;
-  if (init_condition_type == 0)
+  if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 1)
   {
     auto pointBasis = pointwiseSphericalBasis(a_W.box(),a_block,-1);
     A_matrix_inv = forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,pointBasis);

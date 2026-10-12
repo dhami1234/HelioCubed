@@ -25,6 +25,15 @@ private:
 	}
 
 	MHD_BoundaryAverages m_boundaryAverages;
+	struct LegacyBCCache
+	{
+		MBDisjointBoxLayout destinationLayout,sourceLayout;
+		std::unique_ptr<MBLevelBoxData<double,8,HOST>> source;
+		MBInterpOp op;
+		int ranks = -1;
+		int angularGhost = -1;
+	};
+	std::unique_ptr<LegacyBCCache> m_legacyBC;
 public:
 	inline MHDReader() {}
 
@@ -48,6 +57,7 @@ public:
 
 		// Geometry can be read by all (small)
 		m_boundaryAverages.clear();
+		m_legacyBC.reset();
 		readGeom(dtheta, a_filename, /*parallel_open=*/true);
 		readTheta(theta, a_filename, /*parallel_open=*/true);
 		readPhi(phi, a_filename, /*parallel_open=*/true);
@@ -156,8 +166,9 @@ public:
 			a_out, base, base_left);
 	}
 
-	// Initialization requests centered classical primitive samples. Stage fills
-	// request native conserved averages over the full inner radial ghost cells.
+	// With BC_conserved_averages enabled, initialization requests centered
+	// primitive samples and stage fills request native conserved ghost averages.
+	// The default path retains the earlier point-sampled primitive BC strip.
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
 							const MBLevelMap<MBMap_CubedSphereShell<MEM>, MEM> &a_map,
@@ -347,7 +358,33 @@ public:
 			}
 		}
 
-		if (a_conservedAverages)
+		if (ParseInputs::get_BC_conserved_averages() == 0)
+		{
+			const auto& layout = a_dstData.layout();
+			const Point ghost = a_dstData.ghost()[0];
+			const int angularGhost = std::max(ghost[thetaCoord],ghost[phiCoord]);
+			if (!m_legacyBC || m_legacyBC->ranks != numProc()
+				|| &m_legacyBC->destinationLayout.partition() != &layout.partition()
+				|| m_legacyBC->angularGhost != angularGhost)
+			{
+				m_legacyBC = std::make_unique<LegacyBCCache>();
+				auto& cache = *m_legacyBC;
+				cache.destinationLayout = layout;
+				MBProblemDomain sourceDomain(numProc());
+				for (BlockIndex block = 0; block < numProc(); ++block)
+					sourceDomain.defineDomain(block,Box_BC.sizes());
+				cache.sourceLayout = MBDisjointBoxLayout(sourceDomain,Box_BC.sizes());
+				cache.source = std::make_unique<MBLevelBoxData<double,8,HOST>>(
+					cache.sourceLayout,Point::Zeros());
+				cache.op = CubedSphereShell::BCBilinearOp(
+					a_map,cache.sourceLayout,dtheta,theta,phi,Side::Lo,angularGhost);
+				cache.ranks = numProc();
+				cache.angularGhost = angularGhost;
+			}
+			data_0.copyTo((*m_legacyBC->source)[*m_legacyBC->sourceLayout.begin()]);
+			m_legacyBC->op.apply(a_dstData,*m_legacyBC->source);
+		}
+		else if (a_conservedAverages)
 		{
 			m_boundaryAverages.fill(a_dstData,data_0,theta,phi);
 		}
