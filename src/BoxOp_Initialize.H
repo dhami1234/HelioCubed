@@ -63,24 +63,34 @@ initialize(State& a_W,
   double innerRadius = ParseInputs::get_inner_radius();
   double outerRadius = ParseInputs::get_outer_radius();
 
-  // Calculate A_matrix_inv
-  BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(a_W.box(),a_h,a_block,0);
-  BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(a_W.box(),a_h,0);
-  forallInPlace([ ] PROTO_LAMBDA
-    (Var<T, DIM, MEM, DIM> &a_amat,
-    Var<T, 1, MEM> &a_deta)
-    {
-      double inv_deta = 1.0 / a_deta(0);
-      for (int i = 0; i < DIM; i++){
-        for (int j = 0; j < DIM; j++){
-          a_amat(i,j) = a_amat(i,j) * inv_deta;
+  // File primitives are point samples. Use the basis at that same point;
+  // an averaged basis is not the coordinate transform of a point vector.
+  BoxData<T,DIM,MEM,DIM> A_matrix_inv;
+  if (init_condition_type == 0)
+  {
+    auto pointBasis = pointwiseSphericalBasis(a_W.box(),a_block,-1);
+    A_matrix_inv = forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,pointBasis);
+  }
+  else
+  {
+    // Calculate A_matrix_inv
+    BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(a_W.box(),a_h,a_block,0);
+    BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(a_W.box(),a_h,0);
+    forallInPlace([ ] PROTO_LAMBDA
+      (Var<T, DIM, MEM, DIM> &a_amat,
+      Var<T, 1, MEM> &a_deta)
+      {
+        double inv_deta = 1.0 / a_deta(0);
+        for (int i = 0; i < DIM; i++){
+          for (int j = 0; j < DIM; j++){
+            a_amat(i,j) = a_amat(i,j) * inv_deta;
+          }
         }
-      }
-    },amat,deta);
-  BoxData<T,DIM,MEM,DIM> A_matrix_inv(a_W.box());
-  A_matrix_inv.setToZero();
-  forallInPlace(f_matinv3by3,A_matrix_inv,amat);
-
+      },amat,deta);
+    A_matrix_inv.define(a_W.box());
+    A_matrix_inv.setToZero();
+    forallInPlace(f_matinv3by3,A_matrix_inv,amat);
+  }
 
   T strength = ParseInputs::get_strength();
   T testBx = testProblemBackgroundBx(init_condition_type);

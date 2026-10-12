@@ -4,6 +4,7 @@
 #include "Inputs_Parsing.H"
 #include <cstdio>
 #include <cstdlib>
+#include "MHD_BoundaryAverages.H"
 
 using namespace Proto;
 
@@ -23,6 +24,7 @@ private:
 		std::abort();
 	}
 
+	MHD_BoundaryAverages m_boundaryAverages;
 public:
 	inline MHDReader() {}
 
@@ -45,6 +47,7 @@ public:
 		pout(0) << "Reading BC data from file: " << a_filename << endl;
 
 		// Geometry can be read by all (small)
+		m_boundaryAverages.clear();
 		readGeom(dtheta, a_filename, /*parallel_open=*/true);
 		readTheta(theta, a_filename, /*parallel_open=*/true);
 		readPhi(phi, a_filename, /*parallel_open=*/true);
@@ -153,10 +156,12 @@ public:
 			a_out, base, base_left);
 	}
 
+	// Initialization requests centered classical primitive samples. Stage fills
+	// request native conserved averages over the full inner radial ghost cells.
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
 							const MBLevelMap<MBMap_CubedSphereShell<MEM>, MEM> &a_map,
-							T a_time)
+							T a_time, bool a_conservedAverages = false)
 	{
 		PR_TIMERS("MHDReader::BoxData_to_BC");
 		HDF5Handler h5;
@@ -342,59 +347,14 @@ public:
 			}
 		}
 
-		// Making use of cached BC operator to avoid rebuild each time, much faster
-		// --- Cached source layout / data / BC operator ---
-		struct BCCache
+		if (a_conservedAverages)
 		{
-			bool initialized = false;
-			MBDisjointBoxLayout srcLayout;
-			std::unique_ptr<MBLevelBoxData<double, 8, HOST>> srcData;
-			MBInterpOp BCOp;
-			int cachedNumProc = -1;
-		};
-
-		static BCCache s_cache;
-
-		if (!s_cache.initialized || s_cache.cachedNumProc != numProc())
-		{
-			// Rebuild if first time, or if numProc() changed (paranoia)
-			MBProblemDomain srcDomain(numProc());
-			for (BlockIndex bi = 0; bi < numProc(); bi++)
-			{
-				srcDomain.defineDomain(bi, Box_BC.sizes());
-			}
-
-			s_cache.srcLayout = MBDisjointBoxLayout(srcDomain, Box_BC.sizes());
-			s_cache.srcData   = std::make_unique<MBLevelBoxData<double, 8, HOST>>(
-									s_cache.srcLayout, Point::Zeros());
-
-			// Build interpolation op once, based on the map + srcLayout geometry
-			s_cache.BCOp = CubedSphereShell::BCBilinearOp(
-				a_map, s_cache.srcLayout, dtheta, theta, phi, Side::Lo, NGHOST);
-
-			s_cache.cachedNumProc = numProc();
-			s_cache.initialized   = true;
+			m_boundaryAverages.fill(a_dstData,data_0,theta,phi);
 		}
-
-		// Copy BC "image" into the (one) source patch this operator expects
-		data_0.copyTo((*s_cache.srcData)[*s_cache.srcLayout.begin()]);
-
-		// a_dstData.setVal(0);
+		else
 		{
-			PR_TIMERS("MHDReader::BoxData_to_BC::applyBCOp");
-			s_cache.BCOp.apply(a_dstData, *s_cache.srcData);
+			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi);
 		}
-		// Set B_field to zero
-		// for (auto dit : a_dstData.layout())
-		// {
-		// 	forallInPlace([ ] PROTO_LAMBDA
-		// 	(Var<double,NUMCOMPS,HOST>& l_dst)
-		// 	{
-		// 		l_dst(iBX) = 0;
-		// 		l_dst(iBY) = 0;
-		// 		l_dst(iBZ) = 0;
-		// 	},a_dstData[dit]);
-		// }	
 	}
 
 

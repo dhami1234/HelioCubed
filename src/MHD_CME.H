@@ -366,8 +366,8 @@ Insert_CME(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
         int rCoord = CUBED_SPHERE_SHELL_RADIAL_COORD;
         int thetaCoord = (rCoord + 1) % DIM;
         int phiCoord = (rCoord + 2) % DIM;
-        MBLevelBoxData<double, 8, HOST> dstData(a_layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
-        if (ParseInputs::get_init_condition_type() == 0) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time);
+        MBLevelBoxData<double, 8, HOST> dstData(a_layout, NGHOST*Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+        if (ParseInputs::get_init_condition_type() == 0) BC_global.BoxData_to_BC<double,HOST>(dstData, map, a_time, true);
         for (auto dit : a_layout)
         {
             auto block = a_layout.block(dit);
