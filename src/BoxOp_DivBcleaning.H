@@ -1,3 +1,33 @@
+template<typename T, typename MAP, MemType MEM>
+inline void
+BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPowellMagneticAverages(
+    BoxData<T,DIM,MEM>& a_BAvg,
+    const State& a_USph,
+    uint a_block) const
+{
+  // Magnetic test states contain perturbations; reconstructed primitives
+  // contain the full field. Include the background in the smooth source too,
+  // so switching to the troubled-face flux cannot introduce a background jump.
+  const Box pointBox = a_USph.box().grow(1);
+  State backgroundState(pointBox);
+  backgroundState.setVal(0.0);
+  addTestProblemBackgroundB(backgroundState,a_block);
+  auto backgroundPoint = forall<T,DIM,MEM>([] PROTO_LAMBDA(
+      Var<T,DIM,MEM>& a_B,
+      const Var<T,NUMCOMPS,MEM>& a_W)
+    {
+      for (int d = 0; d < DIM; ++d) a_B(d) = a_W(iBX+d);
+    },backgroundState);
+  a_BAvg = (1.0*Shift(Point::Zeros())
+      + (1.0/24.0)*Stencil<T>::Laplacian())(backgroundPoint,a_USph.box());
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,DIM,MEM>& a_B,
+      const Var<T,NUMCOMPS,MEM>& a_U)
+    {
+      for (int d = 0; d < DIM; ++d) a_B(d) += a_U(iBX+d);
+    },a_BAvg,a_USph);
+}
+
 template<
     typename T,
     typename MAP,
@@ -5,36 +35,27 @@ template<
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell1(
                         BoxData<T,1,MEM>& a_minusJDivB,
-                        const State& a_WFace,
+                        const Scalar& a_Bnormal,
                         const BoxData<T,1,MEM>& a_deta,
                         const BoxData<T,1,MEM>& a_adjDrDir,
                         int a_dir,
-                        const Box& a_bxface,
-                        bool a_faceAverages) const
+                        const Scalar* a_BnormalPoint,
+                        const Scalar* a_thetaFluxFace) const
 {
-  BoxData<T,1,MEM> Bfluxdir;
-  if (a_faceAverages)
-  {
-    // Both factors are face averages. Their ordinary product omits the
-    // transverse covariance and produces second-order false div(B), even
-    // for a constant Cartesian magnetic field on the curved grid.
-    auto Bnormal = slice(a_WFace,iBX + a_dir);
-    Bfluxdir = faceProduct(a_deta,Bnormal,a_dir);
-  }
-  else
-  {
-    // Preserve Berta's point-reconstructed path. Its face points cannot be
-    // passed to the face-average product formula without conversion.
-    Bfluxdir.define(a_bxface);
+  // The transverse covariance is required for fourth-order div(B) on the
+  // curved grid. A face point multiplied by an averaged metric is only second order.
+  auto Bfluxdir = faceProduct(a_deta,a_Bnormal,a_dir);
+  if (a_thetaFluxFace && a_BnormalPoint)
     forallInPlace([ ] PROTO_LAMBDA
-      (Var<T,1,MEM>& a_fluxout,
-       const Var<T,NUMCOMPS,MEM>& a_Wsph,
-       const Var<T,1,MEM>& a_deta,
-       int a_dir)
+      (Var<T,1,MEM>& a_flux,
+       const Var<T,1,MEM>& a_theta,
+       const Var<T,1,MEM>& a_det,
+       const Var<T,1,MEM>& a_Bnormal)
       {
-        a_fluxout(0) = a_deta(0)*a_Wsph(iBX + a_dir);
-      },Bfluxdir,a_WFace,a_deta,a_dir);
-  }
+        // Retain the existing local flux near troubled faces; use the same
+        // point-to-average switch as Berta's physical flux.
+        if (a_theta(0) <= T(0.5)) a_flux(0) = a_det(0)*a_Bnormal(0);
+      },Bfluxdir,*a_thetaFluxFace,a_deta,*a_BnormalPoint);
 
   BoxData<T,1,MEM> Bfluxprod = faceProduct(Bfluxdir,a_adjDrDir,a_dir);
   PROTO_ASSERT(Bfluxprod.box().containsBox(a_minusJDivB.box().extrude(a_dir)),
@@ -175,6 +196,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
     State WPoint;
     sphPointToPrim(WPoint,UPoint,block);
 
+    const bool magneticTest =
+        isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+    BoxData<T,DIM,MEM> magneticAvg;
+    if (magneticTest) BertaPowellMagneticAverages(magneticAvg,a_USph,block);
+
     for (int dir = 0; dir < DIM; dir++)
     {
       State WFace_L;
@@ -190,11 +216,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
       WFace_C += WFace_R;
       WFace_C *= 0.5;
 
-      Box bxface = WFace_C.box();
+      const Box bxface = minusJDivB.box().extrude(dir).grow(
+          2*(Point::Ones()-Point::Basis(dir)));
       BoxData<T,1,MEM> deta =
           CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir);
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
-      DivBPowell1(minusJDivB,WFace_C,deta,adjDrDir,dir,bxface,false);
+      auto Bnormal = magneticTest ? slice(magneticAvg,dir) : slice(a_USph,iBX + dir);
+      Scalar Bface = Stencil<T>::CellToFace(dir)(Bnormal);
+      auto Bpoint = slice(WFace_C,iBX + dir);
+      DivBPowell1(minusJDivB,Bface,deta,adjDrDir,dir,&Bpoint,&thetaFluxFace);
     }
   }
   else
@@ -215,7 +245,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
       BoxData<T,1,MEM> deta =
           CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir);
       BoxData<T,1,MEM> adjDrDir = slice(adjDr,dir);
-      DivBPowell1(minusJDivB,WFace,deta,adjDrDir,dir,bxface);
+      auto Bnormal = slice(WFace,iBX + dir);
+      DivBPowell1(minusJDivB,Bnormal,deta,adjDrDir,dir);
     }
   }
 

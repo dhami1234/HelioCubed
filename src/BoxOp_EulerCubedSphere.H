@@ -670,15 +670,21 @@ public:
   // End Viscosity.
 
   // DivB cleaning starts here.
+  // Restore fourth-order magnetic averages for tests that evolve delta-B.
+  inline void BertaPowellMagneticAverages(BoxData<T,DIM,MEM>& a_BAvg,
+                                        const State& a_USph,
+                                        uint a_block) const;
+
   // Accumulate -J*div(B), where J is the cell mapping Jacobian.
-  // The standard operator supplies face averages; Berta supplies face points.
+  // Both operators supply fourth-order magnetic face averages. Berta can
+  // retain its local point flux on troubled faces using the optional switch.
   inline void DivBPowell1(BoxData<T,1,MEM>& a_minusJDivB,
-                        const State& a_WFace,
+                        const Scalar& a_Bnormal,
                         const BoxData<T,1,MEM>& a_deta,
                         const BoxData<T,1,MEM>& a_adjDrDir,
                         int a_dir,
-                        const Box& a_bxface,
-                        bool a_faceAverages = true) const;
+                        const Scalar* a_BnormalPoint = nullptr,
+                        const Scalar* a_thetaFluxFace = nullptr) const;
   
   // Fourth-order cell average of the Powell source. The divergence average
   // must include one ghost layer; A_matrix0 contains pointwise basis matrices.

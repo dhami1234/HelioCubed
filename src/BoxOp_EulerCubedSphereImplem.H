@@ -194,7 +194,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
             2*(Point::Ones()-Point::Basis(dir)));
         auto powellDetA = CubedSphereShell::detA<T,MEM>(
             powellMetricBox,dxiPerp,dir);
-        DivBPowell1(minusJDivB,WFace_L,powellDetA,adjDrDir,dir,powellMetricBox);
+        auto Bnormal = slice(WFace_L,iBX + dir);
+        DivBPowell1(minusJDivB,Bnormal,powellDetA,adjDrDir,dir);
       }
       
       

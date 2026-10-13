@@ -1,3 +1,5 @@
+#include <limits>
+
 // Separate component lines expose independent output storage to CPU compilers.
 // Keep each cell's correction and matrix-column accumulation order.
 template<unsigned N, bool BOTH, typename T>
@@ -739,6 +741,37 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaAverageToPoint(
 }
 
 
+// Normalize each primitive component on the combined L/R face stencil before
+// forming squared smoothness indicators. This makes epsilon dimensionless and
+// prevents CGS density/pressure from losing their nonlinear WENO weights.
+template<typename T, unsigned N>
+inline ACCEL_DECORATION T bertaNormalizeWenoStencil(T (&a_values)[N])
+{
+  T scale = T(0);
+  for (unsigned i = 0; i < N; ++i) scale = max(scale,abs(a_values[i]));
+  if (scale == T(0))
+  {
+    // A max reduction can discard NaNs; do not turn an invalid stencil into zero.
+    for (unsigned i = 0; i < N; ++i)
+      if (a_values[i] != T(0)) return a_values[i];
+    return scale;
+  }
+  if (scale > T(0))
+  {
+    if (scale >= std::numeric_limits<T>::min())
+    {
+      const T inverse = T(1)/scale;
+      for (unsigned i = 0; i < N; ++i) a_values[i] *= inverse;
+    }
+    else
+    {
+      // Direct division also handles subnormal data without overflowing 1/scale.
+      for (unsigned i = 0; i < N; ++i) a_values[i] /= scale;
+    }
+  }
+  return scale;
+}
+
 // ====================================================================================
 // 4. WENOZ, WENO3, and PLM face reconstruction.
 // Corrected convention:
@@ -765,12 +798,20 @@ void f_wenoz_pointwise_faceF(
 
   for (int comp = 0; comp < C; comp++)
   {
+    T values[6] = {a_Wm2(comp),a_Wm1(comp),a_W0(comp),
+                   a_Wp1(comp),a_Wp2(comp),a_Wp3(comp)};
+    const T scale = bertaNormalizeWenoStencil(values);
+    if (scale == T(0))
+    {
+      a_WL(comp) = a_WR(comp) = T(0);
+      continue;
+    }
     // Left state at target face, using a_W0 as the left cell.
-    T vm2 = a_Wm2(comp);
-    T vm1 = a_Wm1(comp);
-    T v0  = a_W0(comp);
-    T vp1 = a_Wp1(comp);
-    T vp2 = a_Wp2(comp);
+    T vm2 = values[0];
+    T vm1 = values[1];
+    T v0  = values[2];
+    T vp1 = values[3];
+    T vp2 = values[4];
 
     T q0 = ( 3.0*vm2 - 10.0*vm1 + 15.0*v0  ) / 8.0;
     T q1 = (    -vm1 +  6.0*v0  +  3.0*vp1 ) / 8.0;
@@ -797,14 +838,14 @@ void f_wenoz_pointwise_faceF(
 
     T asum = alpha0 + alpha1 + alpha2;
 
-    a_WL(comp) = (alpha0*q0 + alpha1*q1 + alpha2*q2)/asum;
+    a_WL(comp) = scale*((alpha0*q0 + alpha1*q1 + alpha2*q2)/asum);
 
     // Right state at target face: reversed stencil, using a_Wp1 as the right cell.
-    T rm2 = a_Wp3(comp);
-    T rm1 = a_Wp2(comp);
-    T r0  = a_Wp1(comp);
-    T rp1 = a_W0(comp);
-    T rp2 = a_Wm1(comp);
+    T rm2 = values[5];
+    T rm1 = values[4];
+    T r0  = values[3];
+    T rp1 = values[2];
+    T rp2 = values[1];
 
     T rq0 = ( 3.0*rm2 - 10.0*rm1 + 15.0*r0  ) / 8.0;
     T rq1 = (    -rm1 +  6.0*r0  +  3.0*rp1 ) / 8.0;
@@ -831,7 +872,7 @@ void f_wenoz_pointwise_faceF(
 
     T rasum = ralpha0 + ralpha1 + ralpha2;
 
-    a_WR(comp) = (ralpha0*rq0 + ralpha1*rq1 + ralpha2*rq2)/rasum;
+    a_WR(comp) = scale*((ralpha0*rq0 + ralpha1*rq1 + ralpha2*rq2)/rasum);
   }
 }
 PROTO_KERNEL_END(f_wenoz_pointwise_faceF, f_wenoz_pointwise_face)
@@ -854,10 +895,17 @@ void f_weno3_pointwise_faceF(
 
   for (int comp = 0; comp < C; comp++)
   {
+    T values[4] = {a_Wm1(comp),a_W0(comp),a_Wp1(comp),a_Wp2(comp)};
+    const T scale = bertaNormalizeWenoStencil(values);
+    if (scale == T(0))
+    {
+      a_WL(comp) = a_WR(comp) = T(0);
+      continue;
+    }
     // Left state using a_W0 as the left cell of the face.
-    T vm1 = a_Wm1(comp);
-    T v0  = a_W0(comp);
-    T vp1 = a_Wp1(comp);
+    T vm1 = values[0];
+    T v0  = values[1];
+    T vp1 = values[2];
 
     T Dm = v0  - vm1;
     T Dp = vp1 - v0;
@@ -872,12 +920,12 @@ void f_weno3_pointwise_faceF(
     T q0 = 0.5*(vp1 + v0);
     T q1 = 0.5*(-vm1 + 3.0*v0);
 
-    a_WL(comp) = (a0*q0 + a1*q1)/(a0 + a1);
+    a_WL(comp) = scale*((a0*q0 + a1*q1)/(a0 + a1));
 
     // Right state using a_Wp1 as the right cell of the face.
-    T rm1 = a_Wp2(comp);
-    T r0  = a_Wp1(comp);
-    T rp1 = a_W0(comp);
+    T rm1 = values[3];
+    T r0  = values[2];
+    T rp1 = values[1];
 
     T rDm = r0  - rm1;
     T rDp = rp1 - r0;
@@ -892,7 +940,7 @@ void f_weno3_pointwise_faceF(
     T rq0 = 0.5*(rp1 + r0);
     T rq1 = 0.5*(-rm1 + 3.0*r0);
 
-    a_WR(comp) = (ra0*rq0 + ra1*rq1)/(ra0 + ra1);
+    a_WR(comp) = scale*((ra0*rq0 + ra1*rq1)/(ra0 + ra1));
   }
 }
 PROTO_KERNEL_END(f_weno3_pointwise_faceF, f_weno3_pointwise_face)
@@ -1754,6 +1802,11 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   // The final cell-average source product needs one divergence ghost layer.
   BoxData<T,1,MEM> minusJDivB(a_Rhs.box().grow(1));
   minusJDivB.setVal(0.0);
+  const bool magneticTest =
+      isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+  BoxData<T,DIM,MEM> magneticAvg;
+  if (ParseInputs::get_divergence_cleaning() == 1 && magneticTest)
+    BertaPowellMagneticAverages(magneticAvg,a_USph,a_block);
 
   for (int dir = 0; dir < DIM; dir++)
   {
@@ -1856,13 +1909,25 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
             (0.5*Shift::Basis(transverse,1)
              - 0.5*Shift::Basis(transverse,-1))(deta_a);
 
-    // Powell term. Use centered reconstructed face state.
+    // Centered point state for Roe and the troubled-face Powell flux.
     State WFace_C(WFace_L.box());
     WFace_L.copyTo(WFace_C);
     WFace_C += WFace_R;
     WFace_C *= 0.5;
 
-    DivBPowell1(minusJDivB,WFace_C,deta,adjDrDir,dir,bxface,false);
+    if (ParseInputs::get_divergence_cleaning() == 1)
+    {
+      // The Powell flux needs face averages and a full source halo. Centered
+      // interpolation of native magnetic averages supplies both without the
+      // extra ghost layers needed to average the WENO face points twice.
+      auto Bnormal = magneticTest ? slice(magneticAvg,dir) : slice(a_USph,iBX + dir);
+      Scalar Bface = Stencil<T>::CellToFace(dir)(Bnormal);
+      auto Bpoint = slice(WFace_C,iBX + dir);
+      const Box sourceFaceBox = minusJDivB.box().extrude(dir).grow(
+          2*(Point::Ones()-Point::Basis(dir)));
+      auto sourceDetA = CubedSphereShell::detA<T,MEM>(sourceFaceBox,dxiPerp,dir);
+      DivBPowell1(minusJDivB,Bface,sourceDetA,adjDrDir,dir,&Bpoint,&thetaFluxFace);
+    }
 
     // Apply the common linear face average to F(WL)+F(WR) once. On the host,
     // local Vars let the shared point-flux kernel write small stack arrays.
