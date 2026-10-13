@@ -413,7 +413,8 @@ int main(int argc, char *argv[])
         for (int p = 0; p < num_probes; ++p) {
           string probe_coord = probe_coords[static_cast<size_t>(p)];
           string probe_filename = probe_filenames[static_cast<size_t>(p)];
-          Probe(JU, map, eulerOp, iop, iter, time, dx, give_space_in_probe_file, probe_coord, probe_filename);
+          Probe(JU, map, eulerOp, iop, iter, time, dx, give_space_in_probe_file,
+                probe_coord, probe_filename, &dVolrLev);
         }
         give_space_in_probe_file = false;
         probe_trigger_count_temp = probe_trigger_count_now;

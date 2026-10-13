@@ -12,6 +12,10 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <algorithm>
+#include <array>
+#include <map>
+#include <memory>
 
 double getPhysTime(double a_time)
 {
@@ -1273,7 +1277,7 @@ inline int ReadCheckpointCMEState(std::string a_filename)
 // Returns interpolated value at x from parallel arrays ( xData, yData )
 //   Assumes that xData has at least two elements, is sorted and is strictly monotonic increasing
 //   boolean argument extrapolate determines behaviour beyond ends of array (if needed)
-double interpolate(vector<double> &xData, vector<double> &yData, double x, bool extrapolate)
+double interpolate(const vector<double> &xData, const vector<double> &yData, double x, bool extrapolate)
 {
   int size = xData.size();
 
@@ -1284,8 +1288,8 @@ double interpolate(vector<double> &xData, vector<double> &yData, double x, bool 
   }
   else
   {
-    while (x > xData[i + 1])
-      i++;
+    auto upper = std::lower_bound(xData.begin() + 1, xData.end(), x);
+    i = static_cast<int>(upper - xData.begin()) - 1;
   }
   double xL = xData[i], yL = yData[i], xR = xData[i + 1], yR = yData[i + 1]; // points on either side (unless beyond ends)
   if (!extrapolate)                                                          // if beyond ends of array and not extrapolating
@@ -1301,6 +1305,84 @@ double interpolate(vector<double> &xData, vector<double> &yData, double x, bool 
   return yL + dydx * (x - xL); // linear interpolation
 }
 
+namespace HelioCubed
+{
+struct ProbeTrajectory
+{
+  vector<double> time, radius, latitude, longitude;
+
+  explicit ProbeTrajectory(const string& filename)
+  {
+    std::ifstream file(filename);
+    if (!file.is_open()) MayDay<void>::Abort(("Unable to open probe trajectory: " + filename).c_str());
+    string line;
+    while (std::getline(file, line))
+    {
+      if (line.find_first_not_of(" \t\r\n") == string::npos) continue;
+      double yearValue, dayValue, r, lat, lon;
+      std::istringstream row(line);
+      if (!(row >> yearValue >> dayValue >> r >> lat >> lon))
+        MayDay<void>::Abort(("Invalid probe trajectory row in: " + filename).c_str());
+      // Retain the existing whole-day interpretation of trajectory DOY values.
+      const int year = static_cast<int>(yearValue);
+      const int day = static_cast<int>(dayValue);
+      const double epoch = year + (day - 1)/(gregorianLeapYear(year) ? 366.0 : 365.0);
+      if (!time.empty() && epoch <= time.back())
+        MayDay<void>::Abort(("Probe trajectory times must increase: " + filename).c_str());
+      time.push_back(epoch);
+      radius.push_back(r);
+      latitude.push_back(lat);
+      longitude.push_back(lon);
+    }
+    if (time.size() < 2)
+      MayDay<void>::Abort(("Probe trajectory needs at least two rows: " + filename).c_str());
+  }
+};
+
+inline const ProbeTrajectory& probeTrajectory(const string& filename)
+{
+  // Trajectories are run inputs; load each distinct file once on each rank.
+  static std::map<string, ProbeTrajectory> cache;
+  auto entry = cache.find(filename);
+  if (entry == cache.end())
+    entry = cache.emplace(filename, ProbeTrajectory(filename)).first;
+  return entry->second;
+}
+
+struct ProbeGeometry
+{
+  MBDisjointBoxLayout layout;
+  int lastLocalBlock = -1;
+  std::map<std::pair<int,int>, double> angularDeterminants;
+
+  explicit ProbeGeometry(const MBDisjointBoxLayout& a_layout) : layout(a_layout)
+  {
+    for (auto index : layout) lastLocalBlock = layout.block(index);
+  }
+
+  double determinant(Point point, double spacing)
+  {
+    auto key = std::make_pair(point[1], point[2]);
+    auto entry = angularDeterminants.find(key);
+    if (entry == angularDeterminants.end())
+    {
+      // detA is independent of radius and block. Evaluate only sampled cells.
+      Point angular(0, point[1], point[2]);
+      auto value = CubedSphereShell::detA<double,HOST>(Box(angular, angular), spacing, 0);
+      entry = angularDeterminants.emplace(key, value(angular, 0)).first;
+    }
+    return entry->second;
+  }
+};
+
+inline ProbeGeometry& probeGeometry(const MBDisjointBoxLayout& layout)
+{
+  static std::unique_ptr<ProbeGeometry> cache;
+  if (!cache || &cache->layout.partition() != &layout.partition())
+    cache = std::make_unique<ProbeGeometry>(layout);
+  return *cache;
+}
+}
 
 
 template<typename BOX_OP>
@@ -1313,87 +1395,28 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
           Array<double, DIM> a_dx,
           bool give_space = false,
           string probe_file = "default",
-          string Probe_data_file = "default")
+          string Probe_data_file = "default",
+          const MBLevelBoxData<double, 1, HOST>* a_dVolrLev = nullptr)
 
 {
   PR_TIME("Probe");
   int pid = procID();
   ofstream outputFile;
-  outputFile.open(Probe_data_file, std::ios::app);
+  auto openOutput = [&]()
+  {
+    if (!outputFile.is_open()) outputFile.open(Probe_data_file, std::ios::app);
+  };
   if (pid == 0 && give_space)
+  {
+    openOutput();
     outputFile << endl;
+  }
   double gamma = ParseInputs::get_gamma();
-
-  int number_of_lines = 0;
-  int totvars = 5; // Year DOY Radius Latitude Longitude
-  std::string line;
-  std::ifstream myfile(probe_file);
-
-  PROTO_ASSERT(myfile.is_open(), "Error: Unable to open trajectory file");
-
-  while (std::getline(myfile, line))
-    ++number_of_lines;
-
-  int row, col;
-  double *my_array;
-  my_array = new double[number_of_lines * totvars];
-
-  ifstream pFile(probe_file);
-  row = 0;
-  while (!pFile.eof())
-  {
-    getline(pFile, line);
-    stringstream ss(line);
-    col = 0;
-
-    while (ss >> my_array[row * totvars + col])
-    {
-
-      col++;
-    }
-    row++;
-  }
-  pFile.close();
-
-  vector<double> time_traj_file, r_traj_file, lat_traj_file, lon_traj_file;
-  int year, day;
-  double rad_AU, latitude, longitude, relative_time;
-  bool leap_year;
-  for (int i = 0; i < number_of_lines; i++)
-  {
-    year = my_array[i * totvars + 0];
-    day = my_array[i * totvars + 1];
-    rad_AU = my_array[i * totvars + 2];
-    latitude = my_array[i * totvars + 3];
-    longitude = my_array[i * totvars + 4];
-    leap_year = false;
-    if ((year % 4) == 0)
-    {
-      leap_year = true;
-      if ((year % 100) == 0 && (year % 400) != 0)
-        leap_year = false;
-    }
-    if (leap_year)
-    {
-      // need to check with Tae if the values are at start of day or end of day. Will use (day-1) then.
-      relative_time = year + (day - 1) / 366.0;
-    }
-    else
-    {
-      relative_time = year + (day - 1) / 365.0;
-    }
-
-    time_traj_file.push_back(relative_time);
-    r_traj_file.push_back(rad_AU);
-    lat_traj_file.push_back(latitude);
-    lon_traj_file.push_back(longitude);
-  }
-  delete[] my_array;
-
+  const auto& trajectory = HelioCubed::probeTrajectory(probe_file);
   double physical_time = getPhysTime(a_time);
-  double r_now = interpolate(time_traj_file, r_traj_file, physical_time, false);
-  double latitude_now = interpolate(time_traj_file, lat_traj_file, physical_time, false);
-  double longitude_now = interpolate(time_traj_file, lon_traj_file, physical_time, false);
+  double r_now = interpolate(trajectory.time, trajectory.radius, physical_time, false);
+  double latitude_now = interpolate(trajectory.time, trajectory.latitude, physical_time, false);
+  double longitude_now = interpolate(trajectory.time, trajectory.longitude, physical_time, false);
   r_now *= c_AU;
   latitude_now = (90.0 - latitude_now);   // To co-latitude
   longitude_now = longitude_now + 181.02; // HGI to Carrington
@@ -1426,12 +1449,10 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   // Array<double, DIM> Xi = a_map.inverse(Xcart); This inverse will work in future
 
   const auto& layout = a_map.layout();
-  for (auto iter : layout)
-  {
-    BlockIndex block = layout.block(iter);
-    auto& mapOp = a_map.op(block);
-    Xi = mapOp.inverse(Xcart);
-  }
+  auto& geometry = HelioCubed::probeGeometry(layout);
+  if (geometry.lastLocalBlock < 0) return;
+  // The previous loop retained only the inverse from its last local block.
+  Xi = a_map.op(geometry.lastLocalBlock).inverse(Xcart);
 
   double eta0 = Xi[0];
   double eta1 = Xi[1];
@@ -1484,59 +1505,46 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   Point index_n2(pt0_nearest, pt1_nearest, pt2_neigbor);
 
 
-  typedef BoxOp_EulerCubedSphere<double, MBMap_CubedSphereShell<HOST>, HOST> OP;
-
-  MBLevelBoxData<double, NUMCOMPS, HOST> JUTemp(layout, OP::ghost());
-  MBLevelBoxData<double, 1, HOST> dVolrLev(layout, OP::ghost() + Point::Basis(0, 2));
-  MBLevelBoxData<double, 1, HOST> radiusLev(layout, OP::ghost() + 2);
-  for (auto dit : a_JU.layout())
-  {
-    BoxData<double, DIM, HOST> Dr(dVolrLev[dit].box());
-    BoxData<double, DIM, HOST> adjDr(dVolrLev[dit].box());
-    a_eulerOp[dit].radialMetrics(radiusLev[dit], Dr, adjDr, dVolrLev[dit], Dr.box());
-    // a_JU[dit].copyTo(JUTemp[dit]);
-  }
-
-  // CubedSphereShell::consToCartInterpEuler(JUTemp, a_iop, dVolrLev, 4);
-
-
   Point size = layout.domain().getBlock(0).sizes();
   double dxiPerp = 1.0/size[1];
 
   for (auto dit : layout)
   {
     auto& JU_i = a_JU[dit];
-    auto& dVolr_i = dVolrLev[dit];
-    BoxData<double,1,HOST> deta = CubedSphereShell::detA<double,HOST>(JU_i.box(),dxiPerp,0); 
-    // auto block = layout.block(dit);
     Box dbx0 = JU_i.box();
     Box dbx1 = dbx0.grow(-NGHOST);
-    BoxData<double, NUMCOMPS, HOST> U_dim(dbx0);
-    // JUTemp[dit].copyTo(U_dim);
-
-    forallInPlace([ ] PROTO_LAMBDA
-      (Var<double,NUMCOMPS,HOST>& l_U,
-        const Var<double,NUMCOMPS,HOST>& l_JU,
-        const Var<double,1,HOST>& l_deta,
-        const Var<double,1,HOST>& l_dVolr)
-      {                    
-        for (int comp = 0; comp < NUMCOMPS; comp++)
-          {
-            l_U(comp) = l_JU(comp)/(l_deta(0)*l_dVolr(0));
-          } 
-      },U_dim,JU_i,deta,dVolr_i);
-
     if (dbx1.containsPoint(index_cc))
     {
+      BoxData<double,1,HOST> localVolume;
+      if (!a_dVolrLev)
+      {
+        // Keep the original call interface usable without allocating a level.
+        Box sampleBox(index_cc-Point::Ones(), index_cc+Point::Ones());
+        localVolume.define(sampleBox);
+        BoxData<double,1,HOST> radius(sampleBox);
+        BoxData<double,DIM,HOST> Dr(sampleBox), adjDr(sampleBox);
+        a_eulerOp[dit].radialMetrics(radius, Dr, adjDr, localVolume, sampleBox);
+      }
+      const auto& volume = a_dVolrLev ? (*a_dVolrLev)[dit] : localVolume;
+      const std::array<Point,4> samples = {index_cc, index_n0, index_n1, index_n2};
+      std::array<std::array<double,NUMCOMPS>,4> values{};
+      for (int sample = 0; sample < 4; ++sample)
+      {
+        Point point = samples[sample];
+        if (!dbx0.containsPoint(point)) continue;
+        const double J = geometry.determinant(point, dxiPerp)*volume(point, 0);
+        for (int component = 0; component < NUMCOMPS; ++component)
+          values[sample][component] = JU_i(point, component)/J;
+      }
       for (int i = 0; i < NUMCOMPS; i++)
       {
-        probed_values[i] = U_dim(index_cc, i);
+        probed_values[i] = values[0][i];
         if (dbx0.containsPoint(index_n0))
-          probed_values[i] += (U_dim(index_n0, i) - U_dim(index_cc, i)) * (pt0 - (pt0_nearest + 0.5)) / (pt0_neigbor - (pt0_nearest + 0.5));
+          probed_values[i] += (values[1][i] - values[0][i]) * (pt0 - (pt0_nearest + 0.5)) / (pt0_neigbor - (pt0_nearest + 0.5));
         if (dbx0.containsPoint(index_n1))
-          probed_values[i] += (U_dim(index_n1, i) - U_dim(index_cc, i)) * (pt1 - (pt1_nearest + 0.5)) / (pt1_neigbor - (pt1_nearest + 0.5));
+          probed_values[i] += (values[2][i] - values[0][i]) * (pt1 - (pt1_nearest + 0.5)) / (pt1_neigbor - (pt1_nearest + 0.5));
         if (dbx0.containsPoint(index_n2))
-          probed_values[i] += (U_dim(index_n2, i) - U_dim(index_cc, i)) * (pt2 - (pt2_nearest + 0.5)) / (pt2_neigbor - (pt2_nearest + 0.5));
+          probed_values[i] += (values[3][i] - values[0][i]) * (pt2 - (pt2_nearest + 0.5)) / (pt2_neigbor - (pt2_nearest + 0.5));
       }
 
       double v2 = 0.0;
@@ -1576,6 +1584,7 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
       BN = H3_to_RTN_20 * Bx + H3_to_RTN_21 * By + H3_to_RTN_22 * Bz;
 
       // if (probed_values[0] != 0) {
+      openOutput();
       outputFile << setw(16) << setprecision(12) << physical_time
                  << setw(11) << setprecision(4) << r_now / c_AU
                  << setw(11) << setprecision(4) << 90 - latitude_now
