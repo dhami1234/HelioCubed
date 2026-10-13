@@ -333,7 +333,13 @@ public:
   mutable T umax;
 
   // How many ghost cells does the operator need from the state variables
-  inline static Point ghost() { return Point::Ones(NGHOST);}
+  inline static Point ghost()
+  {
+    // The derivative-ratio detector consumes one more layer than Jameson.
+    const bool extraDetectorGhost = ParseInputs::get_spatial_operator() == 2
+                                && ParseInputs::get_Berta_detector_type() == 1;
+    return Point::Ones(NGHOST + int(extraDetectorGhost));
+  }
     
   // How many ghost cells does the operator need from the auxiliary variables
   inline static Point auxGhost() { return Point::Zeros();}
@@ -375,12 +381,14 @@ public:
   inline void sphPointToPrim(
                          State& a_WPoint,
                          const State& a_UPoint,
-                         uint a_block) const;
+                         uint a_block,
+                         const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const;
 
   inline void sphAvgToPrim(
                          State& a_WAvg,
                          const State& a_UAvg,
-                         uint a_block) const;
+                         uint a_block,
+                         const BoxData<T,DIM,MEM,DIM>* a_basis = nullptr) const;
 
   inline void BertaComputeThetaJameson(
                          BoxData<T,1,MEM>& a_theta,
@@ -413,7 +421,9 @@ public:
                          const BoxData<T,1,MEM>& a_thetaFluxFace,
                          const BoxData<T,1,MEM>& a_adjDdir,
                          uint a_block,
-                         uint a_dir) const;
+                         uint a_dir,
+                         const FaceEnergies* a_energy = nullptr,
+                         const BoxData<T,1,MEM>* a_radialPoint = nullptr) const;
 
   inline void BertaPrimPointToMappedFlux(
                          State& a_fluxdir,
@@ -425,7 +435,11 @@ public:
                          const BoxData<T,1,MEM>& a_deta,
                          const BoxData<T,DIM,MEM>& a_ntrow,
                          uint a_block,
-                         uint a_dir) const;
+                         uint a_dir,
+                         const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr,
+                         const BoxData<T,1,MEM>* a_magneticPoint = nullptr,
+                         const BoxData<T,1,MEM>* a_totalPressurePoint = nullptr,
+                         bool a_separableMetrics = false) const;
 
   inline void BertaPrimPointToMappedRusanovFlux(
                          State& a_fluxdir,
@@ -438,7 +452,10 @@ public:
                          const BoxData<T,DIM,MEM,DIM>& a_A,
                          const BoxData<T,DIM,MEM>& a_ntrow,
                          uint a_block,
-                         uint a_dir) const;
+                         uint a_dir,
+                         const FaceEnergies* a_leftEnergy = nullptr,
+                         const FaceEnergies* a_rightEnergy = nullptr,
+                         const BoxData<T,1,MEM>* a_radialPoint = nullptr) const;
 
   // Optional point data must be prepared from the final face states in this stage.
   inline void primToFlux(
@@ -584,7 +601,7 @@ public:
                               const State& a_WBar,
                               uint a_dir) const;
 
-  /// Roe dissipation from face averages, returned in mapped Cartesian form.
+  /// Mapped Roe dissipation; optional point states and shock flags support Berta.
   inline void primToMappedRoeFlux(
                               State& a_fluxdir,
                               const State& a_WFace_L,
@@ -598,7 +615,8 @@ public:
                               const State* a_leftPoint = nullptr,
                               const State* a_rightPoint = nullptr,
                               const BoxData<T,1,MEM>* a_radialPoint = nullptr,
-                              const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr) const;
+                              const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences = nullptr,
+                              const BoxData<T,1,MEM>* a_thetaFluxFace = nullptr) const;
 
   // End new factorization of operator().
   // Viscosity starts here.

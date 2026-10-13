@@ -2,6 +2,7 @@
 
 #include "Proto.H"
 #include "Inputs_Parsing.H"
+#include "MHD_CachedCartesianConversion.H"
 
 namespace HelioCubed
 {
@@ -21,25 +22,46 @@ void consToSphInterpEulerCartesian(
         "Cartesian state conversion requires three-dimensional MHD");
     const auto& layout = a_JU.layout();
     const T h = T(1)/layout.domain().getBlock(0).sizes()[1];
+    const bool localCopies = MEM == HOST && ParseInputs::get_spatial_operator() == 2;
 
     // JU is valid only in each block's own coordinate system. Exchange only
     // within a block before dividing; one-sided differences handle block edges.
     Array<Point,DIM+1> localGhost;
     localGhost.fill(Point::Zeros());
     localGhost[0] = Point::Ones(2);
-    MBLevelBoxData<T,C,MEM> ju(layout,localGhost);
-    ju.setVal(T(0));
-    a_JU.copyTo(ju);
+    MBLevelBoxData<T,C,MEM> ju;
+    if (localCopies) ju.defineForOverwrite(layout,localGhost);
+    else ju.define(layout,localGhost);
+    // Level setVal also exchanges. Zero local storage now; exchange only
+    // after the source data have been populated.
+    for (auto index : layout) ju[index].setVal(T(0));
+    if (localCopies)
+        for (auto index : layout)
+            a_JU[index].copyTo(ju[index],layout[index],Point::Zeros());
+    else
+        a_JU.copyTo(ju);
     ju.exchange0();
 
     // The final matrix quotient consumes one angular layer. Interpolation
     // sources require two more. No interblock buffers are needed on the output.
     const auto ghost = a_JU.ghost() + Point(0,1,1);
     localGhost[0] = ghost[0];
-    MBLevelBoxData<T,C,MEM> input(layout,ghost + Point(0,2,2));
-    MBLevelBoxData<T,C,MEM> cart(layout,localGhost);
-    input.setVal(T(0));
-    cart.setVal(T(0));
+    MBLevelBoxData<T,C,MEM> input,cart;
+    if (localCopies)
+    {
+        input.defineForOverwrite(layout,ghost + Point(0,2,2));
+        cart.defineForOverwrite(layout,localGhost);
+    }
+    else
+    {
+        input.define(layout,ghost + Point(0,2,2));
+        cart.define(layout,localGhost);
+    }
+    for (auto index : layout)
+    {
+        input[index].setVal(T(0));
+        if (!localCopies) cart[index].setVal(T(0));
+    }
     for (auto index : layout)
     {
         PR_TIMERS("Cartesian conversion: JU to U");
@@ -102,14 +124,31 @@ void consToSphInterpEulerCartesian(
     // Every vector component has the same global Cartesian meaning on all
     // blocks. Interpolate these averages before rotating into the local basis.
     input.exchange();
-    input.copyTo(cart);
+    if (localCopies)
+    {
+        // exchange() has populated input's wider same-block halos. Copy those
+        // complete patch values locally; interpolation changes only points
+        // outside the block, leaving same-block halos ready for conversion.
+        for (auto index : layout) input[index].copyTo(cart[index]);
+    }
+    else
+        input.copyTo(cart);
     a_iop.apply(cart,input);
-    cart.exchange0();
+    if (!localCopies) cart.exchange0();
     for (auto index : layout)
     {
         PR_TIMERS("Cartesian conversion: U to Usph");
         ScopedHostStack<MEM> scratch;
         const Box outputBox = a_JU[index].box();
+        if constexpr (MEM == HOST)
+        {
+            if (ParseInputs::get_spatial_operator() == 2)
+            {
+                cachedNativeConversion(a_JU[index],cart[index],layout,
+                    a_JU.ghost()[0],index.global(),layout.block(index),h);
+                continue;
+            }
+        }
         const Box metricBox = outputBox.grow(Point(0,1,1));
         auto matrix = CubedSphereShell::AMatrix<T,MEM>(metricBox,h,layout.block(index),0);
         // AMatrix averages derivatives with respect to angular radians. The

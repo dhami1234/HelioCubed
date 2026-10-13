@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include "MHD_pout.H"
 #include "MHD_Constants.H"
+#include "MHD_Time.H"
 
 #ifndef GIT_HASH_RAW
 #define GIT_HASH_RAW unknown_hash
@@ -67,7 +68,7 @@ private:
     int BC_conserved_averages = 0; // 1: centered initialization and averaged BCs.
     int seam_pressure_correction = 0; // 1: match angular ghost energy to pressure.
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
-    int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard operator only)
+    int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard and Berta)
     double entropy_fix_coeff = 0.3; // FullSphere entropy-fix coefficient; 0 disables it
     double Berta_eta_d = 0.02; // Berta detector threshold
     int Berta_detector_type = 0; // 0: Jameson detector, 1: Berta derivative-ratio detector
@@ -118,12 +119,17 @@ private:
     std::vector<std::string> probe_coords;  // Accepts HGI coordinates              
     double Probe_cadence = 1000000000; // In seconds
     double BC_start_time = 0.0; // Like 2024.0 for year 2024
+    // Epochs must bypass InputArgs' single-precision numeric conversion.
+    string BC_start_time_raw = "0";
+    CalendarEpoch BC_start_epoch;
     double BC_cadence = 1.0; // In hours
     int BC_frame_rotate = 0; // 0: Frames don't rotate (SWiG), 1: Frames rotate
     int BC_force_single_frame = 0; // 1: Use only one frame for BCs, 0: Use all frames for BCs (if present)
     int Sun_gravity = 0; // 0: No gravity, 1: Include Sun's gravity as source term
     int CME_type = 0; // 0: No CME, 1: CME
-    double CME_Enter_Time;
+    double CME_Enter_Time = 0.0; // Decimal year; 0 inserts at simulation start.
+    string CME_Enter_Time_raw = "0";
+    double CME_insertion_time = 0.0; // Seconds after BC_start_time.
     double CME_r1;
     double CME_r0;
     double CME_halfangle;
@@ -212,12 +218,14 @@ public:
     static const std::vector<std::string>& get_probe_coords()     { return getInstance().probe_coords; }     
     static double get_Probe_cadence() {return getInstance().Probe_cadence;}
     static double get_BC_start_time() {return getInstance().BC_start_time;}
+    static const CalendarEpoch& get_BC_start_epoch() {return getInstance().BC_start_epoch;}
     static double get_BC_cadence() {return getInstance().BC_cadence;}
     static int get_BC_frame_rotate() {return getInstance().BC_frame_rotate;}
     static int get_BC_force_single_frame() {return getInstance().BC_force_single_frame;}
     static int get_Sun_gravity() {return getInstance().Sun_gravity;}
     static int get_CME_type() {return getInstance().CME_type;}
     static double get_CME_Enter_Time() {return getInstance().CME_Enter_Time;}
+    static double get_CME_insertion_time() {return getInstance().CME_insertion_time;}
     static double get_CME_r1() {return getInstance().CME_r1;}
     static double get_CME_r0() {return getInstance().CME_r0;}
     static double get_CME_halfangle() {return getInstance().CME_halfangle;}
@@ -297,12 +305,12 @@ public:
             args.add(base + "coords",   probe_coords[(size_t)i]);
         }
         args.add("Probe_cadence", Probe_cadence);
-        args.add("BC_start_time", BC_start_time);
+        args.add("BC_start_time", BC_start_time_raw);
         args.add("BC_cadence", BC_cadence);
         args.add("BC_frame_rotate", BC_frame_rotate);
         args.add("BC_force_single_frame", BC_force_single_frame);
         args.add("Sun_gravity", Sun_gravity);
-        args.add("CME_Enter_Time", CME_Enter_Time);
+        args.add("CME_Enter_Time", CME_Enter_Time_raw);
         args.add("CME_type", CME_type);
         args.add("CME_r1", CME_r1);
         args.add("CME_r0", CME_r0);
@@ -336,7 +344,7 @@ public:
             throw std::invalid_argument("viscosity_order must be 3 or 5.");
         }
         auto geometry = cubedSphereShellGeometry();
-        auto parseGeometryValue = [](const string& raw, const char* name,
+        auto parsePreciseValue = [](const string& raw, const char* name,
                                      double defaultValue) {
             if (raw.empty()) return defaultValue;
             try {
@@ -351,9 +359,22 @@ public:
                 throw std::invalid_argument(string(name) + " must be a number.");
             }
         };
-        geometry.r0 = parseGeometryValue(inner_radius, "inner_radius", geometry.r0);
-        geometry.r1 = parseGeometryValue(outer_radius, "outer_radius", geometry.r1);
-        geometry.radialStretch = parseGeometryValue(
+        BC_start_epoch = parseCalendarEpoch(BC_start_time_raw, "BC_start_time");
+        CalendarEpoch cmeEpoch = parseCalendarEpoch(CME_Enter_Time_raw, "CME_Enter_Time");
+        BC_start_time = BC_start_epoch.decimalYear();
+        CME_Enter_Time = cmeEpoch.decimalYear();
+        if (CME_type != 0 && CME_type != 1) {
+            throw std::invalid_argument("CME_type must be 0 or 1.");
+        }
+        if (CME_type == 1 && CME_Enter_Time > 0.0 && BC_start_time == 0.0) {
+            throw std::invalid_argument(
+                "A scheduled CME requires BC_start_time to define the simulation's calendar epoch.");
+        }
+        CME_insertion_time = CME_type == 1 && cmeEpoch.year != 0
+            ? secondsBetweenEpochs(BC_start_epoch, cmeEpoch) : 0.0;
+        geometry.r0 = parsePreciseValue(inner_radius, "inner_radius", geometry.r0);
+        geometry.r1 = parsePreciseValue(outer_radius, "outer_radius", geometry.r1);
+        geometry.radialStretch = parsePreciseValue(
             radial_stretch, "radial_stretch", geometry.radialStretch);
         if (!std::isfinite(geometry.r0) || !std::isfinite(geometry.r1)
             || geometry.r0 <= 0.0 || geometry.r1 <= geometry.r0) {
@@ -439,13 +460,13 @@ public:
             pout(0) << "  probe" << i << ".coords:   " << probe_coords[static_cast<size_t>(i)]   << endl;
         }
         pout(0) << "Probe_cadence: " << Probe_cadence << endl;
-        pout(0) << "BC_start_time: " << BC_start_time << endl;
+        pout(0) << "BC_start_time: " << BC_start_time_raw << endl;
         pout(0) << "BC_cadence: " << BC_cadence << endl;
         pout(0) << "BC_frame_rotate: " << BC_frame_rotate << endl;
         pout(0) << "BC_force_single_frame: " << BC_force_single_frame << endl;
         pout(0) << "Sun_gravity: " << Sun_gravity << endl;
         pout(0) << "CME_type: " << CME_type << endl;
-        pout(0) << "CME_Enter_Time: " << CME_Enter_Time << endl;
+        pout(0) << "CME_Enter_Time: " << CME_Enter_Time_raw << endl;
         pout(0) << "CME_r1: " << CME_r1 << endl;
         pout(0) << "CME_r0: " << CME_r0 << endl;
         pout(0) << "CME_halfangle: " << CME_halfangle << endl;

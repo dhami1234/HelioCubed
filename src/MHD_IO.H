@@ -13,74 +13,9 @@
 #include <limits>
 #include <string>
 
-time_t mktimeUTC(struct tm *time_tm)
-{
-  // *** enter in UTC mode
-  char *oldTZ = getenv("TZ");
-  putenv("TZ=UTC");
-  tzset();
-  // ***
-
-  time_t ret = mktime(time_tm);
-
-  // *** Restore previous TZ
-  if (oldTZ == NULL)
-  {
-    putenv("TZ=");
-  }
-  else
-  {
-    char buff[255];
-    sprintf(buff, "TZ=%s", oldTZ);
-    putenv(buff);
-  }
-  tzset();
-  // ***
-
-  return ret;
-}
-
-time_t getPosixTime(double a_time)
-{
-  int year = (int)(floor(a_time));
-  int daysYear = (year % 4 == 0 ? 366 : 365);
-
-  tm time_tm;
-  bzero(&time_tm, sizeof(tm));
-
-  time_tm.tm_year = year - 1900;
-  time_tm.tm_sec = (int)((a_time - year) * daysYear * 24.0 * 3600.0);
-  time_tm.tm_mday = 1;
-  time_tm.tm_isdst = 0;
-
-  time_t posix_time = mktimeUTC(&time_tm);
-
-  return posix_time;
-}
-
 double getPhysTime(double a_time)
 {
-  // double   timeRef      = eos_AU/m_lismV; // sec
-  double BC_start_time = ParseInputs::get_BC_start_time();
-  time_t startBC = getPosixTime(BC_start_time);
-  double timeSec = (a_time); //*timeRef; // time in sec
-  time_t timeSec_t = (time_t)(floor(timeSec));
-
-  time_t curTime = startBC + timeSec_t;
-
-  tm curTime_tm;
-  // gmtime_r(&curTime,&curTime_tm);
-  localtime_r(&curTime, &curTime_tm);
-
-  int daysYear = (curTime_tm.tm_year % 4 == 0 ? 366 : 365);
-
-  double PhysTime = curTime_tm.tm_year + 1900.0 +
-                    (double)(curTime_tm.tm_yday) / (double)(daysYear) +
-                    (double)(curTime_tm.tm_hour) / (double)(daysYear * 24.0) +
-                    (double)(curTime_tm.tm_min) / (double)(daysYear * 24.0 * 60.0) +
-                    (double)(curTime_tm.tm_sec + timeSec - timeSec_t) / (double)(daysYear * 24.0 * 3600.0);
-
-  return PhysTime;
+  return advanceCalendarEpoch(ParseInputs::get_BC_start_epoch(), a_time).decimalYear();
 }
 
 std::string getPhysTime_duration(double a_time)
@@ -108,76 +43,7 @@ std::string getPhysTime_duration(double a_time)
 
 std::string getPhysTime_date(double a_time)
 {
-    double physical_time = getPhysTime(a_time);
-
-    // Split into year + fractional part
-    double year_part;
-    double fracpart = std::modf(physical_time, &year_part);
-    int year = static_cast<int>(year_part);
-
-    // ---- 1. Handle leap year and days in year ----
-    auto is_leap = [](int y) {
-        return ((y % 4 == 0 && y % 100 != 0) || (y % 400 == 0));
-    };
-
-    bool leap = is_leap(year);
-    double days_in_year = leap ? 366.0 : 365.0;
-
-    // Convert fraction of year to (day of year + fraction of that day)
-    double day_of_year_real = fracpart * days_in_year;   // 0-based, fractional
-    int day_of_year = static_cast<int>(day_of_year_real); // 0-based integer
-    double day_frac = day_of_year_real - day_of_year;     // fraction of the day
-
-    // ---- 2. Convert day_of_year to month/day ----
-    static const int days_in_month_common[] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-    static const int days_in_month_leap[]   = { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-
-    const int* days_in_month = leap ? days_in_month_leap : days_in_month_common;
-
-    int month = 0;               // 0-based
-    int day_index = day_of_year; // still 0-based
-
-    for (month = 0; month < 12; ++month) {
-        if (day_index < days_in_month[month]) {
-            break;
-        }
-        day_index -= days_in_month[month];
-    }
-
-    int day = day_index + 1;  // 1-based day of month
-
-    // ---- 3. Time of day from fraction of the *day* ----
-    double hours_real   = day_frac * 24.0;
-    int hour            = static_cast<int>(hours_real);
-
-    double minutes_real = (hours_real - hour) * 60.0;
-    int minute          = static_cast<int>(minutes_real);
-
-    double seconds_real = (minutes_real - minute) * 60.0;
-    int second          = static_cast<int>(seconds_real + 0.5); // round
-
-    // Optional: handle second == 60 corner case
-    if (second >= 60) {
-        second = 0;
-        ++minute;
-        if (minute >= 60) {
-            minute = 0;
-            ++hour;
-            if (hour >= 24) {
-                hour = 0;
-                ++day;
-            }
-        }
-    }
-
-    // ---- 4. Format UTC string manually (no DST, no timezone conversion) ----
-    char dateStr[64];
-    std::snprintf(dateStr, sizeof(dateStr),
-                  "%04d-%02d-%02dT%02d:%02d:%02d UTC",
-                  year, month + 1, day,   // month+1 for 1–12
-                  hour, minute, second);
-
-    return std::string(dateStr);
+  return formatUTCEpoch(advanceCalendarEpoch(ParseInputs::get_BC_start_epoch(), a_time));
 }
 
 template<
@@ -1305,11 +1171,85 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   
 }
 
+// Store the event state in the checkpoint itself. Rank zero adds the scalar
+// attribute after all ranks have closed the parallel data writer.
+inline void CheckCMECheckpointHDF5(bool a_success, const char* a_operation)
+{
+  if (a_success) return;
+  std::fprintf(stderr, "CME checkpoint: HDF5 operation failed: %s\n", a_operation);
+  std::fflush(stderr);
+#ifdef PR_MPI
+  MPI_Abort(MPI_COMM_WORLD, 1);
+#endif
+  std::abort();
+}
+#define CME_CHECKPOINT_HDF5(operation) \
+    CheckCMECheckpointHDF5((operation), #operation)
+
+inline void WriteCheckpointCMEState(std::string a_filename, bool a_inserted)
+{
+  barrier();
+  if (procID() == 0)
+  {
+    auto file = H5Fopen(a_filename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(file >= 0);
+    auto level = H5Gopen(file, "/level_0", H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(level >= 0);
+    auto space = H5Screate(H5S_SCALAR);
+    CME_CHECKPOINT_HDF5(space >= 0);
+    auto attr = H5Acreate2(level, "cme_inserted", H5T_NATIVE_INT, space,
+                          H5P_DEFAULT, H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(attr >= 0);
+    int inserted = a_inserted ? 1 : 0;
+    CME_CHECKPOINT_HDF5(H5Awrite(attr, H5T_NATIVE_INT, &inserted) >= 0);
+    CME_CHECKPOINT_HDF5(H5Aclose(attr) >= 0);
+    CME_CHECKPOINT_HDF5(H5Sclose(space) >= 0);
+    CME_CHECKPOINT_HDF5(H5Gclose(level) >= 0);
+    CME_CHECKPOINT_HDF5(H5Fclose(file) >= 0);
+  }
+  barrier();
+}
+
+// -1 identifies older checkpoints without event metadata. The driver then
+// infers the event state from the restart time, as the FullSphere driver does.
+inline int ReadCheckpointCMEState(std::string a_filename)
+{
+  if (a_filename.substr(a_filename.find_last_of('.') + 1) != "hdf5")
+    a_filename += ".hdf5";
+  int inserted = -1;
+  barrier();
+  if (procID() == 0)
+  {
+    auto file = H5Fopen(a_filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(file >= 0);
+    auto level = H5Gopen(file, "/level_0", H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(level >= 0);
+    auto exists = H5Aexists(level, "cme_inserted");
+    CME_CHECKPOINT_HDF5(exists >= 0);
+    if (exists > 0)
+    {
+      auto attr = H5Aopen(level, "cme_inserted", H5P_DEFAULT);
+      CME_CHECKPOINT_HDF5(attr >= 0);
+      CME_CHECKPOINT_HDF5(H5Aread(attr, H5T_NATIVE_INT, &inserted) >= 0);
+      CME_CHECKPOINT_HDF5(H5Aclose(attr) >= 0);
+    }
+    CME_CHECKPOINT_HDF5(H5Gclose(level) >= 0);
+    CME_CHECKPOINT_HDF5(H5Fclose(file) >= 0);
+  }
+#ifdef PR_MPI
+  MPI_Bcast(&inserted, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+  return inserted;
+}
+
+#undef CME_CHECKPOINT_HDF5
+
   void Write_Checkpoint(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
              int iter,
              int restart_step,
              double time = 0.0,
-             double dt = 0.0)
+             double dt = 0.0,
+             bool cme_inserted = false)
 {
   PR_TIME("Write_Checkpoint");
   HDF5Handler h5;
@@ -1318,6 +1258,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   h5.setTimestep(dt);
   h5.setIter(iter);
   h5.writeMBLevel(a_JU, check_file_name);
+  WriteCheckpointCMEState(check_file_name + ".hdf5", cme_inserted);
   pout(0) << "Checkpoint file written at iteration " << iter << endl;
   int checkpoint_cadence = ParseInputs::get_checkpoint_cadence();
   int iter_to_delete = iter - (checkpoint_cadence*ParseInputs::get_max_checkpoint_files());

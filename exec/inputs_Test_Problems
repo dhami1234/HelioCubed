@@ -1,70 +1,159 @@
-# Optional runtime shell geometry (radii in cm; stretch is dimensionless).
-# Omit these to use the Makefile defaults. radial_stretch = 0 is uniform.
-#-inner_radius                   1.4964e12
-#-outer_radius                   1.61124e13
-#-radial_stretch                 1.5
-# State conversion: 0 = preserve spherical symmetry (default).
-# Set to 1 for JU -> Cartesian U -> exchange/interpolate -> cubed-spherical U.
-# Both use fourth-order averages; option 1 does not preserve radial symmetry exactly.
--state_conversion                0
-# Optional centered file sampling and conserved BC averages (default off).
--BC_conserved_averages           0
-# Optional seam ghost pressure correction (default off).
--seam_pressure_correction        0
-## Idealized test problems selected by init_condition_type:
-##   2 = radial pulse
-##   3 = radial pulse with B_cart set by c_RADIAL_PULSE_BX0
-##   4 = non-radial pulse
-##   5 = non-radial pulse with B_cart set by c_NONRADIAL_PULSE_BX0
-##   6 = strong spherical shock
-##   7 = strong spherical shock with B_cart set by c_STRONG_SHOCK_BX0
-##   8 = off-center hydrodynamic blast
-##   9 = off-center blast with B_cart = (0.1, 0, 0) G
-## For 8/9 use the test runner, which sets gamma/time per case.
--convTestType                    0
--init_condition_type             6
--domainSize                      30
--thickness                       60
--boxSize_nonrad                  30
--boxSize_rad                     20
--max_iter                        100
--max_time                        3600000.0
--CFL                             0.5
--limiter                         1
--spatial_operator                1
-# Standard operator: 1 = Rusanov (default), 2 = Roe 8-wave.
--Riemann_solver_type             2
--entropy_fix_coeff               0.3
--Berta_eta_d                     0.02
--Berta_detector_type             0
--Berta_fallback_type             0
--strength                        100.0
--write_cadence                   1000000000
--slice_cadence                   1000000000
--write_time_cadence              1800.0
--slice_time_cadence              1800.0
--slices                          Z
--checkpoint_cadence              100
--P_floor_cadence                 1000000000
--data_file_prefix                test_data
--checkpoint_file_prefix          test_checkpoint
--scale_data_with_r               0
--output_divB                     1
--max_checkpoint_files            1
--gamma                           1.6666666666666666666667
--temporal_order                  4
--divergence_cleaning             1
-# Independent artificial-viscosity switches: 0 = off, 1 = on.
--linear_viscosity                1
--nonlinear_viscosity             1
-# Linear viscosity order: 3 = third order, 5 = fifth order (default).
--viscosity_order                 5
-# 0 uses the historical radius-independent viscosity scaling, which is
-# recommended for radial-symmetry tests; 1 enables radius-scaled viscosity.
--scale_viscosity_with_r          0
--boundary_reflux                 1
--radial_refinement               0
--MBInterp_define                 1
--num_probes                      0
--Sun_gravity                     0
--CME_type                        0
+# HelioCubed inputs: Idealized pulse, shock and blast problems
+# Format: -option value. Keep explanations on separate comment lines.
+# Paths are relative to the working directory used to launch the executable.
+# Omitted options retain code or Makefile defaults.
+
+# === Run type and physical model ===
+
+# Initial conditions: 0=file solar wind; 1=analytic solar wind.
+# Pulse tests: 2=spherical, 3=spherical with B; 4=off-center, 5=off-center with B.
+# Shock tests: 6=spherical hydro, 7=spherical with B.
+# Blast tests: 8=off-center hydro, 9=off-center with B; use gamma=1.4 for 8/9.
+# Constant Cartesian test fields are set in src/MHD_Constants.H.
+
+# Initial-condition selector; choices are listed above.
+-init_condition_type            6
+# Perturbation strength for analytic wind and spherical-shock tests.
+-strength                       100.0
+# Ratio of specific heats (dimensionless).
+-gamma                          1.6666666666666666666667
+# Solar gravitational source: 0=off, 1=on.
+-Sun_gravity                    0
+
+# === Grid and shell geometry ===
+
+# Geometry overrides below remain commented; uncomment to use runtime values.
+
+# Cells along each angular direction on each cubed-sphere panel.
+-domainSize                     30
+# Total radial cells across the shell.
+-thickness                      60
+# Angular cells per MPI patch; divides domainSize.
+-boxSize_nonrad                 30
+# Radial cells per MPI patch; divides thickness.
+-boxSize_rad                    20
+# Inner shell radius (cm); uncomment to override the Makefile default.
+#-inner_radius                  1.4964e12
+# Outer shell radius (cm); must exceed inner_radius.
+#-outer_radius                  1.61124e13
+# Radial spacing: 0=uniform, nonzero=exponential stretching.
+#-radial_stretch                1.5
+
+# === Spatial scheme and Riemann solver ===
+
+# Solver pairs (spatial_operator, Riemann_solver_type):
+# Standard/Rusanov=(1,1), standard/Roe=(1,2), Berta/Rusanov=(2,1), Berta/Roe=(2,2).
+
+# Spatial scheme: 1=standard fourth-order FV, 2=Berta WENOZ.
+-spatial_operator               1
+# Standard scheme only: 0=none, 1=fourth-order limiter, 2=minmod.
+-limiter                        1
+# Riemann solver for either scheme: 1=Rusanov, 2=Roe eight-wave.
+-Riemann_solver_type            2
+# Roe entropy-fix coefficient: nonnegative; 0 disables the fix.
+-entropy_fix_coeff              0.3
+
+# Berta-only settings below; unused by the standard spatial scheme.
+# Berta only: 0=Jameson, 1=derivative-ratio detector.
+-Berta_detector_type            0
+# Berta detector threshold; smaller values trigger more fallback.
+-Berta_eta_d                    0.02
+# Berta shock reconstruction: 0=WENO3, 1=limited linear (PLM).
+-Berta_fallback_type            0
+
+# === Time integration and stopping limits ===
+
+# Time integrator: 1=Euler, 3=classical RK3, 4=classical RK4.
+-temporal_order                 4
+# Multiplier of the wave-speed/viscosity timestep estimate.
+-CFL                            0.5
+# Maximum step number; stops when this or max_time is reached.
+-max_iter                       100
+# Maximum elapsed simulation time (s), including time before a restart.
+-max_time                       3600000.0
+
+# === Divergence control and artificial viscosity ===
+
+# Powell divergence-control source: 0=off, 1=on.
+-divergence_cleaning            1
+# Linear artificial viscosity: 0=off, 1=on.
+-linear_viscosity               1
+# Nonlinear artificial viscosity: 0=off, 1=on.
+-nonlinear_viscosity            1
+# Linear artificial-viscosity order: 3 or 5.
+-viscosity_order                5
+# Viscosity scaling: 0=radius-independent, 1=radius-scaled.
+-scale_viscosity_with_r         0
+# Apply the pressure-floor repair every this many steps.
+-P_floor_cadence                1000000000
+
+# === State conversion and block boundaries ===
+
+# Both conversions retain fourth-order averages; Cartesian U does not preserve
+# radial symmetry exactly. Optional BC treatments add work and default to off.
+
+# State interpolation: 0=preserve spherical symmetry, 1=Cartesian U.
+-state_conversion               0
+# Reconcile fluxes at panel boundaries: 0=off, 1=on.
+-boundary_reflux                1
+# File BCs: 0=legacy sampling, 1=centered sampling/conserved averages.
+-BC_conserved_averages          0
+# Angular ghost energy correction to interpolated pressure: 0=off, 1=on.
+-seam_pressure_correction       0
+# Legacy interpolation selector (0/1); unused by the current driver.
+-MBInterp_define                1
+
+# === Convergence controls ===
+
+# Other modes: convTestType=3 compares initial states; 4 initializes one grid only.
+# convergence_level and convergence_dt apply to convergence modes 1/2.
+
+# Mode: 0=simulation, 1=space convergence, 2=space/time convergence.
+-convTestType                   0
+# Convergence refinement: 0=all directions, 1=radial direction only.
+-radial_refinement              0
+
+# === Volume and slice output ===
+
+# Step/time triggers are combined; final output is always written.
+# Volume output is also written immediately after a scheduled CME insertion.
+# Use large positive cadences to suppress periodic output.
+
+# Prefix for volume and slice output filenames.
+-data_file_prefix               test_data
+# Full-volume HDF5 output every this many steps.
+-write_cadence                  1000000000
+# Full-volume HDF5 output interval in elapsed simulation time (s).
+-write_time_cadence             1800.0
+# Slice output every this many steps.
+-slice_cadence                  1000000000
+# Slice output interval in elapsed simulation time (s).
+-slice_time_cadence             1800.0
+# Slice selection: any combination of X, Y, Z (planes) and R (shell).
+-slices                         Z
+# Output: 0=unscaled CGS, 1=radius scaling and presentation units.
+-scale_data_with_r              0
+# Append physical div(B) to volume output: 0=no, 1=yes.
+-output_divB                    1
+
+# === Checkpointing and restart ===
+
+# Checkpoint filename prefix.
+-checkpoint_file_prefix         test_checkpoint
+# Save a restart checkpoint every this many steps.
+-checkpoint_cadence             100
+# Number of recent checkpoints targeted for retention.
+-max_checkpoint_files           1
+
+# === Trajectory probes ===
+
+# Number of trajectory probes; 0 disables probes (up to 32 named entries).
+-num_probes                     0
+
+# === CME insertion ===
+
+# When CME_type=1, schedule one insertion relative to BC_start_time.
+# Checkpoints retain insertion state to prevent duplicate CMEs on restart.
+
+# CME insertion: 0=off, 1=insert the scheduled flux rope.
+-CME_type                       0

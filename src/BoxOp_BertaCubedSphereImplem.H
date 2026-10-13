@@ -1,3 +1,194 @@
+// Separate component lines expose independent output storage to CPU compilers.
+// Keep each cell's correction and matrix-column accumulation order.
+template<unsigned N, bool BOTH, typename T>
+inline void bertaMappedLine(
+    T* __restrict__ a_out,
+    const T* const* a_matrix,
+    const T* const* a_firstMatrix,
+    const T* const* a_secondMatrix,
+    const T* const* a_flux,
+    const T* const* a_firstFlux,
+    const T* const* a_secondFlux,
+    int a_size)
+{
+#ifdef __clang__
+#pragma clang loop vectorize(enable)
+#endif
+  for (int cell = 0; cell < a_size; ++cell)
+  {
+    T sum = T(0);
+    for (unsigned column = 0; column < N; ++column)
+    {
+      T term = T(0);
+      if constexpr (BOTH)
+        term += a_firstMatrix[column][cell]*a_firstFlux[column][cell]*T(1.0/12.0);
+      term += a_secondMatrix[column][cell]*a_secondFlux[column][cell]*T(1.0/12.0);
+      term += a_matrix[column][cell]*a_flux[column][cell]*T(1);
+      sum += term;
+    }
+    a_out[cell] = sum;
+  }
+}
+
+template<typename T>
+inline void bertaMapHostBox(
+    BoxData<T,NUMCOMPS,HOST>& a_out,
+    const BoxData<T,NUMCOMPS,HOST>& a_flux,
+    const BoxData<T,NUMCOMPS,HOST>& a_firstFlux,
+    const BoxData<T,NUMCOMPS,HOST>& a_secondFlux,
+    const BoxData<T,DIM,HOST,DIM>& a_matrix,
+    const BoxData<T,DIM,HOST,DIM>& a_firstMatrix,
+    const BoxData<T,DIM,HOST,DIM>& a_secondMatrix,
+    const BoxData<T,1,HOST>& a_det,
+    const BoxData<T,1,HOST>& a_firstDet,
+    const BoxData<T,1,HOST>& a_secondDet,
+    const Box& a_box,bool a_skipFirst)
+{
+  PROTO_ASSERT(a_out.aliasData() != a_flux.aliasData(),
+      "Berta mapping requires separate input and output storage");
+  const Point low = a_box.low(),high = a_box.high();
+  const int count = a_box.size(0);
+  for (int k = low[2]; k <= high[2]; ++k)
+    for (int j = low[1]; j <= high[1]; ++j)
+    {
+      const Point start(low[0],j,k);
+      for (int component : {iRHO,iE})
+      {
+        const T* matrix[1] = {a_det.data(start)};
+        const T* firstMatrix[1] = {a_firstDet.data(start)};
+        const T* secondMatrix[1] = {a_secondDet.data(start)};
+        const T* flux[1] = {a_flux.data(start,component)};
+        const T* firstFlux[1] = {a_firstFlux.data(start,component)};
+        const T* secondFlux[1] = {a_secondFlux.data(start,component)};
+        if (a_skipFirst)
+          bertaMappedLine<1,false>(a_out.data(start,component),matrix,
+              firstMatrix,secondMatrix,flux,firstFlux,secondFlux,count);
+        else
+          bertaMappedLine<1,true>(a_out.data(start,component),matrix,
+              firstMatrix,secondMatrix,flux,firstFlux,secondFlux,count);
+      }
+      for (int component : {iMOMX,iBX})
+        for (unsigned row = 0; row < DIM; ++row)
+        {
+          const T* matrix[DIM];
+          const T* firstMatrix[DIM];
+          const T* secondMatrix[DIM];
+          const T* flux[DIM];
+          const T* firstFlux[DIM];
+          const T* secondFlux[DIM];
+          for (unsigned column = 0; column < DIM; ++column)
+          {
+            matrix[column] = a_matrix.data(start,row,column);
+            firstMatrix[column] = a_firstMatrix.data(start,row,column);
+            secondMatrix[column] = a_secondMatrix.data(start,row,column);
+            flux[column] = a_flux.data(start,component+column);
+            firstFlux[column] = a_firstFlux.data(start,component+column);
+            secondFlux[column] = a_secondFlux.data(start,component+column);
+          }
+          if (a_skipFirst)
+            bertaMappedLine<DIM,false>(a_out.data(start,component+row),matrix,
+                firstMatrix,secondMatrix,flux,firstFlux,secondFlux,count);
+          else
+            bertaMappedLine<DIM,true>(a_out.data(start,component+row),matrix,
+                firstMatrix,secondMatrix,flux,firstFlux,secondFlux,count);
+        }
+    }
+}
+
+// A shifted component view shares storage; const callers never modify it.
+template<typename T, unsigned C, MemType MEM>
+inline const BoxData<T,C,MEM> bertaReadView(
+    const BoxData<T,C,MEM>& a_data,
+    const Point& a_shift = Point::Zeros())
+{
+  auto view = slice<T,C,C,MEM>(a_data,0);
+  view.shift(a_shift);
+  return view;
+}
+
+// Share both transverse derivatives and accumulate every component in one pass.
+// The scalar product and correction order match Operator::_faceTensorProduct.
+template<typename T, unsigned C, MemType MEM>
+inline BoxData<T,C,MEM> bertaFaceTensorProduct(
+    const BoxData<T,C,MEM>& a_vector,
+    const BoxData<T,1,MEM>& a_scalar,
+    int a_dir,
+    int a_correctionDir = -2)
+{
+  PR_TIMERS("Berta::faceTensorProduct()");
+  if constexpr (MEM == HOST && DIM == 3)
+  {
+    Box productBox = (a_vector.box() & a_scalar.box()).grow(-1).grow(a_dir,1);
+    // -2 keeps both corrections; -1 means a factor is constant in both
+    // transverse directions; a coordinate index selects the sole nonzero one.
+    if (a_correctionDir == -1)
+      return forallOverwrite<T,C,MEM>([] PROTO_LAMBDA(
+          Var<T,C,MEM>& out, const Var<T,C,MEM>& vector,
+          const Var<T,1,MEM>& scalar)
+      {
+        for (int comp = 0; comp < C; ++comp)
+        {
+          T value = T(0);
+          value += vector(comp)*scalar(0)*T(1);
+          out(comp) = value;
+        }
+      },productBox,a_vector,a_scalar);
+    if (a_correctionDir >= 0)
+    {
+      const Stencil<T> difference =
+          0.5*Shift::Basis(a_correctionDir,1)
+        - 0.5*Shift::Basis(a_correctionDir,-1);
+      BoxData<T,C,MEM> vectorDifference = difference(a_vector);
+      BoxData<T,1,MEM> scalarDifference = difference(a_scalar);
+      return forallOverwrite<T,C,MEM>([] PROTO_LAMBDA(
+          Var<T,C,MEM>& out, const Var<T,C,MEM>& vector,
+          const Var<T,C,MEM>& dv, const Var<T,1,MEM>& scalar,
+          const Var<T,1,MEM>& ds)
+      {
+        for (int comp = 0; comp < C; ++comp)
+        {
+          T value = T(0);
+          value += dv(comp)*ds(0)*T(1.0/12.0);
+          value += vector(comp)*scalar(0)*T(1);
+          out(comp) = value;
+        }
+      },productBox,a_vector,vectorDifference,a_scalar,scalarDifference);
+    }
+    const int firstDir = a_dir == 0 ? 1 : 0;
+    const int secondDir = a_dir == 2 ? 1 : 2;
+    const Stencil<T> firstDiff =
+        0.5*Shift::Basis(firstDir,1) - 0.5*Shift::Basis(firstDir,-1);
+    const Stencil<T> secondDiff =
+        0.5*Shift::Basis(secondDir,1) - 0.5*Shift::Basis(secondDir,-1);
+    BoxData<T,C,MEM> vectorFirst = firstDiff(a_vector);
+    BoxData<T,C,MEM> vectorSecond = secondDiff(a_vector);
+    BoxData<T,1,MEM> scalarFirst = firstDiff(a_scalar);
+    BoxData<T,1,MEM> scalarSecond = secondDiff(a_scalar);
+    BoxData<T,C,MEM> product;
+    product.defineForOverwrite(productBox);
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,C,MEM>& out, const Var<T,C,MEM>& vector,
+        const Var<T,C,MEM>& dv0, const Var<T,C,MEM>& dv1,
+        const Var<T,1,MEM>& scalar,
+        const Var<T,1,MEM>& ds0, const Var<T,1,MEM>& ds1)
+    {
+      for (int comp = 0; comp < C; ++comp)
+      {
+        T value = T(0);
+        value += dv0(comp)*ds0(0)*T(1.0/12.0);
+        value += dv1(comp)*ds1(0)*T(1.0/12.0);
+        value += vector(comp)*scalar(0)*T(1);
+        out(comp) = value;
+      }
+    },product, a_vector,vectorFirst,vectorSecond,
+        a_scalar,scalarFirst,scalarSecond);
+    return product;
+  }
+  else
+    return Operator::_faceTensorProduct(
+        a_vector,a_scalar,a_vector,a_scalar,a_dir);
+}
+
 // ====================================================================================
 // Berta-style 4th-order FV pointwise-WENOZ implementation.
 // Corrected for face indexing convention:
@@ -24,7 +215,8 @@ inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
                                           State& a_WPoint,
                                           const State& a_UPoint,
-                                          uint a_block) const
+                                          uint a_block,
+                                          const BoxData<T,DIM,MEM,DIM>* a_basis) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::sphPointToPrim()");
 
@@ -42,8 +234,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphPointToPrim(
     addTestProblemBackgroundB(a_WPoint,a_block);
   }
 
-  BoxData<T,1,MEM> kePoint = kineticEnergyW(a_WPoint,a_block,-1);
-  BoxData<T,1,MEM> mePoint = magneticEnergyW(a_WPoint,a_block,-1);
+  BoxData<T,DIM,MEM,DIM> ownedBasis;
+  if (!a_basis)
+  {
+    ownedBasis = pointwiseSphericalBasis(a_WPoint.box(),a_block,-1);
+    a_basis = &ownedBasis;
+  }
+  BoxData<T,1,MEM> kePoint = kineticEnergyW(a_WPoint,a_block,-1,a_basis);
+  BoxData<T,1,MEM> mePoint = magneticEnergyW(a_WPoint,a_block,-1,a_basis);
 
   forallInPlace(
       [ ] PROTO_LAMBDA
@@ -83,7 +281,8 @@ inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
                                           State& a_WAvg,
                                           const State& a_UAvg,
-                                          uint a_block) const
+                                          uint a_block,
+                                          const BoxData<T,DIM,MEM,DIM>* a_basis) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::sphAvgToPrim()");
 
@@ -100,8 +299,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphAvgToPrim(
     addTestProblemBackgroundB(a_WAvg,a_block);
   }
 
-  BoxData<T,1,MEM> keAvg = kineticEnergyW(a_WAvg,a_block,-1);
-  BoxData<T,1,MEM> meAvg = magneticEnergyW(a_WAvg,a_block,-1);
+  BoxData<T,DIM,MEM,DIM> ownedBasis;
+  if (!a_basis)
+  {
+    ownedBasis = pointwiseSphericalBasis(a_WAvg.box(),a_block,-1);
+    a_basis = &ownedBasis;
+  }
+  BoxData<T,1,MEM> keAvg = kineticEnergyW(a_WAvg,a_block,-1,a_basis);
+  BoxData<T,1,MEM> meAvg = magneticEnergyW(a_WAvg,a_block,-1,a_basis);
 
   forallInPlace(
       [ ] PROTO_LAMBDA
@@ -249,13 +454,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaJameson(
 
   const T eps = 1.0e-40;
 
-  State Wm_x = (1.0*Shift(-ex))(a_WAvgForDetector);
-  State W0   = (1.0*Shift(Point::Zeros()))(a_WAvgForDetector);
-  State Wp_x = (1.0*Shift( ex))(a_WAvgForDetector);
-  State Wm_y = (1.0*Shift(-ey))(a_WAvgForDetector);
-  State Wp_y = (1.0*Shift( ey))(a_WAvgForDetector);
-  State Wm_z = (1.0*Shift(-ez))(a_WAvgForDetector);
-  State Wp_z = (1.0*Shift( ez))(a_WAvgForDetector);
+  const auto Wm_x = bertaReadView(a_WAvgForDetector,-(-ex));
+  const auto W0 = bertaReadView(a_WAvgForDetector,-(Point::Zeros()));
+  const auto Wp_x = bertaReadView(a_WAvgForDetector,-( ex));
+  const auto Wm_y = bertaReadView(a_WAvgForDetector,-(-ey));
+  const auto Wp_y = bertaReadView(a_WAvgForDetector,-( ey));
+  const auto Wm_z = bertaReadView(a_WAvgForDetector,-(-ez));
+  const auto Wp_z = bertaReadView(a_WAvgForDetector,-( ez));
 
   forallInPlace(
       f_berta_jameson_theta_raw,
@@ -274,13 +479,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaJameson(
   Box bxInterior = thetaRaw.box().grow(-1);
   BoxData<T,1,MEM> thetaInterior(bxInterior);
 
-  BoxData<T,1,MEM> theta0   = (1.0*Shift(Point::Zeros()))(thetaRaw);
-  BoxData<T,1,MEM> thetam_x = (1.0*Shift(-ex))(thetaRaw);
-  BoxData<T,1,MEM> thetap_x = (1.0*Shift( ex))(thetaRaw);
-  BoxData<T,1,MEM> thetam_y = (1.0*Shift(-ey))(thetaRaw);
-  BoxData<T,1,MEM> thetap_y = (1.0*Shift( ey))(thetaRaw);
-  BoxData<T,1,MEM> thetam_z = (1.0*Shift(-ez))(thetaRaw);
-  BoxData<T,1,MEM> thetap_z = (1.0*Shift( ez))(thetaRaw);
+  const auto theta0 = bertaReadView(thetaRaw,-(Point::Zeros()));
+  const auto thetam_x = bertaReadView(thetaRaw,-(-ex));
+  const auto thetap_x = bertaReadView(thetaRaw,-( ex));
+  const auto thetam_y = bertaReadView(thetaRaw,-(-ey));
+  const auto thetap_y = bertaReadView(thetaRaw,-( ey));
+  const auto thetam_z = bertaReadView(thetaRaw,-(-ez));
+  const auto thetap_z = bertaReadView(thetaRaw,-( ez));
 
   forallInPlace(
       f_berta_dilate_theta,
@@ -417,21 +622,21 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaDerivativeRatio(
 
   const T eps = 1.0e-40;
 
-  State Wmm_x = (1.0*Shift(-2*ex))(a_WAvgForDetector);
-  State Wm_x  = (1.0*Shift(-ex))(a_WAvgForDetector);
-  State W0    = (1.0*Shift(Point::Zeros()))(a_WAvgForDetector);
-  State Wp_x  = (1.0*Shift( ex))(a_WAvgForDetector);
-  State Wpp_x = (1.0*Shift( 2*ex))(a_WAvgForDetector);
+  const auto Wmm_x = bertaReadView(a_WAvgForDetector,-(-2*ex));
+  const auto Wm_x = bertaReadView(a_WAvgForDetector,-(-ex));
+  const auto W0 = bertaReadView(a_WAvgForDetector,-(Point::Zeros()));
+  const auto Wp_x = bertaReadView(a_WAvgForDetector,-( ex));
+  const auto Wpp_x = bertaReadView(a_WAvgForDetector,-( 2*ex));
 
-  State Wmm_y = (1.0*Shift(-2*ey))(a_WAvgForDetector);
-  State Wm_y  = (1.0*Shift(-ey))(a_WAvgForDetector);
-  State Wp_y  = (1.0*Shift( ey))(a_WAvgForDetector);
-  State Wpp_y = (1.0*Shift( 2*ey))(a_WAvgForDetector);
+  const auto Wmm_y = bertaReadView(a_WAvgForDetector,-(-2*ey));
+  const auto Wm_y = bertaReadView(a_WAvgForDetector,-(-ey));
+  const auto Wp_y = bertaReadView(a_WAvgForDetector,-( ey));
+  const auto Wpp_y = bertaReadView(a_WAvgForDetector,-( 2*ey));
 
-  State Wmm_z = (1.0*Shift(-2*ez))(a_WAvgForDetector);
-  State Wm_z  = (1.0*Shift(-ez))(a_WAvgForDetector);
-  State Wp_z  = (1.0*Shift( ez))(a_WAvgForDetector);
-  State Wpp_z = (1.0*Shift( 2*ez))(a_WAvgForDetector);
+  const auto Wmm_z = bertaReadView(a_WAvgForDetector,-(-2*ez));
+  const auto Wm_z = bertaReadView(a_WAvgForDetector,-(-ez));
+  const auto Wp_z = bertaReadView(a_WAvgForDetector,-( ez));
+  const auto Wpp_z = bertaReadView(a_WAvgForDetector,-( 2*ez));
 
   forallInPlace(
       f_berta_derivative_ratio_theta_raw,
@@ -457,13 +662,13 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaComputeThetaDerivativeRatio(
   Box bxInterior = thetaRaw.box().grow(-1);
   BoxData<T,1,MEM> thetaInterior(bxInterior);
 
-  BoxData<T,1,MEM> theta0   = (1.0*Shift(Point::Zeros()))(thetaRaw);
-  BoxData<T,1,MEM> thetam_x = (1.0*Shift(-ex))(thetaRaw);
-  BoxData<T,1,MEM> thetap_x = (1.0*Shift( ex))(thetaRaw);
-  BoxData<T,1,MEM> thetam_y = (1.0*Shift(-ey))(thetaRaw);
-  BoxData<T,1,MEM> thetap_y = (1.0*Shift( ey))(thetaRaw);
-  BoxData<T,1,MEM> thetam_z = (1.0*Shift(-ez))(thetaRaw);
-  BoxData<T,1,MEM> thetap_z = (1.0*Shift( ez))(thetaRaw);
+  const auto theta0 = bertaReadView(thetaRaw,-(Point::Zeros()));
+  const auto thetam_x = bertaReadView(thetaRaw,-(-ex));
+  const auto thetap_x = bertaReadView(thetaRaw,-( ex));
+  const auto thetam_y = bertaReadView(thetaRaw,-(-ey));
+  const auto thetap_y = bertaReadView(thetaRaw,-( ey));
+  const auto thetam_z = bertaReadView(thetaRaw,-(-ez));
+  const auto thetap_z = bertaReadView(thetaRaw,-( ez));
 
   forallInPlace(
       f_berta_dilate_theta,
@@ -541,24 +746,24 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaAverageToPoint(
 //   adjacent cells are i-1 and i.
 // ====================================================================================
 
-template<typename T, MemType MEM>
+template<typename T, MemType MEM, unsigned C = NUMCOMPS>
 PROTO_KERNEL_START
 void f_wenoz_pointwise_faceF(
-    Var<T,NUMCOMPS,MEM>&       a_WL,
-    Var<T,NUMCOMPS,MEM>&       a_WR,
-    const Var<T,NUMCOMPS,MEM>& a_Wm2,
-    const Var<T,NUMCOMPS,MEM>& a_Wm1,
-    const Var<T,NUMCOMPS,MEM>& a_W0,
-    const Var<T,NUMCOMPS,MEM>& a_Wp1,
-    const Var<T,NUMCOMPS,MEM>& a_Wp2,
-    const Var<T,NUMCOMPS,MEM>& a_Wp3)
+    Var<T,C,MEM>&       a_WL,
+    Var<T,C,MEM>&       a_WR,
+    const Var<T,C,MEM>& a_Wm2,
+    const Var<T,C,MEM>& a_Wm1,
+    const Var<T,C,MEM>& a_W0,
+    const Var<T,C,MEM>& a_Wp1,
+    const Var<T,C,MEM>& a_Wp2,
+    const Var<T,C,MEM>& a_Wp3)
 {
   const T eps = 1.0e-40;
   const T d0  = 1.0/16.0;
   const T d1  = 5.0/8.0;
   const T d2  = 5.0/16.0;
 
-  for (int comp = 0; comp < NUMCOMPS; comp++)
+  for (int comp = 0; comp < C; comp++)
   {
     // Left state at target face, using a_W0 as the left cell.
     T vm2 = a_Wm2(comp);
@@ -632,22 +837,22 @@ void f_wenoz_pointwise_faceF(
 PROTO_KERNEL_END(f_wenoz_pointwise_faceF, f_wenoz_pointwise_face)
 
 
-template<typename T, MemType MEM>
+template<typename T, MemType MEM, unsigned C = NUMCOMPS>
 PROTO_KERNEL_START
 void f_weno3_pointwise_faceF(
-    Var<T,NUMCOMPS,MEM>&       a_WL,
-    Var<T,NUMCOMPS,MEM>&       a_WR,
-    const Var<T,NUMCOMPS,MEM>& a_Wm1,
-    const Var<T,NUMCOMPS,MEM>& a_W0,
-    const Var<T,NUMCOMPS,MEM>& a_Wp1,
-    const Var<T,NUMCOMPS,MEM>& a_Wp2,
+    Var<T,C,MEM>&       a_WL,
+    Var<T,C,MEM>&       a_WR,
+    const Var<T,C,MEM>& a_Wm1,
+    const Var<T,C,MEM>& a_W0,
+    const Var<T,C,MEM>& a_Wp1,
+    const Var<T,C,MEM>& a_Wp2,
     const T                    a_dx2)
 {
   const T d0  = 3.0/4.0;
   const T d1  = 1.0/4.0;
   const T eps = a_dx2;
 
-  for (int comp = 0; comp < NUMCOMPS; comp++)
+  for (int comp = 0; comp < C; comp++)
   {
     // Left state using a_W0 as the left cell of the face.
     T vm1 = a_Wm1(comp);
@@ -657,15 +862,15 @@ void f_weno3_pointwise_faceF(
     T Dm = v0  - vm1;
     T Dp = vp1 - v0;
 
-    T beta0 = Dm*Dm;
-    T beta1 = Dp*Dp;
+    T beta0 = Dp*Dp;
+    T beta1 = Dm*Dm;
     T tau   = (Dp - Dm)*(Dp - Dm);
 
     T a0 = d0*(1.0 + tau/(beta0 + eps));
     T a1 = d1*(1.0 + tau/(beta1 + eps));
 
     T q0 = 0.5*(vp1 + v0);
-    T q1 = 0.5*(-vp1 + 3.0*v0);
+    T q1 = 0.5*(-vm1 + 3.0*v0);
 
     a_WL(comp) = (a0*q0 + a1*q1)/(a0 + a1);
 
@@ -677,15 +882,15 @@ void f_weno3_pointwise_faceF(
     T rDm = r0  - rm1;
     T rDp = rp1 - r0;
 
-    T rbeta0 = rDm*rDm;
-    T rbeta1 = rDp*rDp;
+    T rbeta0 = rDp*rDp;
+    T rbeta1 = rDm*rDm;
     T rtau   = (rDp - rDm)*(rDp - rDm);
 
     T ra0 = d0*(1.0 + rtau/(rbeta0 + eps));
     T ra1 = d1*(1.0 + rtau/(rbeta1 + eps));
 
     T rq0 = 0.5*(rp1 + r0);
-    T rq1 = 0.5*(-rp1 + 3.0*r0);
+    T rq1 = 0.5*(-rm1 + 3.0*r0);
 
     a_WR(comp) = (ra0*rq0 + ra1*rq1)/(ra0 + ra1);
   }
@@ -702,19 +907,19 @@ inline T berta_minmod3_scalar(T a, T b, T c)
 }
 
 
-template<typename T, MemType MEM>
+template<typename T, MemType MEM, unsigned C = NUMCOMPS>
 PROTO_KERNEL_START
 void f_plm_pointwise_faceF(
-    Var<T,NUMCOMPS,MEM>&       a_WL,
-    Var<T,NUMCOMPS,MEM>&       a_WR,
-    const Var<T,NUMCOMPS,MEM>& a_Wm1,
-    const Var<T,NUMCOMPS,MEM>& a_W0,
-    const Var<T,NUMCOMPS,MEM>& a_Wp1,
-    const Var<T,NUMCOMPS,MEM>& a_Wp2)
+    Var<T,C,MEM>&       a_WL,
+    Var<T,C,MEM>&       a_WR,
+    const Var<T,C,MEM>& a_Wm1,
+    const Var<T,C,MEM>& a_W0,
+    const Var<T,C,MEM>& a_Wp1,
+    const Var<T,C,MEM>& a_Wp2)
 {
   const T theta = 1.5;
 
-  for (int comp = 0; comp < NUMCOMPS; comp++)
+  for (int comp = 0; comp < C; comp++)
   {
     // Left state from cell represented by a_W0.
     T dm = a_W0(comp)  - a_Wm1(comp);
@@ -815,6 +1020,92 @@ void f_select_reconstructionF(
 PROTO_KERNEL_END(f_select_reconstructionF, f_select_reconstruction)
 
 
+// Split contiguous flag runs so CPU vectorization need not evaluate an
+// unselected fallback. The scalar kernels are the same kernels used on devices.
+template<unsigned METHOD,typename T>
+inline void bertaReconstructLine(
+    T* __restrict__ a_left,T* __restrict__ a_right,
+    const T* const* a_source,int a_size,T a_dx2,bool a_clamp,T a_floor)
+{
+  Var<T,1,HOST> left{},right{},source[6]{};
+  left.m_ptrs[0] = a_left;
+  right.m_ptrs[0] = a_right;
+  // Var stores mutable pointers even for const inputs. These source Vars are
+  // passed only to the reconstruction kernels' const input parameters.
+  for (unsigned i = 0; i < 6; ++i)
+    source[i].m_ptrs[0] = const_cast<T*>(a_source[i]);
+#ifdef __clang__
+#pragma clang loop vectorize(enable)
+#endif
+  for (int cell = 0; cell < a_size; ++cell)
+  {
+    if constexpr (METHOD == 0)
+      f_wenoz_pointwise_faceF(left,right,source[0],source[1],source[2],
+          source[3],source[4],source[5]);
+    else if constexpr (METHOD == 1)
+      f_weno3_pointwise_faceF(left,right,source[1],source[2],source[3],
+          source[4],a_dx2);
+    else
+      f_plm_pointwise_faceF(left,right,source[1],source[2],source[3],source[4]);
+    if (a_clamp)
+    {
+      left(0) = max(left(0),a_floor);
+      right(0) = max(right(0),a_floor);
+    }
+    ++left;
+    ++right;
+    for (unsigned i = 0; i < 6; ++i) ++source[i];
+  }
+}
+
+template<typename T>
+inline void bertaReconstructHostBox(
+    BoxData<T,NUMCOMPS,HOST>& a_left,BoxData<T,NUMCOMPS,HOST>& a_right,
+    const BoxData<T,NUMCOMPS,HOST>& a_wm3,
+    const BoxData<T,NUMCOMPS,HOST>& a_wm2,
+    const BoxData<T,NUMCOMPS,HOST>& a_wm1,
+    const BoxData<T,NUMCOMPS,HOST>& a_w0,
+    const BoxData<T,NUMCOMPS,HOST>& a_wp1,
+    const BoxData<T,NUMCOMPS,HOST>& a_wp2,
+    const BoxData<T,1,HOST>& a_theta,T a_dx2,int a_fallback)
+{
+  const Box& box = a_left.box();
+  const Point low = box.low(),high = box.high();
+  const int count = box.size(0);
+  for (int k = low[2]; k <= high[2]; ++k)
+    for (int j = low[1]; j <= high[1]; ++j)
+    {
+      const T* theta = a_theta.data(Point(low[0],j,k));
+      int begin = 0;
+      while (begin < count)
+      {
+        const bool smooth = theta[begin] > T(0.5);
+        int end = begin+1;
+        while (end < count && (theta[end] > T(0.5)) == smooth) ++end;
+        const Point start(low[0]+begin,j,k);
+        for (unsigned component = 0; component < NUMCOMPS; ++component)
+        {
+          const T* source[6] = {a_wm3.data(start,component),
+              a_wm2.data(start,component),a_wm1.data(start,component),
+              a_w0.data(start,component),a_wp1.data(start,component),
+              a_wp2.data(start,component)};
+          const bool clamp = component == iRHO || component == iP;
+          const T floor = component == iRHO ? T(RHO00) : T(1.0e-12);
+          if (smooth)
+            bertaReconstructLine<0>(a_left.data(start,component),
+                a_right.data(start,component),source,end-begin,a_dx2,clamp,floor);
+          else if (a_fallback == 0)
+            bertaReconstructLine<1>(a_left.data(start,component),
+                a_right.data(start,component),source,end-begin,a_dx2,clamp,floor);
+          else
+            bertaReconstructLine<2>(a_left.data(start,component),
+                a_right.data(start,component),source,end-begin,a_dx2,clamp,floor);
+        }
+        begin = end;
+      }
+    }
+}
+
 template<
     typename T,
     typename MAP,
@@ -839,99 +1130,65 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaReconstructWithFallback(
   // grow(-3) is conservative. You may later optimize asymmetrically.
   Box faceBox = a_WPoint.box().extrude(e).grow(-3);
 
-  State WL_wenoz(faceBox);
-  State WR_wenoz(faceBox);
-  State WL_fallback(faceBox);
-  State WR_fallback(faceBox);
+  a_WFace_L.defineForOverwrite(faceBox);
+  a_WFace_R.defineForOverwrite(faceBox);
+  a_thetaFluxFace.defineForOverwrite(faceBox);
+  a_thetaReconFace.defineForOverwrite(faceBox);
 
-  a_WFace_L.define(faceBox);
-  a_WFace_R.define(faceBox);
-  a_thetaFluxFace.define(faceBox);
-  a_thetaReconFace.define(faceBox);
-
-  // Adjacent-cell theta for flux point-to-average correction.
-  // Face i lies between cells i-1 and i.
-  BoxData<T,1,MEM> thetam1 = (1.0*Shift(-1*e))(a_thetaCell);
-  BoxData<T,1,MEM> theta0  = (1.0*Shift(Point::Zeros()))(a_thetaCell);
-
-  forallInPlace(
-      f_face_theta_adjacent,
-      a_thetaFluxFace,
-      thetam1,
-      theta0);
-
-  // Full-stencil theta for reconstruction fallback.
-  BoxData<T,1,MEM> thetam3 = (1.0*Shift(-3*e))(a_thetaCell);
-  BoxData<T,1,MEM> thetam2 = (1.0*Shift(-2*e))(a_thetaCell);
-  BoxData<T,1,MEM> thetap1 = (1.0*Shift( 1*e))(a_thetaCell);
-  BoxData<T,1,MEM> thetap2 = (1.0*Shift( 2*e))(a_thetaCell);
-
-  forallInPlace(
-      f_face_theta_recon_stencil,
-      a_thetaReconFace,
-      thetam3,
-      thetam2,
-      thetam1,
-      theta0,
-      thetap1,
-      thetap2);
-
-  State Wm3 = (1.0*Shift(-3*e))(a_WPoint);
-  State Wm2 = (1.0*Shift(-2*e))(a_WPoint);
-  State Wm1 = (1.0*Shift(-1*e))(a_WPoint);
-  State W0  = (1.0*Shift(Point::Zeros()))(a_WPoint);
-  State Wp1 = (1.0*Shift( 1*e))(a_WPoint);
-  State Wp2 = (1.0*Shift( 2*e))(a_WPoint);
-
-  // WENOZ candidate at lower face of cell i.
-  forallInPlace(
-      f_wenoz_pointwise_face,
-      WL_wenoz,
-      WR_wenoz,
-      Wm3,
-      Wm2,
-      Wm1,
-      W0,
-      Wp1,
-      Wp2);
-
-  if (a_fallback_type == 0)
+  const auto tm3 = bertaReadView(a_thetaCell,3*e);
+  const auto tm2 = bertaReadView(a_thetaCell,2*e);
+  const auto tm1 = bertaReadView(a_thetaCell,e);
+  const auto t0 = bertaReadView(a_thetaCell);
+  const auto tp1 = bertaReadView(a_thetaCell,-e);
+  const auto tp2 = bertaReadView(a_thetaCell,-2*e);
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,1,MEM>& flux, Var<T,1,MEM>& recon,
+      const Var<T,1,MEM>& tm3, const Var<T,1,MEM>& tm2,
+      const Var<T,1,MEM>& tm1, const Var<T,1,MEM>& t0,
+      const Var<T,1,MEM>& tp1, const Var<T,1,MEM>& tp2)
   {
-    // WENO3 fallback at lower face of cell i.
-    T dx2 = this->dx()[a_dir]*this->dx()[a_dir];
+    flux(0) = min(tm1(0),t0(0));
+    T value = tm3(0);
+    value = min(value,tm2(0));
+    value = min(value,tm1(0));
+    value = min(value,t0(0));
+    value = min(value,tp1(0));
+    recon(0) = min(value,tp2(0));
+  },a_thetaFluxFace,a_thetaReconFace,tm3,tm2,tm1,t0,tp1,tp2);
 
-    forallInPlace(
-        f_weno3_pointwise_face,
-        WL_fallback,
-        WR_fallback,
-        Wm2,
-        Wm1,
-        W0,
-        Wp1,
-        dx2);
-  }
-  else
+  const auto wm3 = bertaReadView(a_WPoint,3*e);
+  const auto wm2 = bertaReadView(a_WPoint,2*e);
+  const auto wm1 = bertaReadView(a_WPoint,e);
+  const auto w0 = bertaReadView(a_WPoint);
+  const auto wp1 = bertaReadView(a_WPoint,-e);
+  const auto wp2 = bertaReadView(a_WPoint,-2*e);
+  T dx2 = this->dx()[a_dir]*this->dx()[a_dir];
+  if constexpr (MEM == HOST)
   {
-    // PLM fallback at lower face of cell i.
-    forallInPlace(
-        f_plm_pointwise_face,
-        WL_fallback,
-        WR_fallback,
-        Wm2,
-        Wm1,
-        W0,
-        Wp1);
+    bertaReconstructHostBox(a_WFace_L,a_WFace_R,wm3,wm2,wm1,w0,wp1,wp2,
+        a_thetaReconFace,dx2,a_fallback_type);
+    return;
   }
-
-  forallInPlace(
-      f_select_reconstruction,
-      a_WFace_L,
-      a_WFace_R,
-      WL_wenoz,
-      WR_wenoz,
-      WL_fallback,
-      WR_fallback,
-      a_thetaReconFace);
+  // Evaluate only the selected reconstruction; both read the same point data.
+  forallInPlace([] PROTO_LAMBDA(
+      Var<T,NUMCOMPS,MEM>& left, Var<T,NUMCOMPS,MEM>& right,
+      const Var<T,NUMCOMPS,MEM>& wm3, const Var<T,NUMCOMPS,MEM>& wm2,
+      const Var<T,NUMCOMPS,MEM>& wm1, const Var<T,NUMCOMPS,MEM>& w0,
+      const Var<T,NUMCOMPS,MEM>& wp1, const Var<T,NUMCOMPS,MEM>& wp2,
+      const Var<T,1,MEM>& recon, T dx2, int fallback)
+  {
+    if (recon(0) > T(0.5))
+      f_wenoz_pointwise_faceF(left,right,wm3,wm2,wm1,w0,wp1,wp2);
+    else if (fallback == 0)
+      f_weno3_pointwise_faceF(left,right,wm2,wm1,w0,wp1,dx2);
+    else
+      f_plm_pointwise_faceF(left,right,wm2,wm1,w0,wp1);
+    left(iRHO) = max(left(iRHO),T(RHO00));
+    right(iRHO) = max(right(iRHO),T(RHO00));
+    left(iP) = max(left(iP),T(1.0e-12));
+    right(iP) = max(right(iP),T(1.0e-12));
+  },a_WFace_L,a_WFace_R,wm3,wm2,wm1,w0,wp1,wp2,
+      a_thetaReconFace,dx2,a_fallback_type);
 }
 
 
@@ -973,39 +1230,39 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToFluxAverage(
            const BoxData<T,1,MEM>& a_thetaFluxFace,
            const BoxData<T,1,MEM>& a_adjDdir,
            uint                    a_block,
-           uint                    a_dir) const
+           uint                    a_dir,
+           const FaceEnergies* a_energy,
+           const BoxData<T,1,MEM>* a_radialPoint) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::BertaPrimPointToFluxAverage()");
 
-  Stencil<T> deconvolveStencilRadial =
-      (1.0*Shift(Point::Zeros())
-       - (1.0/24.0)*Stencil<T>::Derivative(2,0,2));
-
-  BoxData<T,1,MEM> kePoint(a_WFacePoint.box());
-  BoxData<T,1,MEM> mePoint(a_WFacePoint.box());
-  BoxData<T,1,MEM> vbPoint(a_WFacePoint.box());
-
-  EnergyW(kePoint,mePoint,vbPoint,a_WFacePoint,a_block,a_dir);
-
-  BoxData<T,1,MEM> adjDdirPoint;
-  if (a_dir != 0)
+  FaceEnergies ownedEnergy;
+  if (!a_energy)
   {
-    adjDdirPoint = deconvolveStencilRadial(a_adjDdir);
+    ownedEnergy = faceEnergies(a_WFacePoint,a_block,a_dir);
+    a_energy = &ownedEnergy;
   }
-  else
+  BoxData<T,1,MEM> ownedRadial;
+  if (!a_radialPoint)
   {
-    adjDdirPoint.define(a_adjDdir.box());
-    a_adjDdir.copyTo(adjDdirPoint);
+    if (a_dir != 0)
+      ownedRadial = (1.0*Shift(Point::Zeros())
+          - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(a_adjDdir);
+    else
+    {
+      ownedRadial.define(a_adjDdir.box());
+      a_adjDdir.copyTo(ownedRadial);
+    }
+    a_radialPoint = &ownedRadial;
   }
-
   State fluxPoint =
       forall<T,NUMCOMPS>(
           f_primflux,
           a_WFacePoint,
-          kePoint,
-          mePoint,
-          vbPoint,
-          adjDdirPoint,
+          a_energy->kinetic,
+          a_energy->magnetic,
+          a_energy->velocityDotMagnetic,
+          *a_radialPoint,
           m_gamma,
           a_block,
           a_dir);
@@ -1042,65 +1299,151 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedFlux(
     const BoxData<T,1,MEM>&        a_deta,
     const BoxData<T,DIM,MEM>&      a_ntrow,
     uint                           a_block,
-    uint                           a_dir) const
+    uint                           a_dir,
+    const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences,
+    const BoxData<T,1,MEM>* a_magneticPoint,
+    const BoxData<T,1,MEM>* a_totalPressurePoint,
+    bool a_separableMetrics) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::BertaPrimPointToMappedFlux()");
 
   BoxData<T,DIM,MEM> fluxdirMom =
       slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iMOMX);
-
-  BoxData<T,DIM,MEM> physFluxMom =
-      slice<T,NUMCOMPS,DIM,MEM>(a_physFluxAvg,iMOMX);
-
-  BoxData<T,DIM,MEM> tmp =
-      Operator::_faceMatrixProductAB(
-          a_deta_a,physFluxMom,
-          a_deta_a,physFluxMom,
-          a_dir);
-
-  tmp.copyTo(fluxdirMom);
-
-  BoxData<T,DIM,MEM> fluxdirB =
-      slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iBX);
-
-  BoxData<T,DIM,MEM> physFluxB =
-      slice<T,NUMCOMPS,DIM,MEM>(a_physFluxAvg,iBX);
-
-  BoxData<T,DIM,MEM> tmp2 =
-      Operator::_faceMatrixProductAB(
-          a_deta_a,physFluxB,
-          a_deta_a,physFluxB,
-          a_dir);
-
-  tmp2.copyTo(fluxdirB);
-
-  forallInPlace(
-      [ ] PROTO_LAMBDA
-      (
-        Var<T,NUMCOMPS,MEM>&       a_advflux,
-        const Var<T,NUMCOMPS,MEM>& a_fluxin,
-        const Var<T,1,MEM>&        a_deta)
-      {
-        a_advflux(iRHO) = a_deta(0)*a_fluxin(iRHO);
-        a_advflux(iE  ) = a_deta(0)*a_fluxin(iE);
-      },
-      a_fluxdir,
-      a_physFluxAvg,
-      a_deta);
-
-  for (int comp = 0; comp < NUMCOMPS; comp++)
+  if constexpr (MEM == HOST && DIM == 3)
   {
-    BoxData<T,1,MEM> advfluxcomp = slice(a_fluxdir,comp);
-    BoxData<T,1,MEM> advfluxprod =
-        faceProduct(advfluxcomp,a_adjDrDir,a_dir);
+    // Map all eight components in one pass. Preserve each product's original
+    // transverse-correction and row-accumulation order without scalar buffers.
+    const int firstDir = a_dir == 0 ? 1 : 0;
+    const int secondDir = a_dir == 2 ? 1 : 2;
+    const Stencil<T> firstDiff =
+        0.5*Shift::Basis(firstDir,1) - 0.5*Shift::Basis(firstDir,-1);
+    const Stencil<T> secondDiff =
+        0.5*Shift::Basis(secondDir,1) - 0.5*Shift::Basis(secondDir,-1);
+    const bool skipFirst = a_separableMetrics && firstDir == 0;
+    State physicalFirst;
+    State physicalSecond = secondDiff(a_physFluxAvg);
+    Scalar detFirst;
+    Scalar detSecond = secondDiff(a_deta);
+    if (!skipFirst)
+    {
+      physicalFirst = firstDiff(a_physFluxAvg);
+      detFirst = firstDiff(a_deta);
+    }
+    std::array<BoxData<T,DIM,MEM,DIM>,2> ownedDifferences;
+    if (!a_metricDifferences)
+    {
+      ownedDifferences[0] = firstDiff(a_deta_a);
+      ownedDifferences[1] = secondDiff(a_deta_a);
+      a_metricDifferences = &ownedDifferences;
+    }
+    Box productBox = (a_physFluxAvg.box() & a_deta_a.box() & a_deta.box())
+        .grow(-1).grow(a_dir,1);
+    if (a_separableMetrics)
+      bertaMapHostBox(a_fluxdir,a_physFluxAvg,
+          skipFirst ? physicalSecond : physicalFirst,physicalSecond,
+          a_deta_a,(*a_metricDifferences)[0],(*a_metricDifferences)[1],
+          a_deta,skipFirst ? detSecond : detFirst,detSecond,productBox,skipFirst);
+    else
+    {
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,NUMCOMPS,MEM>& out, const Var<T,NUMCOMPS,MEM>& flux,
+        const Var<T,NUMCOMPS,MEM>& df0, const Var<T,NUMCOMPS,MEM>& df1,
+        const Var<T,DIM,MEM,DIM>& matrix,
+        const Var<T,DIM,MEM,DIM>& dm0, const Var<T,DIM,MEM,DIM>& dm1,
+        const Var<T,1,MEM>& det, const Var<T,1,MEM>& dd0,
+        const Var<T,1,MEM>& dd1,bool skipFirst)
+    {
+      for (int comp : {iRHO,iE})
+      {
+        T value = T(0);
+        if (!skipFirst) value += dd0(0)*df0(comp)*T(1.0/12.0);
+        value += dd1(0)*df1(comp)*T(1.0/12.0);
+        value += det(0)*flux(comp)*T(1);
+        out(comp) = value;
+      }
+      for (int row = 0; row < DIM; ++row)
+      {
+        T momentum = T(0), magnetic = T(0);
+        for (int col = 0; col < DIM; ++col)
+        {
+          T termMomentum = T(0), termMagnetic = T(0);
+          if (!skipFirst)
+            termMomentum += dm0(row,col)*df0(iMOMX+col)*T(1.0/12.0);
+          termMomentum += dm1(row,col)*df1(iMOMX+col)*T(1.0/12.0);
+          termMomentum += matrix(row,col)*flux(iMOMX+col)*T(1);
+          if (!skipFirst)
+            termMagnetic += dm0(row,col)*df0(iBX+col)*T(1.0/12.0);
+          termMagnetic += dm1(row,col)*df1(iBX+col)*T(1.0/12.0);
+          termMagnetic += matrix(row,col)*flux(iBX+col)*T(1);
+          momentum += termMomentum;
+          magnetic += termMagnetic;
+        }
+        out(iMOMX+row) = momentum;
+        out(iBX+row) = magnetic;
+      }
+    },productBox,a_fluxdir,a_physFluxAvg,
+        skipFirst ? physicalSecond : physicalFirst,physicalSecond,
+        a_deta_a,(*a_metricDifferences)[0],(*a_metricDifferences)[1],
+        a_deta,skipFirst ? detSecond : detFirst,detSecond,skipFirst);
+    }
+  }
+  else
+  {
 
-    advfluxprod.copyTo(advfluxcomp);
+    BoxData<T,DIM,MEM> physFluxMom =
+        slice<T,NUMCOMPS,DIM,MEM>(a_physFluxAvg,iMOMX);
+
+    BoxData<T,DIM,MEM> tmp =
+        Operator::_faceMatrixProductAB(
+            a_deta_a,physFluxMom,
+            a_deta_a,physFluxMom,
+            a_dir,a_metricDifferences);
+
+    tmp.copyTo(fluxdirMom);
+
+    BoxData<T,DIM,MEM> fluxdirB =
+        slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iBX);
+
+    BoxData<T,DIM,MEM> physFluxB =
+        slice<T,NUMCOMPS,DIM,MEM>(a_physFluxAvg,iBX);
+
+    BoxData<T,DIM,MEM> tmp2 =
+        Operator::_faceMatrixProductAB(
+            a_deta_a,physFluxB,
+            a_deta_a,physFluxB,
+            a_dir,a_metricDifferences);
+
+    tmp2.copyTo(fluxdirB);
+
+    for (int comp : {iRHO,iE})
+    {
+      auto physical = slice(a_physFluxAvg,comp);
+      auto mapped = faceProduct(a_deta,physical,a_dir);
+      auto destination = slice(a_fluxdir,comp);
+      mapped.copyTo(destination);
+    }
+
   }
 
+  const int radialCorrection = a_separableMetrics ? (a_dir == 0 ? -1 : 0) : -2;
+  auto radialFlux = bertaFaceTensorProduct(
+      a_fluxdir,a_adjDrDir,a_dir,radialCorrection);
+  radialFlux.copyTo(a_fluxdir);
+
   // Pressure force from point total pressure, then theta-aware face averaging.
-  BoxData<T,1,MEM> pPoint  = slice(a_WFacePoint,iP);
-  BoxData<T,1,MEM> mePoint = magneticEnergyW(a_WFacePoint,a_block,a_dir);
-  BoxData<T,1,MEM> pTotPoint = pPoint + mePoint;
+  BoxData<T,1,MEM> ownedMagnetic,ownedPressure;
+  if (!a_totalPressurePoint)
+  {
+    if (!a_magneticPoint)
+    {
+      ownedMagnetic = magneticEnergyW(a_WFacePoint,a_block,a_dir);
+      a_magneticPoint = &ownedMagnetic;
+    }
+    auto pPoint = slice(a_WFacePoint,iP);
+    ownedPressure = pPoint + *a_magneticPoint;
+    a_totalPressurePoint = &ownedPressure;
+  }
+  const auto& pTotPoint = *a_totalPressurePoint;
 
   BoxData<T,1,MEM> lapPTotPoint =
       Stencil<T>::LaplacianFace(a_dir)(pTotPoint);
@@ -1129,22 +1472,16 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedFlux(
       lapPTotPoint,
       a_thetaFluxFace);
 
-  BoxData<T,1,MEM> tmp3 =
-      faceProduct(pTotAvg,a_adjDrDir,a_dir);
+  BoxData<T,1,MEM> tmp3 = bertaFaceTensorProduct(
+      pTotAvg,a_adjDrDir,a_dir,radialCorrection);
 
   BoxData<T,DIM,MEM> pforce(a_ntrow.box());
   pforce.setVal(0.0);
 
-  for (int dirvec = 0; dirvec < DIM; dirvec++)
-  {
-    BoxData<T,1,MEM> ntSlice = slice(a_ntrow,dirvec);
-    BoxData<T,1,MEM> pforceSlice = slice(pforce,dirvec);
-
-    BoxData<T,1,MEM> tmpPF =
-        faceProduct(tmp3,ntSlice,a_dir);
-
-    tmpPF.copyTo(pforceSlice);
-  }
+  const int angularCorrection = a_separableMetrics && a_dir != 0
+      ? (a_dir == 1 ? 2 : 1) : -2;
+  auto tmpPF = bertaFaceTensorProduct(a_ntrow,tmp3,a_dir,angularCorrection);
+  tmpPF.copyTo(pforce);
 
   fluxdirMom += pforce;
 }
@@ -1170,108 +1507,68 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
     const BoxData<T,DIM,MEM,DIM>&  a_A,
     const BoxData<T,DIM,MEM>&      a_ntrow,
     uint                           a_block,
-    uint                           a_dir) const
+    uint                           a_dir,
+    const FaceEnergies* a_leftEnergy,
+    const FaceEnergies* a_rightEnergy,
+    const BoxData<T,1,MEM>* a_radialPoint) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::BertaPrimPointToMappedRusanovFlux()");
 
-  Stencil<T> deconvolveStencilRadial =
-      (1.0*Shift(Point::Zeros())
-       - (1.0/24.0)*Stencil<T>::Derivative(2,0,2));
-
-  BoxData<T,1,MEM> adjDdirPoint;
-  if (a_dir != 0)
+  BoxData<T,1,MEM> ownedRadial;
+  if (!a_radialPoint)
   {
-    adjDdirPoint = deconvolveStencilRadial(a_adjDdir);
+    if (a_dir != 0)
+      ownedRadial = (1.0*Shift(Point::Zeros())
+          - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(a_adjDdir);
+    else
+    {
+      ownedRadial.define(a_adjDdir.box());
+      a_adjDdir.copyTo(ownedRadial);
+    }
+    a_radialPoint = &ownedRadial;
   }
-  else
+  FaceEnergies ownedLeft,ownedRight;
+  if (!a_leftEnergy)
   {
-    adjDdirPoint.define(a_adjDdir.box());
-    a_adjDdir.copyTo(adjDdirPoint);
+    ownedLeft = faceEnergies(a_WFacePoint_L,a_block,a_dir);
+    a_leftEnergy = &ownedLeft;
   }
-
-  BoxData<T,1,MEM> kePoint_L(a_WFacePoint_L.box());
-  BoxData<T,1,MEM> mePoint_L(a_WFacePoint_L.box());
-  EnergyW(kePoint_L,mePoint_L,a_WFacePoint_L,a_block,a_dir);
-
-  State qPoint_L =
-      forall<T,NUMCOMPS>
-      ([ ] PROTO_LAMBDA
-       (
-        Var<T,NUMCOMPS>& a_u,
-        const Var<T,NUMCOMPS>& a_wface,
-        const Var<T,1>& a_ke,
-        const Var<T,1>& a_me,
-        const Var<T>& a_adjddir,
-        const T a_gamma)
-       {
-          a_u(iRHO ) = a_adjddir(0)*a_wface(iRHO);
-          a_u(iMOMX) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVX);
-          a_u(iMOMY) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVY);
-          a_u(iMOMZ) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVZ);
-          a_u(iE   ) = a_adjddir(0)*(a_ke(0) + a_me(0)
-                          + a_wface(iP)/(a_gamma - 1.0));
-          a_u(iBX  ) = a_adjddir(0)*a_wface(iBX);
-          a_u(iBY  ) = a_adjddir(0)*a_wface(iBY);
-          a_u(iBZ  ) = a_adjddir(0)*a_wface(iBZ);
-       },
-       a_WFacePoint_L,
-       kePoint_L,
-       mePoint_L,
-       adjDdirPoint,
-       m_gamma);
-
-  BoxData<T,1,MEM> kePoint_R(a_WFacePoint_R.box());
-  BoxData<T,1,MEM> mePoint_R(a_WFacePoint_R.box());
-  EnergyW(kePoint_R,mePoint_R,a_WFacePoint_R,a_block,a_dir);
-
-  State qPoint_R =
-      forall<T,NUMCOMPS>
-      ([ ] PROTO_LAMBDA
-       (
-        Var<T,NUMCOMPS>& a_u,
-        const Var<T,NUMCOMPS>& a_wface,
-        const Var<T,1>& a_ke,
-        const Var<T,1>& a_me,
-        const Var<T>& a_adjddir,
-        const T a_gamma)
-       {
-          a_u(iRHO ) = a_adjddir(0)*a_wface(iRHO);
-          a_u(iMOMX) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVX);
-          a_u(iMOMY) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVY);
-          a_u(iMOMZ) = a_adjddir(0)*a_wface(iRHO)*a_wface(iVZ);
-          a_u(iE   ) = a_adjddir(0)*(a_ke(0) + a_me(0)
-                          + a_wface(iP)/(a_gamma - 1.0));
-          a_u(iBX  ) = a_adjddir(0)*a_wface(iBX);
-          a_u(iBY  ) = a_adjddir(0)*a_wface(iBY);
-          a_u(iBZ  ) = a_adjddir(0)*a_wface(iBZ);
-       },
-       a_WFacePoint_R,
-       kePoint_R,
-       mePoint_R,
-       adjDdirPoint,
-       m_gamma);
-
-  State lapQ_L = Stencil<T>::LaplacianFace(a_dir)(qPoint_L);
-  State lapQ_R = Stencil<T>::LaplacianFace(a_dir)(qPoint_R);
-
-  State qAvg_L(qPoint_L.box());
-  State qAvg_R(qPoint_R.box());
-
-  forallInPlace(
-      f_flux_point_to_avg_theta,
-      qAvg_L,
-      qPoint_L,
-      lapQ_L,
+  if (!a_rightEnergy)
+  {
+    ownedRight = faceEnergies(a_WFacePoint_R,a_block,a_dir);
+    a_rightEnergy = &ownedRight;
+  }
+  // Face averaging is linear with the common theta. Average the pointwise
+  // conserved jump once, rather than averaging each side and subtracting.
+  State qPointDiff = forallOverwrite<T,NUMCOMPS,MEM>([] PROTO_LAMBDA(
+      Var<T,NUMCOMPS,MEM>& out,
+      const Var<T,NUMCOMPS,MEM>& left,
+      const Var<T,NUMCOMPS,MEM>& right,
+      const Var<T,1,MEM>& leftKinetic,
+      const Var<T,1,MEM>& leftMagnetic,
+      const Var<T,1,MEM>& rightKinetic,
+      const Var<T,1,MEM>& rightMagnetic,
+      const Var<T,1,MEM>& radial,
+      T gamma)
+  {
+    out(iRHO) = radial(0)*right(iRHO) - radial(0)*left(iRHO);
+    for (int dir = 0; dir < DIM; ++dir)
+    {
+      out(iMOMX+dir) = radial(0)*right(iRHO)*right(iVX+dir)
+                    - radial(0)*left(iRHO)*left(iVX+dir);
+      out(iBX+dir) = radial(0)*right(iBX+dir) - radial(0)*left(iBX+dir);
+    }
+    out(iE) = radial(0)*(rightKinetic(0) + rightMagnetic(0)
+                        + right(iP)/(gamma - 1.0))
+            - radial(0)*(leftKinetic(0) + leftMagnetic(0)
+                        + left(iP)/(gamma - 1.0));
+  },a_WFacePoint_L,a_WFacePoint_R,a_leftEnergy->kinetic,
+      a_leftEnergy->magnetic,a_rightEnergy->kinetic,
+      a_rightEnergy->magnetic,*a_radialPoint,m_gamma);
+  State lapQDiff = Stencil<T>::LaplacianFace(a_dir)(qPointDiff);
+  State qAvgDiff(qPointDiff.box(),T(0));
+  forallInPlace(f_flux_point_to_avg_theta,qAvgDiff,qPointDiff,lapQDiff,
       a_thetaFluxFace);
-
-  forallInPlace(
-      f_flux_point_to_avg_theta,
-      qAvg_R,
-      qPoint_R,
-      lapQ_R,
-      a_thetaFluxFace);
-
-  qAvg_R -= qAvg_L;
 
   T one = 1.0;
 
@@ -1279,7 +1576,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
       slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iMOMX);
 
   BoxData<T,DIM,MEM> Con_diff_Mom =
-      slice<T,NUMCOMPS,DIM,MEM>(qAvg_R,iMOMX);
+      slice<T,NUMCOMPS,DIM,MEM>(qAvgDiff,iMOMX);
 
   forallInPlace(f_matVecProd,fluxdirMom,a_deta_a,Con_diff_Mom,one);
 
@@ -1287,7 +1584,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
       slice<T,NUMCOMPS,DIM,MEM>(a_fluxdir,iBX);
 
   BoxData<T,DIM,MEM> Con_diff_B =
-      slice<T,NUMCOMPS,DIM,MEM>(qAvg_R,iBX);
+      slice<T,NUMCOMPS,DIM,MEM>(qAvgDiff,iBX);
 
   forallInPlace(f_matVecProd,fluxdirB,a_deta_a,Con_diff_B,one);
 
@@ -1302,7 +1599,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaPrimPointToMappedRusanovFlux(
         a_Rusflux(iE  ) = a_deta(0)*a_fluxin(iE);
       },
       a_fluxdir,
-      qAvg_R,
+      qAvgDiff,
       a_deta);
 
   forallInPlace(
@@ -1424,10 +1721,12 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   const T eta_d = ParseInputs::get_Berta_eta_d();
   const int detector_type = ParseInputs::get_Berta_detector_type(); // 0 = Jameson, 1 = derivative ratio.
   const int fallback_type = ParseInputs::get_Berta_fallback_type(); // 0 = WENO3, 1 = PLM.
+  const bool useRoe = ParseInputs::get_Riemann_solver_type() == 2;
 
   // Detector uses V(<U>), not V(UPoint).
+  auto cellBasis = pointwiseSphericalBasis(a_USph.box(),a_block,-1);
   State WAvgForDetector;
-  sphAvgToPrim(WAvgForDetector,a_USph,a_block);
+  sphAvgToPrim(WAvgForDetector,a_USph,a_block,&cellBasis);
 
   BoxData<T,1,MEM> thetaCell;
   if (detector_type == 1)
@@ -1445,16 +1744,12 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
 
   // Pointwise primitive variables.
   State WPoint;
-  sphPointToPrim(WPoint,UPoint,a_block);
+  sphPointToPrim(WPoint,UPoint,a_block,&cellBasis);
 
   T dxiPerp = this->dx()[1];
   T dxiR    = this->dx()[0];
 
   T half = 0.5;
-
-  BoxData<T,1,MEM>       deta0(bx);
-  BoxData<T,DIM,MEM>     ntrow0(bx);
-  BoxData<T,DIM,MEM,DIM> A_matrix0(bx);
 
   // The final cell-average source product needs one divergence ghost layer.
   BoxData<T,1,MEM> minusJDivB(a_Rhs.box().grow(1));
@@ -1463,6 +1758,12 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
   for (int dir = 0; dir < DIM; dir++)
   {
     PR_TIME("BoxOp_EulerCubedSphere::operator()::Berta directional flux");
+    // Reuse the arena for normal patches. Large patches would retain several
+    // gigabytes of short-lived intermediates until the direction is finished;
+    // use ordinary allocation there so each helper releases its temporaries.
+    std::unique_ptr<ScopedHostStack<MEM>> scratch;
+    if (a_USph.box().size() <= (1 << 19))
+      scratch = std::make_unique<ScopedHostStack<MEM>>();
 
     Point e = Point::Basis(dir);
 
@@ -1482,6 +1783,34 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
         dir,
         fallback_type);
 
+    if (useRoe)
+    {
+      // Repair both final point states together so the centered physical
+      // flux, Powell term and Roe dissipation consume the same donor states.
+      const auto donorLeft = bertaReadView(WAvgForDetector,e);
+      forallInPlace([] PROTO_LAMBDA(
+          Var<T,NUMCOMPS,MEM>& left, Var<T,NUMCOMPS,MEM>& right,
+          Var<T,1,MEM>& fluxTheta, Var<T,1,MEM>& reconTheta,
+          const Var<T,NUMCOMPS,MEM>& cellLeft,
+          const Var<T,NUMCOMPS,MEM>& cellRight)
+      {
+        if (MHD_Reconstruction::usablePrimitiveState<NUMCOMPS>(left,RHO00)
+            && MHD_Reconstruction::usablePrimitiveState<NUMCOMPS>(right,RHO00))
+          return;
+        if (!MHD_Reconstruction::usablePrimitiveState<NUMCOMPS>(cellLeft,RHO00)
+            || !MHD_Reconstruction::usablePrimitiveState<NUMCOMPS>(cellRight,RHO00))
+          return;
+        for (int c = 0; c < NUMCOMPS; ++c)
+        {
+          left(c) = cellLeft(c);
+          right(c) = cellRight(c);
+        }
+        fluxTheta(0) = T(0);
+        reconTheta(0) = T(0);
+      },WFace_L,WFace_R,thetaFluxFace,thetaReconFace,
+          donorLeft,WAvgForDetector);
+    }
+
     Box bxface = WFace_L.box();
 
     // Mapping variables.
@@ -1493,7 +1822,6 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
     BoxData<T,1,MEM> deta =
         CubedSphereShell::detA<T,MEM>(bxface,dxiPerp,dir);
 
-    if (dir == 0) deta.copyTo(deta0);
 
     Box bxCell = WPoint.box();
     Box bxdir  = bxCell.extrude(Point::Basis(dir));
@@ -1501,41 +1829,32 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
     BoxData<T,DIM,MEM> ntrow =
         CubedSphereShell::adjA<T,MEM>(bxdir,dxiPerp,a_block,dir);
 
-    if (dir == 0) ntrow.copyTo(ntrow0);
 
-    Array<Array<uint,DIM>,6> permute =
-        {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
+    // Radial-face basis equals the cell basis. Angular faces need only the
+    // reconstructed face box, not the complete five-layer cell halo.
+    BoxData<T,DIM,MEM,DIM> ownedBasis;
+    if (dir != 0)
+      ownedBasis = pointwiseSphericalBasis(bxface,a_block,dir);
+    const auto& A_matrix = dir == 0 ? cellBasis : ownedBasis;
 
-    Array<Array<int,DIM>,6> sign =
-        {{1,-1,-1},{1,1,1},{1,-1,1},{1,1,1},{-1,1,1},{-1,-1,1}};
-
-    Point high = bxCell.high();
-    Point low  = bxCell.low();
-    high[0] = low[0];
-
-    Box bx0(low,high);
-
-    BoxData<T,DIM,MEM,DIM> A_matrix(bxCell);
-
-    T offseta = half;
-    T offsetb = half;
-
-    if (dir == 1) offseta = 0.0;
-    if (dir == 2) offsetb = 0.0;
-
-    forallInPlace_p(
-        f_Amatrix,
-        bx0,
-        A_matrix,
-        permute[a_block],
-        sign[a_block],
-        dxiPerp,
-        offseta,
-        offsetb);
-
-    spreadSlice(A_matrix);
-
-    if (dir == 0) A_matrix.copyTo(A_matrix0);
+    auto leftEnergy = faceEnergies(WFace_L,a_block,dir,&A_matrix);
+    auto rightEnergy = faceEnergies(WFace_R,a_block,dir,&A_matrix);
+    BoxData<T,1,MEM> radialPoint;
+    if (dir != 0)
+      radialPoint = (1.0*Shift(Point::Zeros())
+          - (1.0/24.0)*Stencil<T>::Derivative(2,0,2))(adjDrDir);
+    else
+    {
+      radialPoint.defineForOverwrite(adjDrDir.box());
+      adjDrDir.copyTo(radialPoint);
+    }
+    std::array<BoxData<T,DIM,MEM,DIM>,2> metricDifferences;
+    int differenceIndex = 0;
+    for (int transverse = 0; transverse < DIM; ++transverse)
+      if (transverse != dir)
+        metricDifferences[differenceIndex++] =
+            (0.5*Shift::Basis(transverse,1)
+             - 0.5*Shift::Basis(transverse,-1))(deta_a);
 
     // Powell term. Use centered reconstructed face state.
     State WFace_C(WFace_L.box());
@@ -1545,43 +1864,81 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
 
     DivBPowell1(minusJDivB,WFace_C,deta,adjDrDir,dir,bxface,false);
 
-    // Physical fluxes:
-    // pointwise primitive -> pointwise flux -> theta-aware face-average flux.
-    // Use thetaFluxFace, not thetaReconFace, for flux averaging.
-    BoxData<T,NUMCOMPS> physFlux_L;
-    BoxData<T,NUMCOMPS> physFlux_R;
+    // Apply the common linear face average to F(WL)+F(WR) once. On the host,
+    // local Vars let the shared point-flux kernel write small stack arrays.
+    State physFluxSum;
+    BoxData<T,1,MEM> pressureSum;
+    if constexpr (MEM == HOST)
+    {
+      State fluxPointSum;
+      fluxPointSum.defineForOverwrite(bxface);
+      pressureSum.defineForOverwrite(bxface);
+      forallInPlace([] PROTO_LAMBDA(
+          Var<T,NUMCOMPS,MEM>& out, Var<T,1,MEM>& pressure,
+          const Var<T,NUMCOMPS,MEM>& left,
+          const Var<T,NUMCOMPS,MEM>& right,
+          const Var<T,1,MEM>& leftKinetic,
+          const Var<T,1,MEM>& leftMagnetic,
+          const Var<T,1,MEM>& leftDot,
+          const Var<T,1,MEM>& rightKinetic,
+          const Var<T,1,MEM>& rightMagnetic,
+          const Var<T,1,MEM>& rightDot,
+          const Var<T,1,MEM>& radial,T gamma,uint block,uint direction)
+      {
+        T leftFlux[NUMCOMPS],rightFlux[NUMCOMPS];
+        Var<T,NUMCOMPS,HOST> localLeft{},localRight{};
+        for (int comp = 0; comp < NUMCOMPS; ++comp)
+        {
+          localLeft.m_ptrs[comp] = &leftFlux[comp];
+          localRight.m_ptrs[comp] = &rightFlux[comp];
+        }
+        f_primflux_F(localLeft,left,leftKinetic,leftMagnetic,leftDot,
+            radial,gamma,block,direction);
+        f_primflux_F(localRight,right,rightKinetic,rightMagnetic,rightDot,
+            radial,gamma,block,direction);
+        for (int comp = 0; comp < NUMCOMPS; ++comp)
+          out(comp) = leftFlux[comp] + rightFlux[comp];
+        pressure(0) = (left(iP) + leftMagnetic(0))
+                    + (right(iP) + rightMagnetic(0));
+      },fluxPointSum,pressureSum,WFace_L,WFace_R,
+          leftEnergy.kinetic,leftEnergy.magnetic,leftEnergy.velocityDotMagnetic,
+          rightEnergy.kinetic,rightEnergy.magnetic,rightEnergy.velocityDotMagnetic,
+          radialPoint,m_gamma,a_block,dir);
+      State lapFluxSum = Stencil<T>::LaplacianFace(dir)(fluxPointSum);
+      physFluxSum.define(fluxPointSum.box());
+      forallInPlace(f_flux_point_to_avg_theta,physFluxSum,fluxPointSum,
+          lapFluxSum,thetaFluxFace);
+    }
+    else
+    {
+      State physFluxLeft,physFluxRight;
+      BertaPrimPointToFluxAverage(physFluxLeft,WFace_L,thetaFluxFace,
+          adjDrDir,a_block,dir,&leftEnergy,&radialPoint);
+      BertaPrimPointToFluxAverage(physFluxRight,WFace_R,thetaFluxFace,
+          adjDrDir,a_block,dir,&rightEnergy,&radialPoint);
+      physFluxSum = physFluxLeft + physFluxRight;
+      pressureSum = forallOverwrite<T,1,MEM>([] PROTO_LAMBDA(
+          Var<T,1,MEM>& out, const Var<T,NUMCOMPS,MEM>& left,
+          const Var<T,NUMCOMPS,MEM>& right,
+          const Var<T,1,MEM>& leftMagnetic,
+          const Var<T,1,MEM>& rightMagnetic)
+      {
+        out(0) = (left(iP) + leftMagnetic(0))
+               + (right(iP) + rightMagnetic(0));
+      },WFace_L,WFace_R,leftEnergy.magnetic,rightEnergy.magnetic);
+    }
 
-    BertaPrimPointToFluxAverage(
-        physFlux_L,
-        WFace_L,
-        thetaFluxFace,
-        adjDrDir,
-        a_block,
-        dir);
-
-    BertaPrimPointToFluxAverage(
-        physFlux_R,
-        WFace_R,
-        thetaFluxFace,
-        adjDrDir,
-        a_block,
-        dir);
-
-    // Mapped fluxes and Rusanov dissipation.
     Box bxface0 = a_fluxes[dir].box();
-
-    State fluxdir_L(bxface);
-    State fluxdir_R(bxface);
-    State fluxdir_Rus(bxface);
+    State fluxdirSum(bxface);
+    State fluxdir_Diss(useRoe ? bxface0 : bxface);
     State fluxdir(bxface0);
-    fluxdir_L.setVal(0.0);
-    fluxdir_R.setVal(0.0);
-    fluxdir_Rus.setVal(0.0);
+    fluxdirSum.setVal(0.0);
+    fluxdir_Diss.setVal(0.0);
     fluxdir.setVal(0.0);
 
     BertaPrimPointToMappedFlux(
-        fluxdir_L,
-        physFlux_L,
+        fluxdirSum,
+        physFluxSum,
         WFace_L,
         thetaFluxFace,
         adjDrDir,
@@ -1589,22 +1946,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
         deta,
         ntrow,
         a_block,
-        dir);
+        dir,&metricDifferences,nullptr,&pressureSum,true);
 
-    BertaPrimPointToMappedFlux(
-        fluxdir_R,
-        physFlux_R,
-        WFace_R,
-        thetaFluxFace,
-        adjDrDir,
-        deta_a,
-        deta,
-        ntrow,
-        a_block,
-        dir);
-
-    BertaPrimPointToMappedRusanovFlux(
-        fluxdir_Rus,
+    if (useRoe)
+      primToMappedRoeFlux(fluxdir_Diss,WFace_L,WFace_R,WFace_C,
+          adjDrDir,deta_a,deta,A_matrix,dir,&WFace_L,&WFace_R,
+          &radialPoint,&metricDifferences,&thetaFluxFace);
+    else
+      BertaPrimPointToMappedRusanovFlux(
+        fluxdir_Diss,
         WFace_L,
         WFace_R,
         thetaFluxFace,
@@ -1614,26 +1964,24 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
         A_matrix,
         ntrow,
         a_block,
-        dir);
+        dir,&leftEnergy,&rightEnergy,&radialPoint);
 
     forallInPlace(
       [ ] PROTO_LAMBDA
       (
         Var<T,NUMCOMPS,MEM>&       a_fluxout,
-        const Var<T,NUMCOMPS,MEM>& a_fluxin_L,
-        const Var<T,NUMCOMPS,MEM>& a_fluxin_R,
-        const Var<T,NUMCOMPS,MEM>& a_fluxin_Rus)
+        const Var<T,NUMCOMPS,MEM>& a_fluxSum,
+        const Var<T,NUMCOMPS,MEM>& a_fluxin_Diss)
       {
         for (int comp = 0; comp < NUMCOMPS; comp++)
         {
           a_fluxout(comp) =
-              0.5*(a_fluxin_L(comp) + a_fluxin_R(comp) - a_fluxin_Rus(comp));
+              0.5*(a_fluxSum(comp) - a_fluxin_Diss(comp));
         }
       },
       fluxdir,
-      fluxdir_L,
-      fluxdir_R,
-      fluxdir_Rus);
+      fluxdirSum,
+      fluxdir_Diss);
 
     fluxdir.copyTo(a_fluxes[dir]);
 
@@ -1659,7 +2007,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::BertaOperator
 
   if (ParseInputs::get_divergence_cleaning() == 1)
   {
-    DivBPowell2(a_Rhs,minusJDivB,WPoint,A_matrix0,false);
+    DivBPowell2(a_Rhs,minusJDivB,WPoint,cellBasis,false);
   }
 }
 

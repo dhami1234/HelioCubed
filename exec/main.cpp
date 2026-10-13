@@ -3,6 +3,7 @@
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_IO.H"
 #include "MHD_CME.H"
+#include "MHD_CME_Schedule.H"
 #include <chrono> // Used by timer
 
 MHDReader BC_global;
@@ -27,11 +28,10 @@ int main(int argc, char *argv[])
   const int riemannSolver = ParseInputs::get_Riemann_solver_type();
   const double entropyFix = ParseInputs::get_entropy_fix_coeff();
   if ((riemannSolver != 1 && riemannSolver != 2)
-      || (riemannSolver == 2 && ParseInputs::get_spatial_operator() != 1)
       || !std::isfinite(entropyFix) || entropyFix < 0.0)
   {
     pout(0) << "Error: Riemann_solver_type must be 1 (Rusanov) or 2 (Roe 8-wave). "
-            << "Roe requires spatial_operator=1. entropy_fix_coeff must be finite "
+            << "entropy_fix_coeff must be finite "
             << "and nonnegative." << endl;
 #ifdef PR_MPI
     MPI_Finalize();
@@ -183,6 +183,8 @@ int main(int argc, char *argv[])
       MBLevelBoxData<double, 1, HOST> dVolrLev(layout, OP::ghost() + Point::Basis(0, 2));
       Array<double, DIM> dx;
       auto& eulerOp = *geometry.op;
+      CMEInsertionSchedule cmeSchedule(ParseInputs::get_CME_type() == 1,
+          ParseInputs::get_CME_insertion_time());
       double dxradius = 1.0 / thickness;
       auto C2C = Stencil<double>::CornersToCells(4);
 
@@ -276,10 +278,24 @@ int main(int argc, char *argv[])
           time = h5.time();
 		      dt = h5.dt();   
           restart_step = h5.iter();
+          int inserted = ReadCheckpointCMEState(restart_file);
+          cmeSchedule.setInserted(inserted < 0
+              ? cmeSchedule.due(time) : inserted != 0);
           pout(0) << "Restarting from step " << restart_step << " at time " << time << " with dt " << dt << endl;
         }
 
-      OP::Insert_CME(JU,dVolrLev,iop,layout,time,dt,gamma);
+      auto insertCMEIfDue = [&]() -> bool
+      {
+        if (!cmeSchedule.due(time)) return false;
+        OP::Insert_CME(JU,dVolrLev,iop,layout,time,dt,gamma);
+        cmeSchedule.setInserted(true);
+        pout(0) << "CME inserted at simulation time " << setprecision(17)
+                << time << " s (CME_Enter_Time="
+                << ParseInputs::get_CME_Enter_Time() << ")"
+                << setprecision(6) << endl;
+        return true;
+      };
+      insertCMEIfDue();
 
       MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell<HOST>, double> rk4(map, iop);
       // OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
@@ -325,6 +341,10 @@ int main(int argc, char *argv[])
           double dtcfl1 = OP::dtCFL(JU,iop,dVolrLev);
           dt = dtcfl1*ParseInputs::get_CFL();
         }
+      else if (convTestType == 1 || convTestType == 2)
+        {
+          dt = convergence_step_dt;
+        }
       // Normal simulations and time-evolving convergence tests share the same
       // end-time limit. Convergence timesteps otherwise remain fixed.
       if (convTestType < 3 &&
@@ -342,26 +362,38 @@ int main(int argc, char *argv[])
           dt = max_time - time;
           time_exceeded = true;
         }
+      // Land on the event before advancing the CME. Recompute the normal CFL
+      // timestep on the next iteration after the inserted state is available.
+      bool reachesCME = convTestType < 3 && !cmeSchedule.inserted()
+          && cmeSchedule.time() > time && dt >= cmeSchedule.time() - time;
+      if (reachesCME)
+        {
+          dt = cmeSchedule.time() - time;
+          time_exceeded = cmeSchedule.time() == max_time;
+        }
+      bool cmeInsertedThisStep = false;
       if (convTestType < 3)
         {
           rk4.advance(JU, dVolrLev, dt, time, temporal_order);
+          time = reachesCME ? cmeSchedule.time()
+                           : time_exceeded ? max_time : time + dt;
+          cmeInsertedThisStep = insertCMEIfDue();
           if (!OP::validConservedState(JU))
             {
               pout(0) << "Error: nonfinite conserved state or nonpositive cell-average "
-                      << "density after iteration " << iter << ", time=" << time + dt << endl;
+                      << "density after iteration " << iter << ", time=" << time << endl;
 #ifdef PR_MPI
               MPI_Finalize();
 #endif
               return 1;
             }
-          time = time_exceeded ? max_time : time + dt;
         }
 
       int write_time_cadence_new = floor(time/write_time_cadence);
       int slice_time_cadence_new = floor(time/slice_time_cadence);
       int write_trigger_count_now = floor(time/write_time_cadence);
       int slice_trigger_count_now = floor(time/slice_time_cadence);
-      bool write_data = ((time > write_trigger_count_now * write_time_cadence - dt) && (time < write_trigger_count_now * write_time_cadence + dt) && (write_trigger_count_now != write_trigger_count_temp)) || (iter % write_cadence == 0) || (iter == max_iter) || time_exceeded;
+      bool write_data = ((time > write_trigger_count_now * write_time_cadence - dt) && (time < write_trigger_count_now * write_time_cadence + dt) && (write_trigger_count_now != write_trigger_count_temp)) || (iter % write_cadence == 0) || (iter == max_iter) || time_exceeded || cmeInsertedThisStep;
       bool slice_data = ((time > slice_trigger_count_now * slice_time_cadence - dt) && (time < slice_trigger_count_now * slice_time_cadence + dt) && (slice_trigger_count_now != slice_trigger_count_temp)) || (iter % slice_cadence == 0) || (iter == max_iter) || time_exceeded;
       if (write_data || slice_data)
         {
@@ -372,7 +404,7 @@ int main(int argc, char *argv[])
       // Checkpointing.
       if ((iter % checkpoint_cadence == 0) || (iter == max_iter) || time_exceeded)
         {
-          Write_Checkpoint(JU, iter, restart_step, time, dt);
+          Write_Checkpoint(JU, iter, restart_step, time, dt, cmeSchedule.inserted());
         }
       
       int probe_trigger_count_now = floor(time/probe_cadence);

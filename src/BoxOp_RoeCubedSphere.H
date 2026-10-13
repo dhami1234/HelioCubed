@@ -40,7 +40,8 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
     const State* a_leftPoint,
     const State* a_rightPoint,
     const BoxData<T,1,MEM>* a_radialPoint,
-    const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences) const
+    const std::array<BoxData<T,DIM,MEM,DIM>,2>* a_metricDifferences,
+    const BoxData<T,1,MEM>* a_thetaFluxFace) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::primToMappedRoeFlux()");
   // Standalone callers can still supply face averages only.
@@ -101,8 +102,25 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::primToMappedRoeFlux(
   // radial face, so the same <det(A) A> used by the rest of the operator
   // preserves radial momentum. Face products retain the transverse gradient
   // terms needed for fourth-order accuracy when the coefficients vary.
-  State dissAvg = (1.0*Shift(Point::Zeros())
-      + (1.0/24.0)*Stencil<T>::LaplacianFace(a_dir))(dissPoint);
+  State dissAvg;
+  if (a_thetaFluxFace)
+  {
+    // Berta supplies final point states directly. Disable the transverse
+    // point-to-average correction at faces adjacent to troubled cells.
+    State lapDiss = Stencil<T>::LaplacianFace(a_dir)(dissPoint);
+    dissAvg = forallOverwrite<T,NUMCOMPS,MEM>([] PROTO_LAMBDA(
+        Var<T,NUMCOMPS,MEM>& out,
+        const Var<T,NUMCOMPS,MEM>& point,
+        const Var<T,NUMCOMPS,MEM>& lap,
+        const Var<T,1,MEM>& theta)
+    {
+      for (int c = 0; c < NUMCOMPS; ++c)
+        out(c) = theta(0) > T(0.5) ? point(c) + lap(c)/T(24) : point(c);
+    },dissPoint,lapDiss,*a_thetaFluxFace);
+  }
+  else
+    dissAvg = (1.0*Shift(Point::Zeros())
+        + (1.0/24.0)*Stencil<T>::LaplacianFace(a_dir))(dissPoint);
   for (int c : {iRHO,iE})
   {
     auto avg = slice(dissAvg,c);
