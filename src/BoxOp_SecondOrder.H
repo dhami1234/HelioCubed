@@ -13,20 +13,29 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::reconstructPLM(
     State wp1=(1.0*Shift::Basis(dir,1))(w,faces);
     PROTO_ASSERT((wm2.box() & wm1.box() & w.box() & wp1.box()).containsBox(faces),
         "PLM requires two normal ghost cells");
-    const bool limited=ParseInputs::get_limiter()!=0;
+    const int limiter=ParseInputs::get_limiter();
     forallInPlace([] PROTO_LAMBDA(
         Var<T,NUMCOMPS,MEM>& lo, Var<T,NUMCOMPS,MEM>& hi,
         const Var<T,NUMCOMPS,MEM>& mm, const Var<T,NUMCOMPS,MEM>& m,
-        const Var<T,NUMCOMPS,MEM>& c, const Var<T,NUMCOMPS,MEM>& p, bool limited)
+        const Var<T,NUMCOMPS,MEM>& c, const Var<T,NUMCOMPS,MEM>& p, int limiter)
     {
         for (int k=0; k<NUMCOMPS; ++k)
         {
             T a=m(k)-mm(k), b=c(k)-m(k), d=p(k)-c(k);
             T sl=T(0.5)*(a+b), sr=T(0.5)*(b+d);
-            if (limited)
+            if (limiter != 0)
             {
                 sl = a*b <= 0 ? T(0) : (a>0 ? min(a,b) : max(a,b));
                 sr = b*d <= 0 ? T(0) : (b>0 ? min(b,d) : max(b,d));
+                // Monotonized central: minmod(2*dL, (dL+dR)/2, 2*dR).
+                // Keep zero slope at extrema and on either side of a plateau.
+                if (limiter == 3)
+                {
+                    if (a*b > 0) sl=(a>0 ? T(1) : T(-1))*
+                        min(T(0.5)*fabs(a+b),T(2)*min(fabs(a),fabs(b)));
+                    if (b*d > 0) sr=(b>0 ? T(1) : T(-1))*
+                        min(T(0.5)*fabs(b+d),T(2)*min(fabs(b),fabs(d)));
+                }
             }
             lo(k)=m(k)+T(0.5)*sl;
             hi(k)=c(k)-T(0.5)*sr;
@@ -36,7 +45,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::reconstructPLM(
             for (int k=0; k<NUMCOMPS; ++k) lo(k)=m(k);
         if (!(hi(iRHO)>=RHO00 && hi(iP)>=0))
             for (int k=0; k<NUMCOMPS; ++k) hi(k)=c(k);
-    },left,right,wm2,wm1,w,wp1,limited);
+    },left,right,wm2,wm1,w,wp1,limiter);
 }
 
 // Reconstruct physical Cartesian primitives. One integrated face normal is

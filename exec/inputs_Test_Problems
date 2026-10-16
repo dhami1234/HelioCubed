@@ -45,13 +45,14 @@
 # Standard/Rusanov=(1,1), standard/Roe=(1,2), Berta/Rusanov=(2,1), Berta/Roe=(2,2).
 
 # Spatial accuracy: 2=PLM, 4=standard/Berta fourth-order FV.
-# At order 2, limiter=0 is unlimited PLM; limiter=1/2 selects minmod.
+# At order 2: limiter=0 is unlimited PLM, 1/2=minmod, 3=MC (monotonized central).
 # Order 2 uses Cartesian interpolation/reconstruction.
 # state_conversion, spatial_operator, Berta and seam-pressure settings apply at order 4.
 -spatial_order                  4
 # Spatial scheme at order 4: 1=standard FV, 2=Berta WENOZ.
 -spatial_operator               1
-# Standard scheme only: 0=none, 1=fourth-order limiter, 2=minmod.
+# Limiter at order 4 (standard scheme): 0=none, 1=fourth-order, 2=minmod.
+# At order 2: 0=unlimited, 1/2=minmod, 3=MC. MC requires spatial_order=2.
 -limiter                        1
 # Riemann solver for either scheme: 1=Rusanov, 2=Roe eight-wave.
 -Riemann_solver_type            2
@@ -81,7 +82,7 @@
 
 # Powell divergence-control source: 0=off, 1=on.
 -divergence_cleaning            1
-# Artificial viscosity switches are ignored for O2 with minmod (limiter != 0).
+# Artificial viscosity switches are ignored for O2 with minmod or MC (limiter != 0).
 # Linear artificial viscosity: 0=off, 1=on.
 -linear_viscosity               1
 # Nonlinear artificial viscosity: 0=off, 1=on.

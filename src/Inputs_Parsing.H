@@ -61,7 +61,7 @@ private:
     int max_iter; 
     double max_time; // Maximum simulation time in seconds
     double CFL;
-    int limiter; // 1:4th order, 2: Minmod
+    int limiter; // 0: unlimited, 1: O4 limiter (minmod at O2), 2: minmod, 3: MC (O2 only)
     // 0: preserve spherical symmetry (default); 1: interpolate Cartesian U.
     int state_conversion = 0;
     // Optional seam treatments; retain the earlier, faster path by default.
@@ -207,14 +207,14 @@ public:
     static int get_spatial_order() {return getInstance().spatial_order;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
-    static bool uses_second_order_minmod()
+    static bool uses_second_order_limiter()
     {return get_spatial_order() == 2 && get_limiter() != 0;}
-    // Minmod supplies the dissipation for limited O2. Apply the same switches
+    // The slope limiter supplies dissipation for limited O2. Apply the same switches
     // to fluxes, timestep estimation, and ghost-width selection.
     static int get_linear_viscosity()
-    {return uses_second_order_minmod() ? 0 : getInstance().linear_viscosity;}
+    {return uses_second_order_limiter() ? 0 : getInstance().linear_viscosity;}
     static int get_nonlinear_viscosity()
-    {return uses_second_order_minmod() ? 0 : getInstance().nonlinear_viscosity;}
+    {return uses_second_order_limiter() ? 0 : getInstance().nonlinear_viscosity;}
     static int get_viscosity_order() {return getInstance().viscosity_order;}
     static int get_scale_viscosity_with_r() {return getInstance().scale_viscosity_with_r;}
     static int get_boundary_reflux() {return getInstance().boundary_reflux;}
@@ -340,6 +340,12 @@ public:
         if (spatial_order != 2 && spatial_order != 4) {
             throw std::invalid_argument("spatial_order must be 2 or 4.");
         }
+        if (limiter < 0 || limiter > 3) {
+            throw std::invalid_argument("limiter must be 0 (unlimited), 1 (O4 limiter; minmod at O2), 2 (minmod), or 3 (MC at O2).");
+        }
+        if (limiter == 3 && spatial_order != 2) {
+            throw std::invalid_argument("limiter=3 (MC) requires spatial_order=2.");
+        }
         if (temporal_order != 1 && temporal_order != 2 && temporal_order != 3 && temporal_order != 4) {
             throw std::invalid_argument("temporal_order must be 1, 2, 3, or 4.");
         }
@@ -459,14 +465,17 @@ public:
         pout(0) << "restart_file: " << restart_file << endl;
         pout(0) << "gamma: " << gamma << endl;
         pout(0) << "spatial_order: " << spatial_order << endl;
-        if (spatial_order == 2)
-            pout(0) << "Spatial reconstruction: Cartesian PLM (limiter=0: unlimited; otherwise minmod); state_conversion, spatial_operator, Berta settings, and seam_pressure_correction are unused." << endl;
+        if (spatial_order == 2) {
+            const char* name = limiter == 0 ? "unlimited" : limiter == 3 ? "MC (monotonized central)" : "minmod";
+            pout(0) << "Spatial reconstruction: Cartesian PLM with " << name
+                    << "; state_conversion, spatial_operator, Berta settings, and seam_pressure_correction are unused." << endl;
+        }
         pout(0) << "temporal_order: " << temporal_order << endl;
         pout(0) << "divergence_cleaning: " << divergence_cleaning << endl;
         pout(0) << "linear_viscosity: " << get_linear_viscosity() << endl;
         pout(0) << "nonlinear_viscosity: " << get_nonlinear_viscosity() << endl;
-        if (uses_second_order_minmod() && (linear_viscosity || nonlinear_viscosity))
-            pout(0) << "Artificial viscosity inputs are ignored for spatial_order=2 with minmod; minmod supplies the dissipation." << endl;
+        if (uses_second_order_limiter() && (linear_viscosity || nonlinear_viscosity))
+            pout(0) << "Artificial viscosity inputs are ignored for spatial_order=2 with minmod or MC; the slope limiter supplies the dissipation." << endl;
         pout(0) << "viscosity_order: " << viscosity_order << endl;
         pout(0) << "scale_viscosity_with_r: " << scale_viscosity_with_r << endl;
         pout(0) << "boundary_reflux: " << boundary_reflux << endl;
