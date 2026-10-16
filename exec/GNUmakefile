@@ -11,24 +11,34 @@ HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
 # HDF5_LIB=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/lib
 # HDF5_INC=/apps/spack/anvil/apps/hdf5/1.10.7-gcc-11.2.0-axhcpbs/include
 
-PROTO= ../../proto
+PROTO ?= ../../proto
 
-CXXOPTFLAGS=-O3 
+# Use DEBUG=1 for an assertion-enabled build. Clean or use separate object
+# directories when changing compiler flags.
+DEBUG ?= 0
+CXXOPTFLAGS ?= -O3
+ifeq ($(DEBUG),1)
+CXXOPTFLAGS += -g
+else
+CXXOPTFLAGS += -DNDEBUG -DPR_DISABLE_HOST_COPIER_BARRIERS
+endif
 CXXOPTFLAGS+=-DmemoryFootPrint
 CXXOPTFLAGS+= -DPR_DISABLE_INIT_CHECKS
 CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 CXXOPTFLAGS+= -DPR_OPS=TRUE
-TARGET:=FullSphere.exe
+TARGET ?= FullSphere.exe
+OBJDIR ?= o
+DEPDIR ?= d
 
-SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/_common/*.cpp) 
+SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp)
 NODIRSRC = $(notdir $(SRC))
 NODIROBJ = $(subst .cpp,.o,$(NODIRSRC))
-OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
+OBJ=$(patsubst %.o,$(OBJDIR)/%.o, $(NODIROBJ))
 
 NODIRDEP = $(subst .cpp,.d,$(NODIRSRC))
-DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
+DEPENDS=$(patsubst %.d,$(DEPDIR)/%.d, $(NODIRDEP))
 
 VPATH=o. ../src  $(PROTO)/examples/_common
 
@@ -68,8 +78,6 @@ endif
 
 
 LINK=$(CXX)
-OBJDIR = o
-DEPDIR = d
 
 
 $(TARGET): $(OBJ)
@@ -77,18 +85,18 @@ $(TARGET): $(OBJ)
 
 $(OBJDIR):
 	@if [ ! -d "./$(OBJDIR)" ];then     \
-		mkdir $(OBJDIR);           \
+		mkdir -p $(OBJDIR);           \
 	fi
 
 $(DEPDIR):
 	@if [ ! -d "./$(DEPDIR)" ];then     \
-		mkdir $(DEPDIR);           \
+		mkdir -p $(DEPDIR);           \
 	fi
 
 #compile non-main sources
-$(OBJDIR)/%.o : %.cpp   $(OBJDIR) $(DEPDIR)
+$(OBJDIR)/%.o : %.cpp | $(OBJDIR) $(DEPDIR)
 	$(CXX) -c -o $@ $< $(CXXFLAGS) $(CPPFLAGS)
-	$(DEP) $<   $(CPPFLAGS) > $(DEPDIR)/$*.d
+	$(DEP) $< $(CPPFLAGS) -MT $@ -MP > $(DEPDIR)/$*.d
 
 
 
@@ -103,7 +111,7 @@ vars:
 	$(foreach v,$(filter-out $(VARS_OLD) VARS_OLD,$(.VARIABLES)), $(info $(v) = $($(v))))
 
 clean:
-	rm -rf d o *.o *.exe *.d $(PROTO)/examples/_common/*.o ../src/*.o $(PROTO)/examples/_common/*.d ../src/*.d
+	rm -rf $(DEPDIR) $(OBJDIR) $(TARGET)
 
 dataclean:
 	rm -rf *.hdf5 *.vtk *.table pout*

@@ -1,6 +1,6 @@
+#include "MHD_Error.H"
 #include "Proto.H"
 #include "MHDOp.H"
-#include "CommonTemplates.H"
 #include "Proto_Timer.H"
 // #include "Proto_WriteBoxData.H"
 // For Chrono Timer (Talwinder)
@@ -954,7 +954,7 @@ namespace MHDOp {
 				}
 				else
 				{
-					PROTO_ASSERT(false,
+					MHD::require(false,
 					        "Riemann_solver_type must be 1 (Rusanov) or 2 (Roe 8-wave).");
 				}
 				#if TURB == 1

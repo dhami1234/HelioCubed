@@ -1,6 +1,5 @@
 #include "Proto.H"
 #include "MHD_Mapping.H"
-#include "CommonTemplates.H"
 #include "Proto_Timer.H"
 #include "MHDOp.H"
 #include "MHD_Output_Writer.H"

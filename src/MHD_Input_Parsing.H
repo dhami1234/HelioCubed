@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MHD_Error.H"
+
 #include "Proto.H"
 #include "InputParser.H"
 
@@ -62,10 +64,10 @@ class Parsefrominputs {
 	}
     
 	void parsenow(int argc, char* argv[]){
-		PROTO_ASSERT(argc >= 2, "Error: No input file name provided.");
+		MHD::require(argc >= 2, "Error: No input file name provided.");
         std::string inputFileName = argv[1];
 		std::ifstream myfile(inputFileName);
-		PROTO_ASSERT(myfile.is_open(), "Error: Unable to open inputs file. Is the file name correct?");
+		MHD::require(myfile.is_open(), "Error: Unable to open inputs file. Is the file name correct?");
 
         std::cout << "Input file provided: " << inputFileName << std::endl;
 
@@ -131,6 +133,18 @@ class Parsefrominputs {
 		args.add("smallTM",  smallTM);
 		args.add("Scaling_time",  Scaling_time);
 		args.parse(argc,argv);
+		// These restrictions were previously enforced only by Proto assertions.
+		// Keep them active before constructing layouts in a release build.
+		MHD::require(domainSizex > 0 && domainSizey > 0 && domainSizez > 0 && BoxSize > 0,
+				"Domain sizes and BoxSize must be positive.");
+		MHD::require(domainSizex % BoxSize == 0 && domainSizey % BoxSize == 0 && domainSizez % BoxSize == 0,
+				"Each domain size must be divisible by BoxSize.");
+		MHD::require(domainSizez % 2 == 0 && (domainSizez/BoxSize) % 2 == 0,
+				"Polar exchange requires an even number of azimuthal cells and patches.");
+		MHD::require(timeIntegratorType >= 1 && timeIntegratorType <= 4,
+				"timeIntegratorType must be 1 (Euler), 2 (RK2), 3 (Hancock), or 4 (RK4).");
+		MHD::require(Riemann_solver_type == 1 || Riemann_solver_type == 2,
+				"Riemann_solver_type must be 1 (Rusanov) or 2 (Roe).");
 		// args.print(); //It prints, but not in the order I want.
 
 		int pid = procID();

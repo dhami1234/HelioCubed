@@ -17,3 +17,30 @@
 *.sh
 *.mpg
 pout.*
+
+# Local Python environments and caches (including macOS no-sync environments).
+.venv/
+.venv.nosync/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Builds, generated documentation, and local experiment outputs.
+/build/
+/build.nosync/
+/exec/o/
+/exec/d/
+/docs/
+/runs/
+/Test_jobs/
+/Test_results/
+/Convergence_jobs/
+/Convergence_results/
+/local_tests/
+/test_scripts/
+myjob.o*
+myjob.e*

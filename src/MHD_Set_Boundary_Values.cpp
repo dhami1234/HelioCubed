@@ -1,6 +1,6 @@
+#include "MHD_Error.H"
 #include "Proto.H"
 #include "MHD_Set_Boundary_Values.H"
-#include "CommonTemplates.H"
 #include "Proto_Timer.H"
 // #include "Proto_WriteBoxData.H"
 #include "Proto_LevelBoxData.H"
@@ -210,13 +210,13 @@ namespace MHD_Set_Boundary_Values {
 						const std::vector<BoxData<double,NUMCOMPS>>& BC_data,
 						const double time)
 	{
-		PROTO_ASSERT(!BC_data.empty(),
+		MHD::require(!BC_data.empty(),
 				"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: no BC frames available");
 
 		double h5_cadence = inputs.BC_cadence; // hrs
 		int low_frame_now = 0;
 		if (BC_data.size() > 1){
-			PROTO_ASSERT(h5_cadence > 0.0,
+			MHD::require(h5_cadence > 0.0,
 					"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: BC_cadence must be positive");
 			low_frame_now = static_cast<int>(time/(h5_cadence*3600.0));
 		}
@@ -255,7 +255,7 @@ namespace MHD_Set_Boundary_Values {
 
 			int low_frame = time_temp/(h5_cadence*3600);
 			int next_frame = low_frame+1;
-			PROTO_ASSERT((low_frame >= 0) &&
+			MHD::require((low_frame >= 0) &&
 					(next_frame < static_cast<int>(BC_data.size())),
 					"MHD_Set_Boundary_Values::interpolate_h5_BC | Error: BC frames %i and %i not available (num_frames = %i)",
 					low_frame, next_frame, static_cast<int>(BC_data.size()));

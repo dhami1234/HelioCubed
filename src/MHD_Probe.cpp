@@ -1,3 +1,4 @@
+#include "MHD_Error.H"
 #include "Proto.H"
 #include "MHD_Mapping.H"
 #include "MHD_Input_Parsing.H"
@@ -136,7 +137,7 @@ namespace MHD_Probe {
         std::string line;
         std::ifstream myfile(probe_file);
 
-        PROTO_ASSERT(myfile.is_open(), "Error: Unable to open trajectory file");
+        MHD::require(myfile.is_open(), "Error: Unable to open trajectory file");
 
         while (std::getline(myfile, line))
             ++number_of_lines;

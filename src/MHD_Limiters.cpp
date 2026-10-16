@@ -1,6 +1,5 @@
 #include "Proto.H"
 #include "MHD_Limiters.H"
-#include "CommonTemplates.H"
 #include "Proto_Timer.H"
 // #include "Proto_WriteBoxData.H"
 #include "MHD_Input_Parsing.H"

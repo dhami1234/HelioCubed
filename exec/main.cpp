@@ -1,3 +1,4 @@
+#include "MHD_Error.H"
 #include "Proto.H"
 #include "MHDLevelDataRK4.H"
 #include "MHD_Initialize.H"
@@ -12,7 +13,7 @@
 #include "MHD_Pre_Time_Step.H"
 #include <chrono> // Used by timer
 #include "MHDReader.H"
-#include "RK4.H"
+#include "MHD_RK4.H"
 #include "MHD_Set_Boundary_Values.H"
 
 using namespace std;
@@ -20,6 +21,7 @@ using namespace Proto;
 using namespace MHD_EulerStep;
 using namespace MHD_RK2;
 using namespace MHD_Hancock;
+using namespace MHD_RK4;
 
 Parsefrominputs inputs;
 
@@ -199,7 +201,7 @@ int main(int argc, char* argv[])
 					rk4.advance(time,dt,state);
 					break;
 				default:
-					PROTO_ASSERT(false,
+					MHD::require(false,
 					             "timeIntegratorType must be 1 (Euler), 2 (RK2), 3 (Hancock), or 4 (RK4).");
 			}
 
