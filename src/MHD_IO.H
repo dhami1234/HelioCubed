@@ -899,8 +899,13 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     names[9] = "Br_scaled"; 
   }
   Array<double, DIM> dx;
+  const bool secondOrder = ParseInputs::get_spatial_order() == 2;
   for (auto dit : layout)
   {
+    // The fourth-order semispherical split consumes three angular donor
+    // layers. O2 has only two and uses a cell-center basis instead; recover
+    // its output vectors from the selected-order primitives below.
+    if (secondOrder) continue;
     auto& JU_i = a_JU[dit];
     BoxData<double,1,HOST> deta = CubedSphereShell::detA<double,HOST>(JU_i.box(),dxiPerp,0); 
     BoxData<double,NUMCOMPS+2,HOST> USemiSph(layout[dit].grow(Point::Basis(0,2)));
@@ -1062,9 +1067,9 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   }
 
   // Recover density and pressure through the same selected-order primitive
-  // path used by the spatial operator. The faster semi-spherical path above
-  // is retained for presentation-space vector conversion, but nonlinear
-  // pressure recovery from its cell averages is inaccurate in low-beta MHD.
+  // path used by the spatial operator. O2 also uses these primitives for
+  // vectors. O4 retains its semispherical presentation above, but nonlinear
+  // pressure recovery from those cell averages is inaccurate in low-beta MHD.
   MBLevelBoxData<double, NUMCOMPS, HOST> USphEvolution(layout, OP::ghost());
   a_JU.copyTo(USphEvolution);
   OP::prepareState(USphEvolution,a_iop,dVolrLev,time);
@@ -1075,6 +1080,43 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     BoxData<double,NUMCOMPS,HOST> W;
     BoxData<double,NUMCOMPS,HOST> WBar;
     eulerOp[dit].sphToPrim(W,WBar,USphEvolution[dit],block);
+    if (secondOrder)
+    {
+      auto basis = HelioCubed::secondOrderCellBasis<double,HOST>(
+          layout[dit],dxiPerp,block);
+      BoxData<double,NUMCOMPS,HOST> cart;
+      HelioCubed::nativePrimitivesToCartesian(cart,W,basis);
+      forallInPlace([] PROTO_LAMBDA(
+          Var<double,NUMCOMPS,HOST>& out,
+          const Var<double,NUMCOMPS,HOST>& cart,
+          const Var<double,DIM,HOST,DIM>& basis,
+          const Var<double,1,HOST>& radius,
+          int scaled)
+        {
+          // The first basis column is the unit radial vector at the same
+          // cell center. Project the full Cartesian vectors onto the usual
+          // orthonormal (r, theta, phi) directions used by output files.
+          const double nx = basis(0,0), ny = basis(1,0), nz = basis(2,0);
+          const double phi = atan2(ny,nx);
+          const double cp = cos(phi), sp = sin(phi);
+          const double st = sqrt(nx*nx + ny*ny);
+          for (int start : {iVX,iBX})
+          {
+            const double x = cart(start), y = cart(start+1), z = cart(start+2);
+            out(start) = nx*x + ny*y + nz*z;
+            out(start+1) = nz*(cp*x + sp*y) - st*z;
+            out(start+2) = -sp*x + cp*y;
+          }
+          if (scaled == 1)
+          {
+            const double rOverAU = radius(0)/c_AU;
+            for (int d = 0; d < DIM; ++d) out(iVX+d) *= 1.0e-5;
+            out(iBX) *= rOverAU*rOverAU*1.0e6;
+            out(iBY) *= rOverAU*1.0e6;
+            out(iBZ) *= rOverAU*1.0e6;
+          }
+        },W_sph_out[dit],cart,basis,radiusLev[dit],scale_data_with_r);
+    }
     forallInPlace([] PROTO_LAMBDA(
         Var<double,NUMCOMPS,HOST>& a_output,
         const Var<double,NUMCOMPS,HOST>& a_W,
