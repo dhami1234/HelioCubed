@@ -67,6 +67,7 @@ private:
     // Optional seam treatments; retain the earlier, faster path by default.
     int BC_conserved_averages = 0; // 1: centered initialization and averaged BCs.
     int seam_pressure_correction = 0; // 1: match angular ghost energy to pressure.
+    int spatial_order = 4; // 2: common PLM operator, 4: standard/Berta operator
     int spatial_operator = 1; // 1: Existing Euler operator, 2: Berta WENOZ operator
     int Riemann_solver_type = 1; // 1: Rusanov, 2: Roe 8-wave (standard and Berta)
     double entropy_fix_coeff = 0.3; // FullSphere entropy-fix coefficient; 0 disables it
@@ -203,10 +204,17 @@ public:
     static int get_max_checkpoint_files() {return getInstance().max_checkpoint_files;}
     static string get_restart_file() {return getInstance().restart_file;}
     static double get_gamma() {return getInstance().gamma;}
+    static int get_spatial_order() {return getInstance().spatial_order;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
-    static int get_linear_viscosity() {return getInstance().linear_viscosity;}
-    static int get_nonlinear_viscosity() {return getInstance().nonlinear_viscosity;}
+    static bool uses_second_order_minmod()
+    {return get_spatial_order() == 2 && get_limiter() != 0;}
+    // Minmod supplies the dissipation for limited O2. Apply the same switches
+    // to fluxes, timestep estimation, and ghost-width selection.
+    static int get_linear_viscosity()
+    {return uses_second_order_minmod() ? 0 : getInstance().linear_viscosity;}
+    static int get_nonlinear_viscosity()
+    {return uses_second_order_minmod() ? 0 : getInstance().nonlinear_viscosity;}
     static int get_viscosity_order() {return getInstance().viscosity_order;}
     static int get_scale_viscosity_with_r() {return getInstance().scale_viscosity_with_r;}
     static int get_boundary_reflux() {return getInstance().boundary_reflux;}
@@ -263,6 +271,7 @@ public:
         args.add("state_conversion", state_conversion);
         args.add("BC_conserved_averages", BC_conserved_averages);
         args.add("seam_pressure_correction", seam_pressure_correction);
+        args.add("spatial_order", spatial_order);
         args.add("spatial_operator", spatial_operator);
         args.add("Riemann_solver_type", Riemann_solver_type);
         args.add("entropy_fix_coeff", entropy_fix_coeff);
@@ -328,6 +337,12 @@ public:
         args.add("CME_a1", CME_a1);
         args.add("CME_shift", CME_shift);
         args.parse(argc, argv);
+        if (spatial_order != 2 && spatial_order != 4) {
+            throw std::invalid_argument("spatial_order must be 2 or 4.");
+        }
+        if (temporal_order != 1 && temporal_order != 2 && temporal_order != 3 && temporal_order != 4) {
+            throw std::invalid_argument("temporal_order must be 1, 2, 3, or 4.");
+        }
         if (state_conversion != 0 && state_conversion != 1) {
             throw std::invalid_argument("state_conversion must be 0 (symmetry preserving) or 1 (Cartesian).");
         }
@@ -337,7 +352,7 @@ public:
         if (seam_pressure_correction != 0 && seam_pressure_correction != 1) {
             throw std::invalid_argument("seam_pressure_correction must be 0 or 1.");
         }
-        if (state_conversion == 1 && CUBED_SPHERE_SHELL_RADIAL_COORD != 0) {
+        if ((spatial_order == 2 || state_conversion == 1) && CUBED_SPHERE_SHELL_RADIAL_COORD != 0) {
             throw std::invalid_argument("Cartesian state_conversion requires radial coordinate 0.");
         }
         if (viscosity_order != 3 && viscosity_order != 5) {
@@ -443,10 +458,15 @@ public:
         pout(0) << "max_checkpoint_files: " << max_checkpoint_files << endl;
         pout(0) << "restart_file: " << restart_file << endl;
         pout(0) << "gamma: " << gamma << endl;
+        pout(0) << "spatial_order: " << spatial_order << endl;
+        if (spatial_order == 2)
+            pout(0) << "Spatial reconstruction: Cartesian PLM (limiter=0: unlimited; otherwise minmod); state_conversion, spatial_operator, Berta settings, and seam_pressure_correction are unused." << endl;
         pout(0) << "temporal_order: " << temporal_order << endl;
         pout(0) << "divergence_cleaning: " << divergence_cleaning << endl;
-        pout(0) << "linear_viscosity: " << linear_viscosity << endl;
-        pout(0) << "nonlinear_viscosity: " << nonlinear_viscosity << endl;
+        pout(0) << "linear_viscosity: " << get_linear_viscosity() << endl;
+        pout(0) << "nonlinear_viscosity: " << get_nonlinear_viscosity() << endl;
+        if (uses_second_order_minmod() && (linear_viscosity || nonlinear_viscosity))
+            pout(0) << "Artificial viscosity inputs are ignored for spatial_order=2 with minmod; minmod supplies the dissipation." << endl;
         pout(0) << "viscosity_order: " << viscosity_order << endl;
         pout(0) << "scale_viscosity_with_r: " << scale_viscosity_with_r << endl;
         pout(0) << "boundary_reflux: " << boundary_reflux << endl;

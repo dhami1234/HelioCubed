@@ -68,6 +68,16 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
     }
   }
 
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    secondOrderOperator(a_Rhs,a_fluxes,a_USph,a_scale);
+    if (subtractBackground)
+    {
+      a_Rhs -= m_testBackgroundRhs;
+      for (int dir=0; dir<DIM; ++dir) a_fluxes[dir] -= m_testBackgroundFluxes[dir];
+    }
+    return;
+  }
   if (ParseInputs::get_spatial_operator() == 2)
   {
     BertaOperator(a_Rhs,a_fluxes,a_USph,a_dt,a_scale,a_counter);

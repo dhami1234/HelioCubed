@@ -167,7 +167,8 @@ public:
 	}
 
 	// With BC_conserved_averages enabled, initialization requests centered
-	// primitive samples and stage fills request native conserved ghost averages.
+	// primitive samples and stage fills request native conserved ghost averages
+	// (center values when spatial_order=2).
 	// The default path retains the earlier point-sampled primitive BC strip.
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
@@ -358,7 +359,13 @@ public:
 			}
 		}
 
-		if (ParseInputs::get_BC_conserved_averages() == 0)
+		if (ParseInputs::get_BC_conserved_averages() == 0
+			&& ParseInputs::get_spatial_order() == 2)
+		{
+			// Match the center-valued basis used by the second-order operator.
+			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi);
+		}
+		else if (ParseInputs::get_BC_conserved_averages() == 0)
 		{
 			const auto& layout = a_dstData.layout();
 			const Point ghost = a_dstData.ghost()[0];

@@ -6,6 +6,121 @@
 
 namespace HelioCubed
 {
+// Fourth-order seam interpolation needs two angular donor layers beyond
+// its output. Only O4 conversion needs additional output layers for products.
+inline Proto::Point interpolationSourceGhost(Proto::Point stateGhost)
+{
+    if (CUBED_SPHERE_SHELL_RADIAL_COORD != 0) return stateGhost;
+    const int padding = ParseInputs::get_spatial_order() == 2 ? 2
+        : (ParseInputs::get_state_conversion() == 1 ? 3 : 4);
+    return stateGhost + Proto::Point(0,padding,padding);
+}
+
+template<typename T, Proto::MemType MEM>
+Proto::BoxData<T,DIM,MEM,DIM> secondOrderCellBasis(
+    const Proto::Box& box,T h,unsigned block)
+{
+    using namespace Proto;
+    BoxData<T,DIM,MEM,DIM> matrix(box);
+    auto perm= CubedSphereShell::perm(block);
+    auto sign= CubedSphereShell::permsign(block);
+    const T half=T(0.5);
+    Point high=box.high();high[0]=box.low()[0];
+    forallInPlace_p(f_Amatrix,Box(box.low(),high),matrix,perm,sign,h,half,half);
+    Operator::spreadSlice(matrix);
+    return matrix;
+}
+
+template<typename T, unsigned C, Proto::MemType MEM>
+void nativePrimitivesToCartesian(Proto::BoxData<T,C,MEM>& cart,
+    const Proto::BoxData<T,C,MEM>& native,
+    const Proto::BoxData<T,DIM,MEM,DIM>& matrix)
+{
+    using namespace Proto;
+    cart=forallOverwrite<T,C,MEM>([] PROTO_LAMBDA(
+        Var<T,C,MEM>& out,const Var<T,C,MEM>& in,const Var<T,DIM,MEM,DIM>& A)
+    {
+        out(0)=in(0);out(4)=in(4);
+        for(unsigned group=0;group<2;++group)
+        {
+            const unsigned start=group==0?1:5;
+            for(unsigned i=0;i<DIM;++i)
+            {
+                out(start+i)=0;
+                for(unsigned j=0;j<DIM;++j)out(start+i)+=A(i,j)*in(start+j);
+            }
+        }
+    },native,matrix);
+}
+
+// Second-order quotient and basis transformations. Keep JU as mapped
+// conserved averages and retain the accurate geometry/interpolation. At order
+// two all interpolated vector components have a common Cartesian meaning.
+// Pointwise semispherical splitting with an average interpolation stencil
+// introduces coordinate-dependent O(h^2) jumps in otherwise uniform vectors.
+template<typename T, unsigned C, Proto::MemType MEM>
+void consToSphInterpEuler2(
+    Proto::MBLevelBoxData<T,C,MEM>& state, Proto::MBInterpOp& interp,
+    Proto::MBLevelBoxData<T,1,MEM>& volume)
+{
+    using namespace Proto;
+    PR_TIMERS("HelioCubed::consToSphInterpEuler2");
+    static_assert(C == 8 && DIM == 3);
+    const auto& layout = state.layout();
+    const T h = T(1)/layout.domain().getBlock(0).sizes()[1];
+    const auto sourcePadding = interpolationSourceGhost(state.ghost()[0])
+                             - state.ghost()[0];
+    MBLevelBoxData<T,C,MEM> input(layout,state.ghost()+sourcePadding);
+    // Output is needed only on the final state halo. Interblock buffers
+    // belong to the donor level; same-block output ghosts use exchange0().
+    Array<Point,DIM+1> outputGhost;
+    outputGhost.fill(Point::Zeros());
+    outputGhost[0] = state.ghost()[0];
+    MBLevelBoxData<T,C,MEM> output(layout,outputGhost);
+    for (auto index : layout)
+    {
+        input[index].setVal(0);
+        output[index].setVal(0);
+        const Box valid = layout[index];
+        auto det = CubedSphereShell::detA<T,MEM>(valid,h,0);
+        forallInPlace([] PROTO_LAMBDA(
+            Var<T,C,MEM>& out, const Var<T,C,MEM>& ju,
+            const Var<T,1,MEM>& vol, const Var<T,1,MEM>& det)
+        {
+            const T invJ = T(1)/(vol(0)*det(0));
+            for (unsigned c=0; c<C; ++c) out(c) = ju(c)*invJ;
+        },valid,input[index],state[index],volume[index],det);
+    }
+    input.exchange();
+    input.copyTo(output);
+    interp.apply(output,input);
+    output.exchange0();
+    for (auto index : layout)
+    {
+        const Box box = state[index].box();
+        auto matrix = secondOrderCellBasis<T,MEM>(box,h,layout.block(index));
+        auto inverse = forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,matrix);
+        forallInPlace([] PROTO_LAMBDA(
+            Var<T,C,MEM>& out, const Var<T,C,MEM>& in,
+            const Var<T,DIM,MEM,DIM>& inv)
+        {
+            out(0)=in(0); out(4)=in(4);
+            for (unsigned group=0; group<2; ++group)
+            {
+                const unsigned start = group == 0 ? 1 : 5;
+                for (unsigned d=0; d<DIM; ++d)
+                {
+                    T value = 0;
+                    for (unsigned j=0; j<DIM; ++j)
+                        value += inv(d,j)*in(start+j);
+                    out(start+d) = value;
+                }
+            }
+        },state[index],output[index],inverse);
+    }
+    state.exchange0();
+}
+
 // Recover Cartesian conserved cell averages before interblock interpolation.
 // Unlike the semispherical path, this does not preserve radial symmetry exactly.
 // Both divisions and the final basis change include fourth-order average
@@ -182,7 +297,9 @@ void consToSphInterpEuler(
     Proto::MBLevelBoxData<T,1,MEM>& a_dVolr,
     unsigned a_order = 4, int a_counter = 0)
 {
-    if (ParseInputs::get_state_conversion() == 1)
+    if (ParseInputs::get_spatial_order() == 2)
+        consToSphInterpEuler2(a_JU,a_iop,a_dVolr);
+    else if (ParseInputs::get_state_conversion() == 1)
         consToSphInterpEulerCartesian(a_JU,a_iop,a_dVolr);
     else
         Proto::CubedSphereShell::consToSphInterpEuler(

@@ -39,5 +39,6 @@ visitlog.py
 
 # Local investigation and regression helpers.
 /local_tests/
+/test_scripts/
 
 /.venv.nosync/

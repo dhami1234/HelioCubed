@@ -335,6 +335,14 @@ public:
   // How many ghost cells does the operator need from the state variables
   inline static Point ghost()
   {
+    if (ParseInputs::get_spatial_order() == 2)
+    {
+      // PLM and nonlinear viscosity need two layers. D5 linear viscosity
+      // reaches three cells beyond the owned box at its boundary faces.
+      const bool fifthDerivative = ParseInputs::get_linear_viscosity() == 1
+                               && ParseInputs::get_viscosity_order() == 5;
+      return Point::Ones(fifthDerivative ? 3 : 2);
+    }
     // The derivative-ratio detector consumes one more layer than Jameson.
     const bool extraDetectorGhost = ParseInputs::get_spatial_operator() == 2
                                 && ParseInputs::get_Berta_detector_type() == 1;
@@ -482,7 +490,13 @@ public:
   inline void sphToPrim_2O(
                          State& a_W,
                          const State& a_USph,
-                         uint a_block) const;
+                         uint a_block,
+                         bool a_restoreTestBackground = true) const;
+
+  inline void secondOrderOperator(State& rhs, Array<State,DIM>& fluxes,
+      const State& state, T scale) const;
+  inline void reconstructPLM(State& left, State& right,
+      const State& primitive, const Box& faces, int dir) const;
 
   /// Restore the analytic Cartesian background used by magnetized tests.
   inline void addTestProblemBackgroundB(
@@ -829,6 +843,7 @@ private:
 #include "BoxOp_PreStage.H"
 #include "BoxOp_SeamPressure.H"
 #include "BoxOp_RoeCubedSphere.H"
+#include "BoxOp_SecondOrder.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
 #include "BoxOp_BertaCubedSphereImplem.H"
 #include "BoxOp_Initialize.H"

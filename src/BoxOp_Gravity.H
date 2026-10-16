@@ -10,6 +10,19 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
     const BoxData<T,1,MEM>& a_detA) const
 {
   PR_TIME("BoxOp_EulerCubedSphere::Gravity()");
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,NUMCOMPS,MEM>& rhs,const Var<T,NUMCOMPS,MEM>& u,
+        const Var<T,1,MEM>& dr,const Var<T,DIM,MEM,DIM>& mat,
+        const Var<T,1,MEM>& det)
+    {
+      const T factor=-c_G*c_M0*dr(0);
+      for(int d=0;d<DIM;++d) rhs(iMOMX+d)+=factor*mat(d,0)*u(iRHO);
+      rhs(iE)+=factor*det(0)*u(iMOMX);
+    },a_Rhs,a_USph,a_drDxi,a_detA_A,a_detA);
+    return;
+  }
   // J = det(A) r^2 dr/dxi and g = -GM/r^2 e_r. Cancel r^2
   // analytically before averaging. This also preserves the angular metric
   // factorization of a radial state. USph stores <rho> and <rho V_r>.

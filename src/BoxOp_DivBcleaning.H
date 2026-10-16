@@ -86,6 +86,24 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::DivBPowell2(
                         bool a_cellAverages) const
 {
   PR_TIME("BoxOp_EulerCubedSphere::DivBPowell2()");
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,NUMCOMPS,MEM>& rhs,const Var<T,1,MEM>& minusDiv,
+        const Var<T,NUMCOMPS,MEM>& w,const Var<T,DIM,MEM,DIM>& A)
+    {
+      T v[DIM]={},b[DIM]={},vb=0;
+      for (int i=0;i<DIM;++i)
+      {
+        for (int j=0;j<DIM;++j) {v[i]+=A(i,j)*w(iVX+j);b[i]+=A(i,j)*w(iBX+j);}
+        rhs(iMOMX+i)+=minusDiv(0)*b[i]/(4*M_PI);
+        rhs(iBX+i)+=minusDiv(0)*v[i];
+        vb+=v[i]*b[i];
+      }
+      rhs(iE)+=minusDiv(0)*vb/(4*M_PI);
+    },a_Rhs,a_minusJDivB,a_W,a_A_matrix0);
+    return;
+  }
   const Box sourceBox = a_Rhs.box().grow(1);
   const Box pointBox = a_Rhs.box().grow(2);
   PROTO_ASSERT(a_minusJDivB.box().containsBox(sourceBox),
@@ -172,7 +190,36 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
   BoxData<T,1,MEM> minusJDivB(a_divB.box());
   minusJDivB.setVal(0.0);
 
-  if (ParseInputs::get_spatial_operator() == 2)
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    State native,w;
+    const bool magneticTest=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+    sphToPrim_2O(native,a_USph,block,!magneticTest);
+    auto basis=pointwiseSphericalBasis(native.box(),block,-1);
+    HelioCubed::nativePrimitivesToCartesian(w,native,basis);
+    for (int dir=0;dir<DIM;++dir)
+    {
+      const Box faces=a_divB.box().extrude(dir);
+      State left,right;
+      reconstructPLM(left,right,w,faces,dir);
+      if (magneticTest)
+      {
+        const T b0=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
+        forallInPlace([] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& l,
+            Var<T,NUMCOMPS,MEM>& r,T b0)
+        {l(iBX)+=b0;r(iBX)+=b0;},left,right,b0);
+      }
+      auto normal=CubedSphereShell::adjA<T,MEM>(faces,dxiPerp,block,dir);
+      auto area=slice(adjDr,dir);
+      auto flux=forallOverwrite<T,1,MEM>([] PROTO_LAMBDA(
+          Var<T,1,MEM>& f,const Var<T,NUMCOMPS,MEM>& l,
+          const Var<T,NUMCOMPS,MEM>& r,const Var<T,DIM,MEM>& normal,
+          const Var<T,1,MEM>& area)
+      {f(0)=0;for(int j=0;j<DIM;++j)f(0)+=T(0.5)*(l(iBX+j)+r(iBX+j))*normal(j)*area(0);},left,right,normal,area);
+      minusJDivB+=Stencil<T>::FluxDivergence(dir)(flux,-T(1)/this->dx()[dir]);
+    }
+  }
+  else if (ParseInputs::get_spatial_operator() == 2)
   {
     const T eta_d = ParseInputs::get_Berta_eta_d();
     const int detector_type = ParseInputs::get_Berta_detector_type();

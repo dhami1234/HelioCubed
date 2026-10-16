@@ -66,7 +66,8 @@ initialize(State& a_W,
   // File primitives are point samples. Use the basis at that same point;
   // an averaged basis is not the coordinate transform of a point vector.
   BoxData<T,DIM,MEM,DIM> A_matrix_inv;
-  if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 1)
+  if (ParseInputs::get_spatial_order() == 2
+      || (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 1))
   {
     auto pointBasis = pointwiseSphericalBasis(a_W.box(),a_block,-1);
     A_matrix_inv = forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,pointBasis);
@@ -164,8 +165,8 @@ initialize(State& a_W,
     Box sourceBox(source_lo,source_hi);
     int low_index = a_W.box().low()[0];
     int high_index = a_W.box().high()[0];
-    for (int i = -NGHOST; i <= (high_index-low_index)-NGHOST; i++){
-      a_BC.copyTo(a_W,sourceBox,Point::Basis(0)*(i+1));
+    for (int i = low_index; i <= high_index; i++){
+      a_BC.copyTo(a_W,sourceBox,Point::Basis(0)*(i-source_lo[0]));
     }
 
     // Convert from classical spherical to Cartesian (confirmed correct)

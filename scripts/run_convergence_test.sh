@@ -54,7 +54,7 @@ else
     NPROCS_BY_LEVEL=(18 18 18)
 fi
 
-# Supported time integrators are 1, 3, and 4. Fourth order is the normal
+# Supported time integrators are 1, 2, 3, and 4. Fourth order is the normal
 # choice when measuring the full space-and-time accuracy of the scheme.
 TEMPORAL_ORDER="${HELIOCUBED_CONVERGENCE_TEMPORAL_ORDER:-1}"
 
@@ -140,9 +140,9 @@ for level in 0 1 2; do
     fi
 done
 case "${TEMPORAL_ORDER}" in
-    1|3|4) ;;
+    1|2|3|4) ;;
     *)
-        echo "Error: TEMPORAL_ORDER must be 1, 3, or 4 (got '${TEMPORAL_ORDER}')." >&2
+        echo "Error: TEMPORAL_ORDER must be 1, 2, 3, or 4 (got '${TEMPORAL_ORDER}')." >&2
         exit 1
         ;;
 esac

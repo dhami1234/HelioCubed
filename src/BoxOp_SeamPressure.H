@@ -102,7 +102,8 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::prepareState(
     MBLevelBoxData<T,1,MEM>& a_dVolr, T a_time)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::prepareState()");
-  if (ParseInputs::get_seam_pressure_correction() == 0)
+  if (ParseInputs::get_spatial_order() == 2
+      || ParseInputs::get_seam_pressure_correction() == 0)
   {
     HelioCubed::consToSphInterpEuler(a_state,a_iop,a_dVolr,4,0);
     fillRadialBoundaries(a_state,a_dVolr,a_time);

@@ -162,6 +162,13 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
     BoxData<T,DIM,MEM,DIM> A_matrix_inv;
     if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 0)
     {
+      if (ParseInputs::get_spatial_order() == 2)
+      {
+        auto basis=pointwiseSphericalBasis(bdryBoxLow,a_block,-1);
+        A_matrix_inv=forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,basis);
+      }
+      else
+      {
       // Calculate A_matrix
       BoxData<T,DIM,MEM,DIM> amat = CubedSphereShell::detA_A<T,MEM>(bdryBoxLow,a_h,a_block,0);
       BoxData<T,1,MEM> deta = CubedSphereShell::detA<T,MEM>(bdryBoxLow,a_h,0);
@@ -178,7 +185,7 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
         },amat,deta);
       A_matrix_inv.define(bdryBoxLow, T(0));
       forallInPlace(f_matinv3by3,A_matrix_inv,amat);
-
+      }
     }
 
     // Find X_cart
@@ -309,8 +316,8 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
 
     if (init_condition_type == 0 && ParseInputs::get_BC_conserved_averages() == 1)
     {
-      // The reader supplies native conserved cell averages, including the
-      // radial/angular corner ghosts required by reconstruction.
+      // The reader supplies native conserved cell averages (center values
+      // at order two), including radial/angular corner ghosts.
       PROTO_ASSERT(a_BC.box().containsBox(bdryBoxLow),
           "Inner boundary averages do not cover the radial ghost region");
       a_BC.copyTo(a_USphStage,bdryBoxLow);
@@ -391,8 +398,9 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         if (ParseInputs::get_Sun_gravity() == 1) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
         // viscFlux updates the state with +div(Fvisc). The register and
         // radial balance use the conservative -div(F) convention.
-        a_blockreg.increment(fluxes, dit, -a_dt);
-        CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,-a_dt);
+        const T sourceWeight = ParseInputs::get_temporal_order() == 2 ? a_weight : T(1);
+        a_blockreg.increment(fluxes, dit, -a_dt*sourceWeight);
+        CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,-a_dt*sourceWeight);
       }
   }
 }

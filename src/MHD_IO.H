@@ -1061,7 +1061,7 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 #endif
   }
 
-  // Recover density and pressure through the same fourth-order primitive
+  // Recover density and pressure through the same selected-order primitive
   // path used by the spatial operator. The faster semi-spherical path above
   // is retained for presentation-space vector conversion, but nonlinear
   // pressure recovery from its cell averages is inaccurate in low-beta MHD.
@@ -1133,7 +1133,8 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     // h5.writeMBLevel({"density", "VxPerp", "VyPerp", "VzPerp", "P", "BxPerp", "ByPerp", "BzPerp","Vr","Br"}, map, Wout, "W_" + to_string(iter));
   }
 
-  if (write_slice){
+  if (write_slice && (ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
+      || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R())){
     double physical_time = getPhysTime(time);
 
 
@@ -1141,6 +1142,28 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     Point offset = Point(0, 2, 2);      // extra padding for interpolation
     MBLevelBoxData<double, NUMCOMPS, HOST> W_sph_in(layout, ghost + offset);
     MBLevelBoxData<double, NUMCOMPS, HOST> W_sph_out_ghost(layout, ghost);
+
+    // Slice sampling needs three angular layers even when the evolution
+    // operator uses only two. Give it matching interpolation and geometry.
+    MBInterpOp* sliceInterp = &a_iop;
+    const typename OP::MapT* sliceMap = &map;
+    if (ParseInputs::get_spatial_order() == 2)
+    {
+      struct SliceInterpolation
+      {
+        MBDisjointBoxLayout layout;
+        MBInterpOp op;
+        typename OP::MapT map;
+        SliceInterpolation(const MBDisjointBoxLayout& a_layout, Point a_ghost)
+          : layout(a_layout), op(CubedSphereShell::MHDInterpOp<HOST>(a_layout,a_ghost,4)),
+            map(CubedSphereShell::Map(a_layout,Point::Ones(3))) {}
+      };
+      static std::unique_ptr<SliceInterpolation> interpolation;
+      if (!interpolation || &interpolation->layout.partition() != &layout.partition())
+        interpolation = std::make_unique<SliceInterpolation>(layout,ghost+offset);
+      sliceInterp = &interpolation->op;
+      sliceMap = &interpolation->map;
+    }
 
     W_sph_in.setVal(0.0);
     W_sph_out_ghost.setVal(0.0);
@@ -1150,25 +1173,25 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 
     W_sph_in.exchange();
     W_sph_in.copyTo(W_sph_out_ghost);
-    a_iop.apply(W_sph_out_ghost, W_sph_in);
+    sliceInterp->apply(W_sph_out_ghost, W_sph_in);
     W_sph_out_ghost.exchange0();
 
 
     if (ParseInputs::get_slice_X()){
       std::string tecplot_slice_file_x = ParseInputs::get_data_file_prefix() + ".x." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
     }
     if (ParseInputs::get_slice_Y()){
       std::string tecplot_slice_file_y = ParseInputs::get_data_file_prefix() + ".y." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
     }
     if (ParseInputs::get_slice_Z()){
       std::string tecplot_slice_file_z = ParseInputs::get_data_file_prefix() + ".z." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
     }
     if (ParseInputs::get_slice_R()){
       std::string tecplot_spherical_slice_file = ParseInputs::get_data_file_prefix() + ".r." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_spherical(map, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13); 
+      writeTecplotSlice_spherical(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13);
     }
     pout(0) << "Tecplot slice files written at iteration " << iter << endl;                                     
   }
@@ -1244,6 +1267,57 @@ inline int ReadCheckpointCMEState(std::string a_filename)
   MPI_Bcast(&inserted, 1, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
   return inserted;
+}
+
+// Proto's multiblock reader requires the file and destination ghost widths
+// to agree. Preserve checkpoint compatibility when the selected order or
+// viscosity stencil changes the evolution halo.
+inline void ReadCheckpointState(HDF5Handler& a_h5,
+    MBLevelBoxData<double,NUMCOMPS,HOST>& a_state, std::string a_filename)
+{
+  if (a_filename.substr(a_filename.find_last_of('.') + 1) != "hdf5")
+    a_filename += ".hdf5";
+  Point storedGhost = Point::Zeros();
+  int widths[DIM] = {};
+  if (procID() == 0)
+  {
+    auto file = H5Fopen(a_filename.c_str(),H5F_ACC_RDONLY,H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(file >= 0);
+    auto meta = H5Gopen(file,"/level_0/data_attributes",H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(meta >= 0);
+    auto attribute = H5Aopen(meta,"outputGhost",H5P_DEFAULT);
+    CME_CHECKPOINT_HDF5(attribute >= 0);
+    hid_t pointType;
+    HDF5Handler::getH5DataType<Point>(&pointType);
+    CME_CHECKPOINT_HDF5(H5Aread(attribute,pointType,&storedGhost) >= 0);
+    CME_CHECKPOINT_HDF5(H5Aclose(attribute) >= 0);
+    CME_CHECKPOINT_HDF5(H5Gclose(meta) >= 0);
+    CME_CHECKPOINT_HDF5(H5Fclose(file) >= 0);
+    for (int d=0;d<DIM;++d) widths[d]=storedGhost[d];
+  }
+#ifdef PR_MPI
+  MPI_Bcast(widths,DIM,MPI_INT,0,MPI_COMM_WORLD);
+#endif
+  for (int d=0;d<DIM;++d)
+  {
+    CME_CHECKPOINT_HDF5(widths[d] >= 0);
+    storedGhost[d]=widths[d];
+  }
+  if (storedGhost == a_state.ghost()[0])
+  {
+    a_h5.readMBLevel(a_state,a_filename);
+    return;
+  }
+  Array<Point,DIM+1> ghost;
+  ghost.fill(Point::Zeros());
+  ghost[0]=storedGhost;
+  MBLevelBoxData<double,NUMCOMPS,HOST> saved(a_state.layout(),ghost);
+  a_h5.readMBLevel(saved,a_filename);
+  for (auto index:a_state.layout())
+  {
+    a_state[index].setVal(0.);
+    saved[index].copyTo(a_state[index],a_state.layout()[index]);
+  }
 }
 
 #undef CME_CHECKPOINT_HDF5
@@ -1511,8 +1585,8 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   for (auto dit : layout)
   {
     auto& JU_i = a_JU[dit];
-    Box dbx0 = JU_i.box();
-    Box dbx1 = dbx0.grow(-NGHOST);
+    const Box dbx0 = JU_i.box();
+    const Box dbx1 = layout[dit];
     if (dbx1.containsPoint(index_cc))
     {
       BoxData<double,1,HOST> localVolume;

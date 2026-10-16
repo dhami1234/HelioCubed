@@ -2,7 +2,9 @@ template<typename T, typename MAP, MemType MEM>
 inline State BoxOp_EulerCubedSphere<T,MAP,MEM>::viscosityFaceState(
     const State& a_W, uint a_dir, const Box& a_faceBox) const
 {
-  const auto interpolate = Stencil<T>::CellToFace(a_dir);
+  const auto interpolate = ParseInputs::get_spatial_order() == 2
+      ? Stencil<T>::CellToFace(a_dir,Side::Lo,2)
+      : Stencil<T>::CellToFace(a_dir);
   const Box faceBox = a_faceBox.empty() ? interpolate.range(a_W.box())
       : (a_faceBox & interpolate.range(a_W.box()));
   State face = interpolate(a_W,faceBox);

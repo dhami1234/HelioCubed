@@ -9,8 +9,9 @@
 #include <tuple>
 
 // The evolution operator consumes unweighted computational-cell averages of
-// native conserved variables. Integrate the pointwise basis change and the
-// nonlinear primitive-to-conserved conversion before storing those averages.
+// native conserved variables at order four. Integrate the pointwise basis
+// change and nonlinear primitive-to-conserved conversion for those averages;
+// at order two, evaluate both at the cell center.
 // Source components are (n, Vr, Vphi, Vtheta, P, Br, Bphi, Btheta), in the
 // boundary file's units: cm^-3, cm/s, picodyne/cm^2, and microgauss.
 class MHD_BoundaryAverages
@@ -167,6 +168,7 @@ public:
         PROTO_ASSERT(!theta.empty() && !phi.empty(),"Empty boundary coordinate arrays");
         const double r0=ParseInputs::get_inner_radius(),r1=ParseInputs::get_outer_radius();
         const double stretch=ParseInputs::get_radial_stretch(),gamma=ParseInputs::get_gamma();
+        const bool midpoint=ParseInputs::get_spatial_order()==2;
         const double span=stretch==0?r1-r0:(r1-r0)/std::expm1(stretch);
         const auto& layout=destination.layout();
         std::map<int,std::array<double,4>> radial;
@@ -184,16 +186,17 @@ public:
             {
                 // <s>, <s^2>, <s^4>, <s^(2 gamma)>, where s = r_inner/r.
                 std::array<double,4> mean{};
-                for(int q=0;q<4;++q)
+                for(int q=0;q<(midpoint?1:4);++q)
                 {
-                    const double xi=(ir+radialNodes[q])/nr;
+                    const double xi=(ir+(midpoint?.5:radialNodes[q]))/nr;
                     const double radius=r0+span*(stretch==0?xi:std::expm1(stretch*xi));
                     PROTO_ASSERT(radius>0,"Inner radial ghost cell reaches nonpositive radius");
                     const double ratio=r0/radius,r2=ratio*ratio;
-                    mean[0]+=radialWeights[q]*ratio;
-                    mean[1]+=radialWeights[q]*r2;
-                    mean[2]+=radialWeights[q]*r2*r2;
-                    mean[3]+=radialWeights[q]*std::pow(ratio,2*gamma);
+                    const double weight=midpoint?1:radialWeights[q];
+                    mean[0]+=weight*ratio;
+                    mean[1]+=weight*r2;
+                    mean[2]+=weight*r2*r2;
+                    mean[3]+=weight*std::pow(ratio,2*gamma);
                 }
                 radial.emplace(ir,mean);
             }
@@ -201,17 +204,31 @@ public:
             for(auto p:Box(low,high))
             {
                 auto key=std::make_tuple(block,n,p[1],p[2]);
-                auto it=m_samples.find(key);
-                if(it==m_samples.end())
-                    it=m_samples.emplace(key,makeSamples(block,n,p[1],p[2],
-                        source.box(),theta,phi)).first;
+                const Sample* samples;
+                if(midpoint)
+                {
+                    auto it=m_points.find(key);
+                    if(it==m_points.end())
+                        it=m_points.emplace(key,makeSamples(block,n,p[1],p[2],
+                            source.box(),theta,phi,true)[0]).first;
+                    samples=&it->second;
+                }
+                else
+                {
+                    auto it=m_samples.find(key);
+                    if(it==m_samples.end())
+                        it=m_samples.emplace(key,makeSamples(block,n,p[1],p[2],
+                            source.box(),theta,phi)).first;
+                    samples=it->second.data();
+                }
                 // Angular integrals: density, three native momenta, thermal
                 // energy, kinetic + tangential magnetic energy, radial magnetic
                 // energy, then the three native magnetic components. Splitting
                 // the energy terms preserves their different radial scalings.
                 std::array<double,10> mean{};
-                for(const auto& sample:it->second)
+                for(int s=0;s<(midpoint?1:angularOrder*angularOrder);++s)
                 {
+                    const auto& sample=samples[s];
                     double w[8]={};
                     for(int q=0;q<4;++q) for(int c=0;c<8;++c)
                         w[c]+=sample.coefficient[q]*source(sample.source[q],c);

@@ -75,6 +75,35 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::primToCons(
 {
   HDF5Handler h5;
   PR_TIMERS("BoxOp_EulerCubedSphere::primToCons()");
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    const Box box = this->layout()[this->index()];
+    a_JU.define(box);
+    // Energy helpers consume the supplied primitive box, including its halo.
+    auto basis = pointwiseSphericalBasis(a_WPoint.box(),a_block,-1);
+    auto ke = kineticEnergyW(a_WPoint,a_block,-1,&basis);
+    auto me = magneticEnergyW(a_WPoint,a_block,-1,&basis);
+    auto det = CubedSphereShell::detA<T,MEM>(box,a_h,0);
+    forallInPlace([] PROTO_LAMBDA(
+        Var<T,NUMCOMPS,MEM>& ju, const Var<T,NUMCOMPS,MEM>& w,
+        const Var<T,1,MEM>& vol, const Var<T,1,MEM>& det,
+        const Var<T,DIM,MEM,DIM>& mat, const Var<T,1,MEM>& ke,
+        const Var<T,1,MEM>& me, T gamma)
+    {
+        ju(iRHO)=vol(0)*det(0)*w(iRHO);
+        ju(iE)=vol(0)*det(0)*(w(iP)/(gamma-1)+ke(0)+me(0));
+        for (int d=0; d<DIM; ++d)
+        {
+            ju(iMOMX+d)=0; ju(iBX+d)=0;
+            for (int j=0; j<DIM; ++j)
+            {
+                ju(iMOMX+d)+=vol(0)*det(0)*mat(d,j)*w(iRHO)*w(iVX+j);
+                ju(iBX+d)+=vol(0)*det(0)*mat(d,j)*w(iBX+j);
+            }
+        }
+    },a_JU,a_WPoint,a_dVolr,det,basis,ke,me,a_gamma);
+    return;
+  }
   Array<Array<uint,DIM>,6>
     permute = {{1,2,0},{1,2,0},{1,0,2},{0,1,2},{1,0,2},{0,1,2}};
   Array<Array<int,DIM>,6>
@@ -582,6 +611,14 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim(
 {
   // Get radial conserved variables.
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim()");
+  if (ParseInputs::get_spatial_order() == 2)
+  {
+    sphToPrim_2O(a_W,a_USph,a_block,a_restoreTestBackground);
+    a_WBar.define(a_W.box());
+    a_W.copyTo(a_WBar);
+    if (a_magneticBar) *a_magneticBar = magneticEnergyW(a_W,a_block,-1);
+    return;
+  }
   Stencil<T> deconvolveStencil = (1.0*Shift(Point::Zeros())
                                   - (1.0/24.0)*Stencil<T>::Laplacian());
          
@@ -677,7 +714,8 @@ inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(
                                           State& a_W,
                                           const State& a_USph,
-                                          uint a_block) const
+                                          uint a_block,
+                                          bool a_restoreTestBackground) const
 {
   // Get radial conserved variables.
   PR_TIMERS("BoxOp_EulerCubedSphere::sphToPrim_2O()");
@@ -690,7 +728,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::sphToPrim_2O(
   if (magneticTest)
   {
     testProblemDeltaMagneticEnergy(deltaMe,a_W,a_block);
-    addTestProblemBackgroundB(a_W,a_block);
+    if (a_restoreTestBackground) addTestProblemBackgroundB(a_W,a_block);
   }
   // Compute pressure.
   BoxData<T,1,MEM> kePoint = kineticEnergyW(a_W,a_block,-1);

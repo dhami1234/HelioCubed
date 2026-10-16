@@ -379,7 +379,8 @@ Insert_CME(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
             eulerOp[dit].sphToPrim(W,WBar,USph_CME[dit],block); // Transform to primitive variables, spherical velocities.
             BoxData<double, NUMCOMPS, HOST> W_point(USph_CME[dit].box());
             W.copyTo(W_point);
-            W_point += Stencil<double>::Laplacian()(W,-1./24.);  
+            if (ParseInputs::get_spatial_order() == 4)
+                W_point += Stencil<double>::Laplacian()(W,-1./24.);
             BoxData<double, NUMCOMPS, HOST> W_CME(USph_CME[dit].box());
             W_CME.setVal(0.);
             double half = 0.5;

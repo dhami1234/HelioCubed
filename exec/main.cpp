@@ -4,6 +4,7 @@
 #include "MHD_IO.H"
 #include "MHD_CME.H"
 #include "MHD_CME_Schedule.H"
+#include "MHD_LevelRK.H"
 #include <chrono> // Used by timer
 
 MHDReader BC_global;
@@ -196,19 +197,14 @@ int main(int argc, char *argv[])
       BoxData<double, NUMCOMPS, HOST> unusedBoundary;
       if (init_condition_type == 0)
       {
-        dstData.define(layout, Point::Basis(rCoord) + NGHOST*Point::Basis(thetaCoord) + NGHOST*Point::Basis(phiCoord));
+        const int boundaryGhost = ParseInputs::get_spatial_order() == 2
+            ? OP::ghost().max() : NGHOST;
+        dstData.define(layout, Point::Basis(rCoord) + boundaryGhost*Point::Basis(thetaCoord) + boundaryGhost*Point::Basis(phiCoord));
         BC_global.BoxData_to_BC(dstData, map, time);
       }
 
       MBInterpOp iop;
-      // Symmetry-preserving conversion needs two extra angular output layers;
-      // Cartesian conversion needs one. Interpolation sources need two more.
-      Point interpSourceGhost = OP::ghost();
-      if (radialDir == 0)
-      {
-        const int padding = ParseInputs::get_state_conversion() == 1 ? 3 : 4;
-        interpSourceGhost += Point(0,padding,padding);
-      }
+      Point interpSourceGhost = HelioCubed::interpolationSourceGhost(OP::ghost());
       iop = CubedSphereShell::MHDInterpOp<HOST>(JU.layout(), interpSourceGhost, 4);
 
       // Set input solution.
@@ -274,7 +270,7 @@ int main(int argc, char *argv[])
             JUTemp.copyTo(JU_i, layout[dit]);
           }
         } else {
-          h5.readMBLevel(JU, restart_file);
+          ReadCheckpointState(h5, JU, restart_file);
           time = h5.time();
 		      dt = h5.dt();   
           restart_step = h5.iter();
@@ -297,7 +293,7 @@ int main(int argc, char *argv[])
       };
       insertCMEIfDue();
 
-      MBLevelRK4<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell<HOST>, double> rk4(map, iop);
+      HelioCubed::MBLevelRK<BoxOp_EulerCubedSphere, MBMap_CubedSphereShell<HOST>, double> rk4(map, iop);
       // OP::P_floor(JU,dVolrLev,iop,layout,time,dt,gamma);
       Write_W(JU, eulerOp, iop, restart_step, time, dt, true, true);            
       // Write_W and preStageLevel fill their own boundary states. The former
