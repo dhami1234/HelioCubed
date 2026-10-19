@@ -136,12 +136,37 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
             else lo[0]=domain.high()[0];
             const Box strip(lo,hi);
             ScopedHostStack<MEM> scratch;
-            auto basis=HelioCubed::secondOrderCellBasis<T,MEM>(strip,op.dx()[1],block);
-            auto inverse=forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,basis);
+            BoxData<T,DIM,MEM,DIM> temporaryBasis,temporaryInverse;
+            const T *basisData,*inverseData;
+            if constexpr (MEM == HOST)
+            {
+                auto& cached=op.m_boundaryGeometry[side];
+                if (!cached || cached->box!=strip)
+                {
+                    PR_TIMERS("HelioCubed::boundaryGeometrySetup");
+                    cached=std::make_shared<SecondOrderBoundaryGeometry>();
+                    cached->box=strip;
+                    temporaryBasis=HelioCubed::secondOrderCellBasis<T,MEM>(strip,op.dx()[1],block);
+                    temporaryInverse=forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,temporaryBasis);
+                    const size_t count=strip.size()*DIM*DIM;
+                    // Heap-owned vectors outlive the temporary HOST arena.
+                    cached->basis.assign(temporaryBasis.data(),temporaryBasis.data()+count);
+                    cached->inverse.assign(temporaryInverse.data(),temporaryInverse.data()+count);
+                }
+                basisData=cached->basis.data();inverseData=cached->inverse.data();
+            }
+            else
+            {
+                temporaryBasis=HelioCubed::secondOrderCellBasis<T,MEM>(strip,op.dx()[1],block);
+                temporaryInverse=forallOverwrite<T,DIM,MEM,DIM>(f_matinv3by3,temporaryBasis);
+                basisData=temporaryBasis.data();inverseData=temporaryInverse.data();
+            }
+            // Matrix components are stored with the row varying fastest.
+            BoxData<T,DIM*DIM,MEM> basis(basisData,strip),inverse(inverseData,strip);
             State native;
             native.defineForOverwrite(strip);
             forallInPlace([] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& u,
-                const Var<T,NUMCOMPS,MEM>& w,const Var<T,DIM,MEM,DIM>& inv,
+                const Var<T,NUMCOMPS,MEM>& w,const Var<T,DIM*DIM,MEM>& inv,
                 T gamma,bool magneticTest,T b0)
             {
                 u(iRHO)=w(iRHO);
@@ -153,8 +178,8 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
                     u(iMOMX+d)=u(iBX+d)=0;
                     for (int j=0; j<DIM; ++j)
                     {
-                        u(iMOMX+d)+=inv(d,j)*w(iRHO)*w(iVX+j);
-                        u(iBX+d)+=inv(d,j)*w(iBX+j);
+                        u(iMOMX+d)+=inv(d+DIM*j)*w(iRHO)*w(iVX+j);
+                        u(iBX+d)+=inv(d+DIM*j)*w(iBX+j);
                     }
                 }
                 if (magneticTest) magnetic+=b0*w(iBX)/T(4*M_PI);
@@ -167,7 +192,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
             // and the angular interpolation at interior radial coordinates.
             if (low) --hi[0]; else ++lo[0];
             forallInPlace([] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& w,
-                const Var<T,NUMCOMPS,MEM>& u,const Var<T,DIM,MEM,DIM>& A,
+                const Var<T,NUMCOMPS,MEM>& u,const Var<T,DIM*DIM,MEM>& A,
                 T gamma,bool magneticTest,T b0)
             {
                 w(iRHO)=u(iRHO);w(iE)=u(iE);
@@ -177,7 +202,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
                     for (int d=0; d<DIM; ++d)
                     {
                         w(start+d)=0;
-                        for (int j=0; j<DIM; ++j) w(start+d)+=A(d,j)*u(start+j);
+                        for (int j=0; j<DIM; ++j) w(start+d)+=A(d+DIM*j)*u(start+j);
                     }
                 }
                 HelioCubed::cartesianPrimitiveFromConserved(

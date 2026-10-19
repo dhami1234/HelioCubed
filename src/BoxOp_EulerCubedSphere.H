@@ -869,6 +869,12 @@ private:
     std::vector<T> radial;
   };
   mutable std::array<std::shared_ptr<SecondOrderFaceGeometry>,DIM> m_faceGeometry;
+  struct SecondOrderBoundaryGeometry
+  {
+    Box box;
+    std::vector<T> basis,inverse;
+  };
+  mutable std::array<std::shared_ptr<SecondOrderBoundaryGeometry>,2> m_boundaryGeometry;
   // The exact magnetic-test equilibrium and geometry are time-independent.
   // Cache its discrete operator so well balancing adds only one operator
   // evaluation per patch per run, rather than one at every RK stage.

@@ -818,6 +818,38 @@ inline bool BoxOp_EulerCubedSphere<T,MAP,MEM>::validConservedState(
 {
   Reduction<T,Operation::Sum,MEM> invalid;
   invalid.reset();
+  if constexpr (MEM == HOST && DIM == 3)
+  {
+    PR_TIMERS("HelioCubed::validConservedStateHost");
+    unsigned invalidFlag=0;
+    for (auto dit : a_JU.layout())
+    {
+      const auto& data=a_JU[dit];
+      const auto valid=a_JU.layout()[dit];
+      const auto lo=valid.low(),hi=valid.high(),origin=data.box().low();
+      const auto sizes=data.box().sizes();
+      const size_t stride=data.box().size();
+      const T* values=data.data();
+      // The existing predicate requires every component to be finite and
+      // density to be positive. Scan the SoA streams without a flag array.
+      for (int c=0; c<NUMCOMPS && !invalidFlag; ++c)
+        for (int k=lo[2]; k<=hi[2]; ++k) for (int j=lo[1]; j<=hi[1]; ++j)
+        {
+          size_t offset=c*stride+(lo[0]-origin[0])+size_t(sizes[0])*
+              ((j-origin[1])+size_t(sizes[1])*(k-origin[2]));
+          for (int i=lo[0]; i<=hi[0]; ++i,++offset)
+          {
+            const T value=values[offset];
+            invalidFlag |= !std::isfinite(value) || (c==0 && !(value>0));
+          }
+        }
+      if (invalidFlag) break;
+    }
+    // Every rank still participates, including ranks without local patches.
+    const T localInvalid=invalidFlag ? T(1) : T(0);
+    invalid.reduce(&localInvalid,1);
+    return invalid.fetch()==0;
+  }
   for (auto dit : a_JU.layout())
   {
     BoxData<T,1,MEM> bad(a_JU.layout()[dit]);
