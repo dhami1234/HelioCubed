@@ -6,6 +6,31 @@
 
 namespace HelioCubed
 {
+// The magnetic tests evolve energy and B perturbations about a constant
+// Cartesian equilibrium. Keep B as a perturbation until face reconstruction.
+template<typename T, typename Output, typename Input>
+inline ACCEL_DECORATION void cartesianPrimitiveFromConserved(
+    Output& out, const Input& in, T inverseJ, T gamma,
+    bool magneticTest, T backgroundBx)
+{
+    T u[8];
+    for (int c=0; c<8; ++c) u[c]=in(c)*inverseJ;
+    const T rho=u[0] < T(c_MP/100) ? T(c_MP/100) : u[0];
+    T kinetic=0, magnetic=0;
+    out(0)=rho;
+    for (int d=0; d<3; ++d)
+    {
+        out(1+d)=u[1+d]/rho;
+        out(5+d)=u[5+d];
+        kinetic+=T(0.5)*rho*out(1+d)*out(1+d);
+        magnetic+=u[5+d]*u[5+d]/T(8*M_PI);
+    }
+    if (magneticTest) magnetic+=backgroundBx*u[5]/T(4*M_PI);
+    const T pressure=(magneticTest ? T(c_TEST_P0) : T(0))
+        +(gamma-T(1))*(u[4]-kinetic-magnetic);
+    out(4)=pressure < T(0) ? T(0) : pressure;
+}
+
 // Fourth-order seam interpolation needs two angular donor layers beyond
 // its output. Only O4 conversion needs additional output layers for products.
 inline Proto::Point interpolationSourceGhost(Proto::Point stateGhost)

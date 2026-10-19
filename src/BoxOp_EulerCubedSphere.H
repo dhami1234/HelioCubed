@@ -6,6 +6,9 @@
 #include "Inputs_Parsing.H"
 #include "MHD_StateConversion.H"
 #include "MHD_Reconstruction.H"
+#include "MHD_SecondOrderFlux.H"
+#include <array>
+#include <vector>
 
 #define NUMCOMPS 2*DIM+2
 #define NUMREG NUMCOMPS
@@ -366,7 +369,8 @@ public:
                         uint a_block) const;
 
   // New factorization of the operator starts here.
-  // New operator() - calls RadialMetrics from inside the operator.
+  // New operator() - calls RadialMetrics from inside the operator. The final
+  // flag is used only by O2 RK stages prepared as Cartesian primitives.
 
   inline void operator()
   (
@@ -375,7 +379,8 @@ public:
    const State&                    a_USph,
    T                               a_dt,
    T                               a_scale = 1.0,
-   int                             a_counter = -1) const;
+   int                             a_counter = -1,
+   bool                            a_cartesianPrimitives = false) const;
 
   inline void BertaOperator
   (
@@ -494,7 +499,7 @@ public:
                          bool a_restoreTestBackground = true) const;
 
   inline void secondOrderOperator(State& rhs, Array<State,DIM>& fluxes,
-      const State& state, T scale) const;
+      const State& state, T scale, bool cartesianPrimitives = false) const;
   inline void reconstructPLM(State& left, State& right,
       const State& primitive, const Box& faces, int dir) const;
 
@@ -529,6 +534,10 @@ public:
                          MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
                          MBInterpOp& a_iop,
                          MBLevelBoxData<T,1,MEM>& a_dVolr);
+
+  inline static T dtCFLSecondOrderHost(
+      const MBLevelBoxData<T,NUMCOMPS,MEM>& state,
+      const MBLevelBoxData<T,1,MEM>& volume);
   
   inline BoxData<T,1,MEM> kineticEnergyW(
                                          const State& a_WPoint,
@@ -726,6 +735,8 @@ public:
   inline void Gravity_Euler(State& a_Rhs,
                             const State& a_USph) const;
 
+  inline void gravitySecondOrderPrimitives(State& rhs, const State& w) const;
+
   // End Gravity.
 
   // Begin Limiter.
@@ -786,6 +797,23 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
                MBLevelBoxData<T,1,MEM>& a_dVolr,
                T a_time);
 
+  // Unlimited O2 runs with artificial viscosity retain the native conserved
+  // path because the viscosity stencil consumes those conserved components.
+  static bool usesSecondOrderPrimitives()
+  {
+    return ParseInputs::get_spatial_order() == 2
+        && ParseInputs::get_linear_viscosity() == 0
+        && ParseInputs::get_nonlinear_viscosity() == 0;
+  }
+
+  static inline void prepareSecondOrderPrimitives(
+      MBLevelBoxData<T,NUMCOMPS,MEM>& state, MBInterpOp& interp,
+      MBLevelBoxData<T,1,MEM>& volume, T time);
+
+  static inline void fillRadialPrimitiveBoundaries(
+      MBLevelBoxData<T,NUMCOMPS,MEM>& state,
+      MBLevelBoxData<T,1,MEM>& volume, T time);
+
   /// Fill physical radial ghosts of an already converted native state.
   static inline void
   fillRadialBoundaries(MBLevelBoxData<T,NUMCOMPS,MEM>& a_state,
@@ -797,7 +825,7 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
   correctSeamPressure(MBLevelBoxData<T,NUMCOMPS,MEM>& a_state,
                        MBInterpOp& a_iop);
 
-  /// Prepare the state, then accumulate viscosity and gravity contributions.
+  /// Prepare stage primitives/native state and accumulate viscosity/gravity.
   // Implemented.
   static inline void
   preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
@@ -825,6 +853,22 @@ P_floor(MBLevelBoxData<T, NUMCOMPS, MEM> &a_JU,
 
 private:
   int m_count = 0;
+  // The owning patch operator is recreated with the level geometry. Store
+  // only one angular plane and one radial line for the O2 gravity source.
+  struct SecondOrderGravityGeometry
+  {
+    Box box;
+    std::vector<std::array<T,7>> angular;
+    std::vector<T> radial;
+  };
+  mutable std::shared_ptr<SecondOrderGravityGeometry> m_gravityGeometry;
+  struct SecondOrderFaceGeometry
+  {
+    Box faces;
+    std::vector<HelioCubed::SecondOrderFrame> angular;
+    std::vector<T> radial;
+  };
+  mutable std::array<std::shared_ptr<SecondOrderFaceGeometry>,DIM> m_faceGeometry;
   // The exact magnetic-test equilibrium and geometry are time-independent.
   // Cache its discrete operator so well balancing adds only one operator
   // evaluation per patch per run, rather than one at every RK stage.
@@ -842,8 +886,10 @@ private:
 #include "BoxOp_TestProblems.H"
 #include "BoxOp_PreStage.H"
 #include "BoxOp_SeamPressure.H"
+#include "BoxOp_SecondOrderPreStage.H"
 #include "BoxOp_RoeCubedSphere.H"
 #include "BoxOp_SecondOrder.H"
+#include "BoxOp_SecondOrderCFL.H"
 #include "BoxOp_EulerCubedSphereImplem.H"
 #include "BoxOp_BertaCubedSphereImplem.H"
 #include "BoxOp_Initialize.H"

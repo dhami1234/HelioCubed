@@ -1,6 +1,87 @@
 #include "MHD_Constants.H"
 
 template<typename T, typename MAP, MemType MEM>
+inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::gravitySecondOrderPrimitives(
+    State& rhs,const State& w) const
+{
+  PR_TIMERS("HelioCubed::gravitySecondOrderPrimitives");
+  const Box box=rhs.box();
+  if constexpr (MEM == HOST)
+  {
+    if (!m_gravityGeometry || m_gravityGeometry->box != box)
+    {
+      PR_TIMERS("HelioCubed::gravityGeometrySetup");
+      auto cache=std::make_shared<SecondOrderGravityGeometry>();
+      cache->box=box;
+      Point high=box.high();high[0]=box.low()[0];
+      const Box plane(box.low(),high);
+      auto basis=pointwiseSphericalBasis(plane,this->block(),-1);
+      auto det=CubedSphereShell::detA<T,MEM>(plane,this->dx()[1],0);
+      auto mat=CubedSphereShell::detA_A<T,MEM>(plane,this->dx()[1],this->block(),0);
+      for (auto p : plane)
+      {
+        std::array<T,7> a;
+        for (int d=0; d<DIM; ++d) {a[d]=basis(p,d,0);a[4+d]=mat(p,d,0);}
+        a[3]=det(p,0);cache->angular.push_back(a);
+      }
+      high=box.low();high[0]=box.high()[0];
+      const Box line(box.low(),high);
+      Scalar radius(line),volume(line);
+      Vector dr(line),adj(line);
+      radialMetrics(radius,dr,adj,volume,line);
+      for (auto p : line) cache->radial.push_back(dr(p,0));
+      m_gravityGeometry=std::move(cache);
+    }
+    const auto& cache=*m_gravityGeometry;
+    const auto low=box.low(),high=box.high();
+    const auto sourceBox=w.box();
+    const auto sizes=sourceBox.sizes();
+    const size_t sourceStride=sourceBox.size(),destStride=box.size();
+    const T* source=w.data();T* dest=rhs.data();
+    size_t angular=0,offset=0;
+    for (int k=low[2]; k<=high[2]; ++k) for (int j=low[1]; j<=high[1]; ++j)
+    {
+      const auto& a=cache.angular[angular++];
+      const size_t row=(low[0]-sourceBox.low()[0])+size_t(sizes[0])*
+          ((j-sourceBox.low()[1])+size_t(sizes[1])*(k-sourceBox.low()[2]));
+      for (int i=low[0]; i<=high[0]; ++i,++offset)
+      {
+        const size_t s=row+i-low[0];
+        const T factor=-c_G*c_M0*cache.radial[i-low[0]]*source[s];
+        T radialVelocity=0;
+        for (int d=0; d<DIM; ++d)
+        {
+          dest[offset+(iMOMX+d)*destStride]+=factor*a[4+d];
+          radialVelocity+=a[d]*source[s+(iVX+d)*sourceStride];
+        }
+        dest[offset+iE*destStride]+=factor*a[3]*radialVelocity;
+      }
+    }
+    return;
+  }
+  Scalar radius(box),volume(box);
+  Vector dr(box),adj(box);
+  radialMetrics(radius,dr,adj,volume,box);
+  auto basis=pointwiseSphericalBasis(box,this->block(),-1);
+  auto det=CubedSphereShell::detA<T,MEM>(box,this->dx()[1],0);
+  auto mat=CubedSphereShell::detA_A<T,MEM>(box,this->dx()[1],this->block(),0);
+  forallInPlace([] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& rhs,
+      const Var<T,NUMCOMPS,MEM>& w,const Var<T,DIM,MEM>& dr,
+      const Var<T,DIM,MEM,DIM>& A,const Var<T,1,MEM>& det,
+      const Var<T,DIM,MEM,DIM>& mat)
+  {
+      const T factor=-c_G*c_M0*dr(0)*w(iRHO);
+      T radialVelocity=0;
+      for (int d=0; d<DIM; ++d)
+      {
+          rhs(iMOMX+d)+=factor*mat(d,0);
+          radialVelocity+=A(d,0)*w(iVX+d);
+      }
+      rhs(iE)+=factor*det(0)*radialVelocity;
+  },rhs,w,dr,basis,det,mat);
+}
+
+template<typename T, typename MAP, MemType MEM>
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::Gravity(
     State& a_Rhs,

@@ -13,7 +13,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
    const State&                    a_USph,
    T                               a_dt,
    T                               a_scale,
-   int                             a_counter) const
+   int                             a_counter,
+   bool                            a_cartesianPrimitives) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::operator()");
   // Magnetized test problems evolve perturbations about a uniform Cartesian
@@ -70,7 +71,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
 
   if (ParseInputs::get_spatial_order() == 2)
   {
-    secondOrderOperator(a_Rhs,a_fluxes,a_USph,a_scale);
+    secondOrderOperator(a_Rhs,a_fluxes,a_USph,a_scale,a_cartesianPrimitives);
     if (subtractBackground)
     {
       a_Rhs -= m_testBackgroundRhs;
@@ -837,6 +838,8 @@ dtCFL(MBLevelBoxData<T,NUMCOMPS,MEM>& a_JU,
       MBLevelBoxData<T,1,MEM>& a_dVolr)
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::dtCFL()");
+  if constexpr (MEM == HOST)
+    if (usesSecondOrderPrimitives()) return dtCFLSecondOrderHost(a_JU,a_dVolr);
   auto layout = a_JU.layout();
   
   auto& geometry = levelGeometry(layout);
@@ -935,7 +938,7 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
     Array<BoxData<double, NUMCOMPS>, DIM> fluxes;
     fluxes[0].define(k_i.box().extrude(0));
     fluxes[1].define(k_i.box().extrude(1));
-    fluxes[2].define(k_i.box().extrude(2));    
+    fluxes[2].define(k_i.box().extrude(2));
     // The standard operator overwrites or copies every flux cell. Preserve
     // the existing initialization for the separate Berta operator.
     if (MEM != HOST || ParseInputs::get_spatial_operator() == 2)
@@ -945,7 +948,8 @@ StageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_k,
       fluxes[2].setToZero();
     }
     unsigned int block = layout.block(dit);
-    eulerOp[dit](k_i, fluxes, USph_i, 1.0);
+    eulerOp[dit](k_i, fluxes, USph_i, 1.0, 1.0, -1,
+        usesSecondOrderPrimitives());
     auto dx = eulerOp[dit].dx();
     Box blockBox = layout.getBlock(block).domain().box();
     a_blockreg.increment(fluxes,dit,wgtxdt);

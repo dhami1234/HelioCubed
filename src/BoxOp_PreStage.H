@@ -67,9 +67,12 @@ PreStagePatch(BoxData<T,NUMCOMPS,MEM>& a_USphStage,
 
   int a_block = this->block();
   Box bxGhosted = a_USphStage.box();
-  BoxData<double> radius(a_dVolr.box());
-  BoxData<double, DIM, HOST> Dr(a_dVolr.box());
-  BoxData<double, DIM, HOST> adjDr(a_dVolr.box());
+  // O2 primitive stages pass thin boundary strips. Only those cells need
+  // radial metrics; the level volume was already populated at setup.
+  const Box metricBox=ParseInputs::get_spatial_order()==2 ? bxGhosted : a_dVolr.box();
+  BoxData<double> radius(metricBox);
+  BoxData<double, DIM, HOST> Dr(metricBox);
+  BoxData<double, DIM, HOST> adjDr(metricBox);
   radialMetrics(radius, Dr, adjDr, a_dVolr, Dr.box());
   Array<double, DIM> dx;
   dx = this->dx();
@@ -367,8 +370,12 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
   auto& geometry = levelGeometry(layout);
   auto& eulerOp = *geometry.op;
 
-  // Radial BCs must precede donor pressure recovery and seam correction.
-  prepareState(a_UStage,a_iop,a_dVolrLev,a_time);
+  // Stage storage is scratch: Cartesian primitives at O2, native conserved
+  // variables for the higher-order and artificial-viscosity paths.
+  if (usesSecondOrderPrimitives())
+    prepareSecondOrderPrimitives(a_UStage,a_iop,a_dVolrLev,a_time);
+  else
+    prepareState(a_UStage,a_iop,a_dVolrLev,a_time);
 
   // initialize a_k to zero. 
   a_k.setVal(0.);
@@ -390,17 +397,25 @@ preStageLevel(MBLevelBoxData<T,NUMCOMPS,MEM>& a_UStage,
         unsigned int block = layout.block(dit);
         Box blockBox = layout.getBlock(block).domain().box();
         // auto mbdata = a_blockreg.bounds(dit);
-        Array<BoxData<double, NUMCOMPS>, DIM> fluxes;
-        fluxes[0].define(rhs_i.box().extrude(0), 0.0);
-        fluxes[1].define(rhs_i.box().extrude(1), 0.0);
-        fluxes[2].define(rhs_i.box().extrude(2), 0.0);
-        if (viscosityEnabled) eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i,a_dt);
-        if (ParseInputs::get_Sun_gravity() == 1) eulerOp[dit].Gravity_Euler(rhs_i, USph_i);
-        // viscFlux updates the state with +div(Fvisc). The register and
-        // radial balance use the conservative -div(F) convention.
-        const T sourceWeight = ParseInputs::get_temporal_order() == 2 ? a_weight : T(1);
-        a_blockreg.increment(fluxes, dit, -a_dt*sourceWeight);
-        CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,-a_dt*sourceWeight);
+        if (viscosityEnabled)
+        {
+          Array<BoxData<double, NUMCOMPS>, DIM> fluxes;
+          fluxes[0].define(rhs_i.box().extrude(0), 0.0);
+          fluxes[1].define(rhs_i.box().extrude(1), 0.0);
+          fluxes[2].define(rhs_i.box().extrude(2), 0.0);
+          eulerOp[dit].viscFlux(rhs_i, fluxes, USph_i,a_dt);
+          // viscFlux updates the state with +div(Fvisc). The register and
+          // radial balance use the conservative -div(F) convention.
+          const T sourceWeight = ParseInputs::get_temporal_order() == 2 ? a_weight : T(1);
+          a_blockreg.increment(fluxes, dit, -a_dt*sourceWeight);
+          CubedSphereShell::radialCons<T,NUMCOMPS,MEM>(fluxes[0],a_consSum,dx[0],blockBox,-a_dt*sourceWeight);
+        }
+        if (ParseInputs::get_Sun_gravity() == 1)
+        {
+          if (usesSecondOrderPrimitives())
+            eulerOp[dit].gravitySecondOrderPrimitives(rhs_i,USph_i);
+          else eulerOp[dit].Gravity_Euler(rhs_i,USph_i);
+        }
       }
   }
 }

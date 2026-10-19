@@ -127,14 +127,17 @@ public:
     template<typename T,Proto::MemType MEM>
     void fillPoints(Proto::MBLevelBoxData<T,8,MEM>& destination,
         const Proto::BoxData<double,8,Proto::HOST>& source,
-        const std::vector<double>& theta,const std::vector<double>& phi)
+        const std::vector<double>& theta,const std::vector<double>& phi,
+        std::vector<Proto::BoxData<T,8,MEM>>* strips=nullptr)
     {
         using namespace Proto;
         static_assert(MEM==HOST,"Boundary input maps are host resident");
         PROTO_ASSERT(!theta.empty() && !phi.empty(),"Empty boundary coordinate arrays");
+        unsigned local=0;
         for(auto index:destination.layout())
         {
-            auto& out=destination[index];
+            auto& out=strips ? (*strips)[local++] : destination[index];
+            if (out.box().size()==0) continue;
             const int block=destination.layout().block(index);
             const int n=destination.layout().domain().getBlock(block).sizes()[1];
             Point low=out.box().low(),high=out.box().high();high[0]=low[0];
@@ -159,7 +162,8 @@ public:
     template<typename T,Proto::MemType MEM>
     void fill(Proto::MBLevelBoxData<T,8,MEM>& destination,
         const Proto::BoxData<double,8,Proto::HOST>& source,
-        const std::vector<double>& theta,const std::vector<double>& phi)
+        const std::vector<double>& theta,const std::vector<double>& phi,
+        std::vector<Proto::BoxData<T,8,MEM>>* strips=nullptr)
     {
         using namespace Proto;
         static_assert(MEM==HOST,"Boundary quadrature currently uses host-resident input maps");
@@ -172,9 +176,11 @@ public:
         const double span=stretch==0?r1-r0:(r1-r0)/std::expm1(stretch);
         const auto& layout=destination.layout();
         std::map<int,std::array<double,4>> radial;
+        unsigned local=0;
         for(auto index:layout)
         {
-            auto& out=destination[index];
+            auto& out=strips ? (*strips)[local++] : destination[index];
+            if (out.box().size()==0) continue;
             if(out.box().low()[0]>=0) continue;
             const int block=layout.block(index),n=layout.domain().getBlock(block).sizes()[1];
             const int nr=layout.domain().getBlock(block).sizes()[0];

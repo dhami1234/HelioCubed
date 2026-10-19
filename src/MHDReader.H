@@ -34,6 +34,13 @@ private:
 		int angularGhost = -1;
 	};
 	std::unique_ptr<LegacyBCCache> m_legacyBC;
+	struct FrameBroadcastCache
+	{
+		int cachedLow = -1, cachedHigh = -1;
+		BoxData<double,8,HOST> lowFrame, highFrame;
+	};
+	std::unique_ptr<FrameBroadcastCache> m_frames;
+	int m_numFrames = 0;
 public:
 	inline MHDReader() {}
 
@@ -58,6 +65,7 @@ public:
 		// Geometry can be read by all (small)
 		m_boundaryAverages.clear();
 		m_legacyBC.reset();
+		m_frames.reset();
 		readGeom(dtheta, a_filename, /*parallel_open=*/true);
 		readTheta(theta, a_filename, /*parallel_open=*/true);
 		readPhi(phi, a_filename, /*parallel_open=*/true);
@@ -107,9 +115,21 @@ public:
 				// wrap copy: [BT] at offset + direct copy
 				BC_data[i].copyTo(BC_data_extended[i], BT, Point::Basis(phiCoord) * (BT.high()[phiCoord] + 1));
 				BC_data[i].copyTo(BC_data_extended[i]);
+				// Complete the periodic buffer, including its -1 longitude
+				// plane, before copying/broadcasting the entire allocation.
+				Point wrapLow = BT.low();
+				wrapLow[phiCoord] = BT.high()[phiCoord];
+				BC_data[i].copyTo(BC_data_extended[i], Box(wrapLow, BT.high()),
+					Point::Basis(phiCoord) * (-BT.sizes()[phiCoord]));
 			}
 			
 		}
+		m_numFrames = procID() == 0 ? int(BC_data_extended.size()) : 0;
+#ifdef PR_MPI
+		// File metadata is immutable between reloads. Share it once instead
+		// of synchronizing every rank at every RK-stage boundary fill.
+		MPI_Bcast(&m_numFrames, 1, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
 		pout(0) << "Geometric + BC frames prepared on rank 0." << endl;
 		barrier();
 		// All ranks keep these shapes for later
@@ -166,6 +186,33 @@ public:
 			a_out, base, base_left);
 	}
 
+	// Preserve the two spatial lerps and the temporal lerp, but keep their
+	// intermediate values in registers instead of two full rotated arrays.
+	template<typename T, MemType MEM>
+	inline void interpolate_rotated_frames(BoxData<T,NUMCOMPS,MEM>& out,
+		BoxData<T,NUMCOMPS,MEM>& low, BoxData<T,NUMCOMPS,MEM>& high,
+		int phiCoord, int lowShift, int highShift,
+		double lowFraction, double highFraction, double timeFraction)
+	{
+		PR_TIMERS("MHDReader::interpolate_rotated_frames");
+		const auto lo = alias(low, Point::Basis(phiCoord)*(-lowShift));
+		const auto lom = alias(low, Point::Basis(phiCoord)*(1-lowShift));
+		const auto hi = alias(high, Point::Basis(phiCoord)*(-highShift));
+		const auto him = alias(high, Point::Basis(phiCoord)*(1-highShift));
+		forallInPlace([] PROTO_LAMBDA(Var<T,NUMCOMPS,MEM>& out,
+			const Var<T,NUMCOMPS,MEM>& lo, const Var<T,NUMCOMPS,MEM>& lom,
+			const Var<T,NUMCOMPS,MEM>& hi, const Var<T,NUMCOMPS,MEM>& him,
+			double fl, double fh, double ft)
+		{
+			for (int c=0; c<NUMCOMPS; ++c)
+			{
+				const T l = (T(1)-T(fl))*lo(c) + T(fl)*lom(c);
+				const T h = (T(1)-T(fh))*hi(c) + T(fh)*him(c);
+				out(c) = ft*h + (1.0-ft)*l;
+			}
+		}, out, lo, lom, hi, him, lowFraction, highFraction, timeFraction);
+	}
+
 	// With BC_conserved_averages enabled, initialization requests centered
 	// primitive samples and stage fills request native conserved ghost averages
 	// (center values when spatial_order=2).
@@ -173,7 +220,8 @@ public:
 	template <typename T, MemType MEM>
 	inline void BoxData_to_BC(MBLevelBoxData<T, 8, MEM> &a_dstData,
 							const MBLevelMap<MBMap_CubedSphereShell<MEM>, MEM> &a_map,
-							T a_time, bool a_conservedAverages = false)
+							T a_time, bool a_conservedAverages = false,
+							std::vector<BoxData<T,8,MEM>>* a_innerStrips = nullptr)
 	{
 		PR_TIMERS("MHDReader::BoxData_to_BC");
 		HDF5Handler h5;
@@ -186,37 +234,30 @@ public:
 		Point eHigh = bx1.high(); eHigh[phiCoord] = 2*(bx1.high()[phiCoord] + 1) - 1;
 		Point eLow  = bx1.low();  eLow [phiCoord] = -1;
 		Box bx2(eLow, eHigh);     // was: BC_data_extended[0].box()
-		BoxData<double, 8, HOST> data_0(bx1);
+		// Compact O2 outputs follow local layout iteration order. Ranks with
+		// no inner boundary still receive every frame broadcast, but need no
+		// local rotation, temporal interpolation, or destination remapping.
+		const bool needed = !a_innerStrips || std::any_of(
+			a_innerStrips->begin(),a_innerStrips->end(),
+			[](const auto& strip) { return strip.box().size()!=0; });
+		BoxData<double, 8, HOST> data_0;
+		if (needed) data_0.defineForOverwrite(bx1);
 
 		Point high = bx1.high();
 		int domainSizez = high[phiCoord] + 1;
-		// --- minimal change: broadcast num_frames so all ranks take same branch
-		int num_frames = 0;
-		if (procID()==0) num_frames = (int)BC_data_extended.size();
-		// num_frames = (int)BC_data_extended.size();
-#ifdef PR_MPI
-		MPI_Bcast(&num_frames, 1, MPI_INT, 0, MPI_COMM_WORLD);
-#endif
+		const int num_frames = m_numFrames;
 		PROTO_ASSERT(num_frames > 0, "MHDReader::BoxData_to_BC | No BC frames available on rank 0.");
 
-		struct FrameBroadcastCache
-		{
-			bool boxesDefined = false;
-			int cachedLow = -1;
-			int cachedHigh = -1;
-			BoxData<double, 8, HOST> lowFrame;
-			BoxData<double, 8, HOST> highFrame;
-		};
-
-		static FrameBroadcastCache s_frameBroadcast;
+		if (!m_frames) m_frames = std::make_unique<FrameBroadcastCache>();
+		auto& s_frameBroadcast = *m_frames;
 
 		auto ensure_frame_boxes = [&](const Box& bx)
 		{
-			if (!s_frameBroadcast.boxesDefined)
+			if (s_frameBroadcast.lowFrame.box() != bx)
 			{
 				s_frameBroadcast.lowFrame.define(bx);
 				s_frameBroadcast.highFrame.define(bx);
-				s_frameBroadcast.boxesDefined = true;
+				s_frameBroadcast.cachedLow = s_frameBroadcast.cachedHigh = -1;
 			}
 		};
 
@@ -264,11 +305,13 @@ public:
 				if (num_frames == 1)
 				{
 					auto& frame = get_broadcast_frame(0, /*useLowSlot=*/true);
+					if (!needed) return;
 					apply_frac_shift_phi<T, MEM>(data_0, frame, phiCoord, cells_to_rotate, needed_fraction);
 				}
 				else if (low_frame_now >= num_frames - 1)
 				{
 					auto& frame = get_broadcast_frame(num_frames - 1, /*useLowSlot=*/true);
+					if (!needed) return;
 					apply_frac_shift_phi<T, MEM>(data_0, frame, phiCoord, cells_to_rotate, needed_fraction);
 				}
 			// }
@@ -279,9 +322,6 @@ public:
 		}
 		else
 		{
-			// Only temporal interpolation needs two rotated frame buffers.
-			BoxData<double, 8, HOST> BC_data_temp1(bx1);
-			BoxData<double, 8, HOST> BC_data_temp2(bx1);
 			double h5_cadence = ParseInputs::get_BC_cadence();
 			double time_temp = a_time;
 			int low_frame = time_temp / (h5_cadence * 3600);
@@ -328,42 +368,18 @@ public:
 
 			auto& lowFrameBuf = get_broadcast_frame(low_frame, /*useLowSlot=*/true);
 			auto& highFrameBuf = get_broadcast_frame(next_frame, /*useLowSlot=*/false);
+			if (!needed) return;
 
-			apply_frac_shift_phi<T, MEM>(
-				BC_data_temp1,
-				lowFrameBuf,
-				phiCoord,
-				cells_to_rotate1,
-				needed_fraction1
-			);
-
-			apply_frac_shift_phi<T, MEM>(
-				BC_data_temp2,
-				highFrameBuf,
-				phiCoord,
-				cells_to_rotate2,
-				needed_fraction2
-			);
-			
-			{ PR_TIMERS("MHDReader::BoxData_to_BC | final interpolation");
-			forallInPlace([] PROTO_LAMBDA(Var<T, NUMCOMPS, MEM> & a_BC_data_interpolated,
-										Var<T, NUMCOMPS, MEM> & a_BC_data_lo,
-										Var<T, NUMCOMPS, MEM> & a_BC_data_hi,
-										double a_fraction)
-			{                    
-                for (int i=0; i<NUMCOMPS; i++){
-                	a_BC_data_interpolated(i) = a_fraction*a_BC_data_hi(i) + (1.0-a_fraction)*a_BC_data_lo(i);
-                } 
-			},
-				data_0, BC_data_temp1, BC_data_temp2, needed_fraction);
-			}
+			interpolate_rotated_frames<T,MEM>(data_0,lowFrameBuf,highFrameBuf,
+				phiCoord,cells_to_rotate1,cells_to_rotate2,
+				needed_fraction1,needed_fraction2,needed_fraction);
 		}
 
 		if (ParseInputs::get_BC_conserved_averages() == 0
 			&& ParseInputs::get_spatial_order() == 2)
 		{
 			// Match the center-valued basis used by the second-order operator.
-			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi);
+			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi,a_innerStrips);
 		}
 		else if (ParseInputs::get_BC_conserved_averages() == 0)
 		{
@@ -393,11 +409,11 @@ public:
 		}
 		else if (a_conservedAverages)
 		{
-			m_boundaryAverages.fill(a_dstData,data_0,theta,phi);
+			m_boundaryAverages.fill(a_dstData,data_0,theta,phi,a_innerStrips);
 		}
 		else
 		{
-			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi);
+			m_boundaryAverages.fillPoints(a_dstData,data_0,theta,phi,a_innerStrips);
 		}
 	}
 
