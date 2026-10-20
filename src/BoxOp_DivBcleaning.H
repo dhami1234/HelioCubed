@@ -174,7 +174,8 @@ template<
 inline void
 BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
                         BoxData<T,1,MEM>& a_divB,
-                        const State& a_USph) const
+                        const State& a_USph,
+                        bool a_cartesianPrimitives) const
 {
   PR_TIME("BoxOp_EulerCubedSphere::computeDivB()");
 
@@ -192,11 +193,15 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::computeDivB(
 
   if (ParseInputs::get_spatial_order() == 2)
   {
-    State native,w;
+    State native,converted;
     const bool magneticTest=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
-    sphToPrim_2O(native,a_USph,block,!magneticTest);
-    auto basis=pointwiseSphericalBasis(native.box(),block,-1);
-    HelioCubed::nativePrimitivesToCartesian(w,native,basis);
+    if(!a_cartesianPrimitives)
+    {
+      sphToPrim_2O(native,a_USph,block,!magneticTest);
+      auto basis=pointwiseSphericalBasis(native.box(),block,-1);
+      HelioCubed::nativePrimitivesToCartesian(converted,native,basis);
+    }
+    const State& w=a_cartesianPrimitives ? a_USph : converted;
     for (int dir=0;dir<DIM;++dir)
     {
       const Box faces=a_divB.box().extrude(dir);

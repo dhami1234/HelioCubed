@@ -255,6 +255,11 @@ inline void CubedSphereAMR::prolongFourthOrder(GridLevel& target,GridLevel& pare
             {
                 double u[NUMCOMPS];
                 for(int c=0;c<NUMCOMPS;++c) u[c]=center[c]+theta*(target.state[index](p,c)-mean[c]);
+                if(theta==0)
+                {
+                    if(!amrAdmissibleParent(u,gamma,magnetic,b0)) return false;
+                    continue;
+                }
                 if(!(u[iRHO]>=RHO00)) return false;
                 double thermal=u[iE]+(magnetic ? c_TEST_P0/(gamma-1) : 0);
                 for(int d=0;d<DIM;++d) thermal-=0.5*u[iMOMX+d]*u[iMOMX+d]/u[iRHO]+u[iBX+d]*u[iBX+d]/(8*M_PI);

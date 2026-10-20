@@ -3,6 +3,9 @@
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_AMRInterpolation.H"
 #include "MHD_AMRTransfers.H"
+#include "MHD_IO.H"
+#include "MHD_CME.H"
+#include "MHD_CME_Schedule.H"
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -45,6 +48,24 @@ inline double amrSlope(double left,double center,double right)
     const double a=center-left,b=right-center;
     if (a*b<=0) return 0;
     return (a>0 ? 1.0 : -1.0)*std::min({2*abs(a),2*abs(b),0.5*abs(a+b)});
+}
+
+// Storing and recovering J*U can move a zero-pressure parent by a few ulps.
+// Allow that margin only for the constant conservative fallback; interpolated
+// trial children still use the strict positivity test. No energy is added.
+inline bool amrAdmissibleParent(const double* u,double gamma,bool magnetic,double b0)
+{
+    if(!(u[iRHO]>=RHO00) || !std::isfinite(u[iRHO])) return false;
+    const double background=magnetic ? c_TEST_P0/(gamma-1) : 0;
+    double thermal=u[iE]+background,scale=abs(u[iE])+abs(background);
+    for(int d=0;d<DIM;++d)
+    {
+        const double energy=0.5*u[iMOMX+d]*u[iMOMX+d]/u[iRHO]+u[iBX+d]*u[iBX+d]/(8*M_PI);
+        thermal-=energy;scale+=energy;
+    }
+    const double cross=b0*u[iBX]/(4*M_PI);
+    thermal-=cross;scale+=abs(cross);
+    return std::isfinite(thermal) && thermal>=-64*std::numeric_limits<double>::epsilon()*scale;
 }
 
 // These arrays are copied as patch data. Only the primitive donor participates
@@ -223,8 +244,9 @@ public:
         }
     };
 
-    explicit CubedSphereAMR(MBProblemDomain domain,Point boxSize,const std::string& restart="")
-        :m_domain(domain),m_boxSize(boxSize)
+    explicit CubedSphereAMR(MBProblemDomain domain,Point boxSize,const std::string& restart="",
+        Point regionScale=Point::Ones(),std::string outputSuffix="")
+        :m_domain(domain),m_boxSize(boxSize),m_regionScale(regionScale),m_outputSuffix(std::move(outputSuffix))
     {
         configureHierarchy();
         MBDisjointBoxLayout layout(m_domain,m_boxSize);
@@ -237,6 +259,15 @@ public:
     unsigned numLevels() const {return m_levels.size();}
     GridLevel& level(unsigned l) {return *m_levels.at(l);}
     const GridLevel& level(unsigned l) const {return *m_levels.at(l);}
+
+    bool insertCME(double time);
+    double convergenceDt() const {return m_convergenceDt;}
+    void setConvergenceDt(double dt) {m_convergenceDt=dt;}
+    double nextCMETime() const
+    {return m_cmeSchedule.inserted() ? std::numeric_limits<double>::infinity() : m_cmeSchedule.time();}
+    std::pair<int,std::array<double,NUMCOMPS>> sampleProbe(const Array<double,DIM>& position,double time)
+    {prepareStates(time);return samplePreparedProbe(position);}
+    void writeProbes(int iteration,double time,bool giveSpace);
 
     void advance(double dt,double time)
     {
@@ -382,39 +413,11 @@ public:
         h5.setTime(time); h5.setTimestep(dt); h5.setIter(iteration);
         const std::string prefix=(checkpoint ? ParseInputs::get_checkpoint_file_prefix()
                                              : ParseInputs::get_data_file_prefix())
-            +"_amr_"+std::to_string(iteration);
+            +m_outputSuffix+"_amr_"+std::to_string(iteration);
         if(!checkpoint)
         {
-            prepareStates(time);
-            using PlotLevel=MBLevelBoxData<double,NUMCOMPS+2,HOST>;
-            std::vector<std::unique_ptr<PlotLevel>> storage;
-            std::vector<const PlotLevel*> output;
-            std::vector<const OP::MapT*> maps;
-            unsigned number=0;
-            for (auto* level : levels())
-            {
-                storage.push_back(std::make_unique<PlotLevel>(level->layout,amrPatchGhosts(Point::Zeros())));
-                auto& plot=*storage.back();
-                const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
-                for (auto index : level->layout)
-                {
-                    State fourth;
-                    if(fourthOrder()) fourth=fourthOrderPrimitives(*level,index);
-                    for (auto p : level->layout[index])
-                    {
-                        for (int c=0;c<NUMCOMPS;++c) plot[index](p,c)=fourthOrder() ? fourth(p,c) : level->primitive[index](p,c);
-                        if (magnetic) plot[index](p,iBX)+=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
-                        plot[index](p,NUMCOMPS)=covered(level->number,p,level->layout.block(index)) ? 0 : 1;
-                        plot[index](p,NUMCOMPS+1)=number;
-                    }
-                }
-                output.push_back(&plot);
-                maps.push_back(&level->map);
-                ++number;
-            }
-            const std::vector<Point> ratios(m_ratios.begin(),m_ratios.begin()+number-1);
-            h5.writeMBAMRData({"density","Vx","Vy","Vz","P","Bx","By","Bz","active","amr_level"},
-                maps,output,ratios,prefix);
+            if(ParseInputs::get_output_divB()) writePlot<true>(h5,prefix,time);
+            else writePlot<false>(h5,prefix,time);
             return;
         }
         int number=0;
@@ -424,7 +427,7 @@ public:
         if (checkpoint && procID()==0)
         {
             std::ofstream file(prefix+".amr");
-            file<<"HelioCubedAMR 2\n"<<iteration<<' '<<std::setprecision(17)<<time<<' '<<dt<<'\n';
+            file<<"HelioCubedAMR 3\n"<<iteration<<' '<<std::setprecision(17)<<time<<' '<<dt<<'\n';
             file<<number<<' '<<m_ratios.size()<<'\n';
             for(int d=0;d<DIM;++d) file<<m_domain.getBlock(0).sizes()[d]<<' ';
             for(int d=0;d<DIM;++d) file<<m_boxSize[d]<<' ';
@@ -432,6 +435,7 @@ public:
                 <<ParseInputs::get_radial_stretch()<<' '<<ParseInputs::get_gamma()<<' '
                 <<ParseInputs::get_init_condition_type()<<'\n';
             for(auto ratio : m_ratios) file<<ratio[0]<<' '<<ratio[1]<<' '<<ratio[2]<<'\n';
+            file<<int(m_cmeSchedule.inserted())<<'\n';
             for(unsigned l=1;l<numLevels();++l)
             {
                 const auto patches=level(l).layout.patches();
@@ -439,6 +443,7 @@ public:
                 for(auto patch : patches) file<<patch.block<<' '<<patch.point[0]<<' '
                     <<patch.point[1]<<' '<<patch.point[2]<<'\n';
             }
+            file<<"convergence_dt "<<m_convergenceDt<<'\n';
             file.close();
             if (!file) manifestError=1;
         }
@@ -467,6 +472,8 @@ public:
     double restartTime=0,restartDt=0;
 
 private:
+    template<bool DivB> void writePlot(HDF5Handler&,const std::string&,double);
+    std::pair<int,std::array<double,NUMCOMPS>> samplePreparedProbe(const Array<double,DIM>&);
     void restrictTo(unsigned l,const Level& source,Level& destination)
     {
         PR_TIMERS("HelioCubed::AMR::restrict");
@@ -497,6 +504,10 @@ private:
     struct Region {unsigned level;int block;Box cells;};
     MBProblemDomain m_domain;
     Point m_boxSize;
+    Point m_regionScale;
+    std::string m_outputSuffix;
+    CMEInsertionSchedule m_cmeSchedule{ParseInputs::get_CME_type()==1,ParseInputs::get_CME_insertion_time()};
+    double m_convergenceDt=-1;
     std::vector<Point> m_ratios,m_boxSizes,m_cumulative;
     std::vector<MBProblemDomain> m_domains;
     std::vector<std::unique_ptr<GridLevel>> m_levels;
@@ -770,12 +781,12 @@ private:
         Point sizes,patchSize;
         double inner,outer,stretch,gamma;int problem;
         if(!(file>>magic>>version>>restartIteration>>restartTime>>restartDt>>number)
-            || magic!="HelioCubedAMR" || (version!=1 && version!=2)
+            || magic!="HelioCubedAMR" || (version<1 || version>3)
             || number<1 || unsigned(number)>m_ratios.size()+1 || (version==1 && number>2)
             || restartIteration<0 || !std::isfinite(restartTime) || restartTime<0
             || !std::isfinite(restartDt) || restartDt<0)
             throw std::invalid_argument("Invalid AMR checkpoint manifest or configured maximum level");
-        if(version==2)
+        if(version>=2)
         {
             int maximum;file>>maximum;
             if(!file || maximum<0 || unsigned(maximum)!=m_ratios.size())
@@ -789,7 +800,7 @@ private:
             || stretch!=ParseInputs::get_radial_stretch() || gamma!=ParseInputs::get_gamma()
             || problem!=ParseInputs::get_init_condition_type())
             throw std::invalid_argument("AMR restart geometry or physical model differs from checkpoint");
-        if(version==2)
+        if(version>=2)
             for(auto expected : m_ratios)
             {
                 Point ratio;file>>ratio[0]>>ratio[1]>>ratio[2];
@@ -797,6 +808,16 @@ private:
             }
         else if(number==2 && m_ratios[0]!=Point::Ones(2))
             throw std::invalid_argument("Version-one AMR checkpoints require ratio two at the first interface");
+        if(version>=3)
+        {
+            int inserted;file>>inserted;
+            if(!file || (inserted!=0 && inserted!=1))
+                throw std::invalid_argument("Invalid AMR checkpoint CME insertion state");
+            m_cmeSchedule.setInserted(inserted!=0);
+        }
+        // Earlier AMR versions could not insert a CME. A newly enabled source
+        // must therefore still fire when loading one of their checkpoints.
+        else m_cmeSchedule.setInserted(false);
         std::vector<PatchSet> desired(m_ratios.size()+1);
         for(unsigned l=1;l<unsigned(number);++l)
         {
@@ -813,6 +834,16 @@ private:
             }
             MBDisjointBoxLayout layout(m_domains[l],patchVector(desired[l]),std::vector<Point>(6,m_boxSizes[l]));
             m_levels.push_back(std::make_unique<GridLevel>(layout,l,l<m_ratios.size(),m_ratios[l-1]));
+        }
+        if(version>=3)
+        {
+            std::string key;
+            if(file>>key)
+            {
+                if(key!="convergence_dt" || !(file>>m_convergenceDt) || !std::isfinite(m_convergenceDt)
+                    || (m_convergenceDt!=-1 && m_convergenceDt<=0))
+                    throw std::invalid_argument("Invalid AMR checkpoint convergence timestep");
+            }
         }
         auto nested=desired;enforceNesting(nested);
         if(nested!=desired) throw std::invalid_argument("AMR checkpoint hierarchy is not properly nested");
@@ -929,7 +960,7 @@ private:
                 throw std::invalid_argument("AMR region level or block is outside the configured hierarchy");
             Point low,high;
             for(int d=0;d<DIM;++d) {low[d]=values[shift+1+d];high[d]=values[shift+4+d];}
-            const Box cells(low,high);
+            const Box cells=Box(low,high).refine(m_regionScale);
             if(cells.empty() || !m_domains[target-1].getBlock(0).box().containsBox(cells))
                 throw std::invalid_argument("AMR region lies outside its parent-level domain");
             m_regions.push_back({unsigned(target),block,cells});
@@ -1455,6 +1486,11 @@ private:
                         double u[NUMCOMPS];
                         for(int c=0;c<NUMCOMPS;++c) u[c]=normalization*source[index](parent,c)+theta*
                             (target.state[index](p,c)/target.jacobian[index](p)-normalization*source[index](parent,c));
+                        if(theta==0)
+                        {
+                            if(!amrAdmissibleParent(u,ParseInputs::get_gamma(),magnetic,b0)) return false;
+                            continue;
+                        }
                         if(!(u[iRHO]>=RHO00)) return false;
                         double thermal=u[iE]+(magnetic ? c_TEST_P0/(ParseInputs::get_gamma()-1) : 0);
                         for(int d=0;d<DIM;++d) thermal-=0.5*u[iMOMX+d]*u[iMOMX+d]/u[iRHO]+u[iBX+d]*u[iBX+d]/(8*M_PI);
@@ -1484,60 +1520,6 @@ private:
     }
 };
 
-inline void runCubedSphereAMR()
-{
-    using OP=CubedSphereAMR::OP;
-    const bool fourth=ParseInputs::get_spatial_order()==4;
-    const int order=ParseInputs::get_temporal_order();
-    if((!fourth && ((order!=2 && order!=3) || !OP::usesSecondOrderPrimitives()))
-        || (fourth && order!=3 && order!=4) || ParseInputs::get_boundary_reflux()!=1)
-        throw std::invalid_argument("AMR requires temporal_order=2 or 3 at O2, temporal_order=3 or 4 at O4, and boundary_reflux=1; O2 requires no artificial viscosity");
-    if(fourth && ParseInputs::get_state_conversion()!=1)
-        throw std::invalid_argument("Fourth-order AMR requires state_conversion=1 (Cartesian conserved state)");
-    if(ParseInputs::get_convTestType()!=0 || ParseInputs::get_CME_type()!=0 || ParseInputs::get_num_probes()!=0
-        || ParseInputs::get_output_divB()!=0 || ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
-        || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R()
-        || ParseInputs::get_P_floor_cadence()<=ParseInputs::get_max_iter())
-        throw std::invalid_argument("Initial AMR driver does not yet support convergence mode, CME insertion, probes, slices, pressure-floor events, or divB output");
-    if(ParseInputs::get_write_cadence()<=0 || ParseInputs::get_checkpoint_cadence()<=0
-        || !std::isfinite(ParseInputs::get_write_time_cadence()) || ParseInputs::get_write_time_cadence()<=0
-        || !std::isfinite(ParseInputs::get_CFL()) || ParseInputs::get_CFL()<=0
-        || !std::isfinite(ParseInputs::get_max_time()) || ParseInputs::get_max_time()<0)
-        throw std::invalid_argument("AMR requires positive output cadences/CFL and a finite nonnegative max_time");
-    Point box=Point::Ones(ParseInputs::get_boxSize_nonrad());box[0]=ParseInputs::get_boxSize_rad();
-    Point domain=Point::Ones(ParseInputs::get_domainSize());domain[0]=ParseInputs::get_thickness();
-    for(int d=0;d<DIM;++d)
-        if(domain[d]<12 || box[d]<8 || domain[d]%box[d])
-            throw std::invalid_argument("AMR domain sizes must be at least 12 and divisible by patch sizes of at least 8");
-    if(fourth && domain[1]<20)
-        throw std::invalid_argument("Fourth-order AMR requires at least 20 angular cells per panel for its extended interpolation stencils");
-    CubedSphereAMR simulation(CubedSphereShell::Domain(domain[1],domain[0],0),box,ParseInputs::get_restart_file());
-    double time=simulation.restartTime,dt=simulation.restartDt;
-    const double maximum=ParseInputs::get_max_time();
-    const auto initial=simulation.integral();
-    pout(0)<<"AMR initial mass = "<<std::setprecision(17)<<initial[iRHO]<<std::endl;
-    int writeTrigger=int(floor(time/ParseInputs::get_write_time_cadence()));
-    for(int iteration=simulation.restartIteration+1;iteration<=ParseInputs::get_max_iter() && time<maximum;++iteration)
-    {
-        const auto start=std::chrono::steady_clock::now();
-        dt=std::min(simulation.timestep(),maximum-time);
-        if(!std::isfinite(dt) || !(dt>0) || !(time+dt>time)) throw std::runtime_error("Invalid AMR timestep");
-        simulation.advance(dt,time);
-        time=dt>=maximum-time ? maximum : time+dt;
-        const int cadence=ParseInputs::get_amr_regrid_interval();
-        if(cadence && iteration%cadence==0) simulation.regrid(time);
-        const bool last=iteration==ParseInputs::get_max_iter() || time==maximum;
-        const int nextTrigger=int(floor(time/ParseInputs::get_write_time_cadence()));
-        if(last || iteration%ParseInputs::get_write_cadence()==0 || nextTrigger!=writeTrigger)
-        {simulation.write(iteration,time,dt,false);writeTrigger=nextTrigger;}
-        if(last || iteration%ParseInputs::get_checkpoint_cadence()==0) simulation.write(iteration,time,dt,true);
-        const auto sum=simulation.integral();
-        pout(0)<<"AMR iter = "<<iteration<<" dt = "<<std::setprecision(17)<<dt<<" time = "<<time
-               <<" mass = "<<sum[iRHO]<<" relative_mass_change = "<<(sum[iRHO]-initial[iRHO])/initial[iRHO]
-               <<" mass_balance_error = "<<(sum[iRHO]-initial[iRHO]-simulation.boundaryMass())/initial[iRHO]
-               <<" Time_taken = "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<std::endl;
-    }
-}
 #else
 inline void runCubedSphereAMR()
 {throw std::invalid_argument("Build with PR_AMR to enable cubed-sphere AMR");}
@@ -1547,4 +1529,7 @@ inline void runCubedSphereAMR()
 #ifdef PR_AMR
 #include "MHD_AMRRungeKutta.H"
 #include "MHD_AMRFourthOrder.H"
+#include "MHD_AMRDiagnostics.H"
+#include "MHD_AMRCME.H"
+#include "MHD_AMRDriver.H"
 #endif

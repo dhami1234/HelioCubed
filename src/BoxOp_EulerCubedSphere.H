@@ -743,8 +743,10 @@ public:
                         bool a_cellAverages = true) const;
 
   // Compute physical div(B) from the same discrete operator used by Powell cleaning.
+  // O2 AMR can supply its already prepared Cartesian primitives.
   inline void computeDivB(BoxData<T,1,MEM>& a_divB,
-                          const State& a_USph) const;
+                          const State& a_USph,
+                          bool a_cartesianPrimitives = false) const;
 
   // End DivB cleaning.
 

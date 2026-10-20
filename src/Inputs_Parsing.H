@@ -500,6 +500,8 @@ public:
         cubedSphereShellGeometry() = geometry;
         parseSlices();
         // use only the first num_probes entries
+        if (num_probes < 0 || num_probes > MAX_PROBES)
+            throw std::invalid_argument("num_probes must be between 0 and 32.");
         probe_filenames.resize((size_t)std::max(0, num_probes));
         probe_coords.resize((size_t)std::max(0, num_probes));
 
