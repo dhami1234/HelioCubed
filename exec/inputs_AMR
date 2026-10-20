@@ -1,0 +1,90 @@
+# Second-order cubed-sphere AMR example: an off-center hydrodynamic pulse.
+# Build with PR_AMR (enabled in GNUmakefile), then launch with this input file.
+# Supports multiple levels, independent radial/angular ratios, SSPRK2 with
+# recursive time subcycling, and limited PLM without artificial viscosity.
+# Fine patches are aligned to whole parent cells. Patch sizes are adjusted
+# when necessary, including odd base extents such as 59 radial cells.
+
+-init_condition_type 4
+-strength 0.1
+-gamma 1.6666666666666667
+-domainSize 24
+-thickness 48
+-boxSize_nonrad 12
+-boxSize_rad 12
+-inner_radius 1.4964e12
+-outer_radius 1.61124e13
+-radial_stretch 1.5
+
+-spatial_order 2
+-temporal_order 2
+-limiter 3
+-Riemann_solver_type 2
+-entropy_fix_coeff 0.3
+-linear_viscosity 0
+-nonlinear_viscosity 0
+-boundary_reflux 1
+-Sun_gravity 0
+-divergence_cleaning 1
+-MBInterp_define 1
+-CFL 0.3
+-max_iter 100
+-max_time 86400
+
+# Zero disables AMR and runs the existing single-level driver.
+-amr_max_level 1
+# Positive integer ratios: one value broadcasts to every interface, or use
+# comma-separated values for L0->L1, L1->L2, ... . Ratios 2,4,8 are supported.
+# One leaves that direction unrefined; at least one direction must refine.
+# The two angular ratios are equal so panel seams remain conforming.
+-amr_ref_ratio_rad 2
+-amr_ref_ratio_nonrad 2
+# Each parent advances once, and its child takes an integer number of steps
+# chosen from its CFL bound, up to the largest spatial ratio at that interface.
+# Deeper CFL bounds propagate back to the base timestep. If no level needs
+# smaller steps, all levels use the shared-step update.
+# Set to 0 to use the original shared-timestep AMR scheme.
+-amr_subcycling 1
+# Regridding, output, and checkpoints occur only when all levels synchronize.
+# Zero fixes the initial hierarchy. Otherwise regrid every this many coarse steps.
+-amr_regrid_interval 4
+# Parent cells to add around tags within each panel before selecting fine patches.
+# Deeper levels also add the parent coverage required for proper nesting,
+# including interpolation donors across panel seams and corners.
+-amr_buffer 2
+# Tag relative density/pressure differences; a negative value disables tagging.
+-amr_threshold 0.03
+# Optional persistent level-one regions, using inclusive BASE-cell indices:
+# block,ilo,jlo,klo,ihi,jhi,khi; block,... . Block -1 selects all six panels.
+# For example, refine a region on panel 5 in addition to gradient tagging:
+#-amr_refine_regions 5,12,12,6,35,23,17
+# For a deeper level, prefix its level number and use that level's PARENT
+# cell indices: level,block,ilo,jlo,klo,ihi,jhi,khi. Parent coverage is added
+# automatically. Levels not selected by tags/regions need not be allocated.
+# Example with three fine levels and different ratios at each interface:
+#-amr_max_level 3
+#-amr_ref_ratio_rad 2,4,8
+#-amr_ref_ratio_nonrad 2,2,4
+#-amr_refine_regions 1,5,12,12,6,35,23,17;2,5,32,28,16,47,35,23;3,5,144,64,40,159,71,47
+
+# Plot output is one multilevel multiblock HDF5 pair per step:
+# <prefix>_amr_<step>.hdf5 and <prefix>_amr_<step>.map.hdf5.
+# Open the data file in VisIt; the companion map supplies physical coordinates.
+# Enable all AMR levels and apply Displace using _mapping_displacement.
+# Threshold active > 0.5 to retain only composite cells for plots and queries.
+# Fields are Cartesian primitives in cgs units, an "active" mask (0 marks
+# covered coarse cells), and "amr_level" (0=base, 1,2,...=finer levels).
+# Checkpoints include every JU level plus a .amr manifest. Restart by setting
+# restart_file to that manifest, retaining geometry, ratios, maximum level,
+# and physical model. Earlier two-level manifests are also readable.
+-data_file_prefix amr_data
+-checkpoint_file_prefix amr_checkpoint
+-write_cadence 20
+-write_time_cadence 1e20
+-checkpoint_cadence 20
+-max_checkpoint_files 100
+-slices none
+-output_divB 0
+-num_probes 0
+-CME_type 0
+-P_floor_cadence 1000000000

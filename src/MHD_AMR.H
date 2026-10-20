@@ -1,0 +1,1367 @@
+#pragma once
+
+#include "BoxOp_EulerCubedSphere.H"
+#include <chrono>
+#include <cstdio>
+#include <fstream>
+#include <limits>
+#include <numeric>
+#include <set>
+
+namespace HelioCubed
+{
+#ifdef PR_AMR
+// Multiblock flux reconciliation and mapped conservative transfer follow
+// McCorquodale et al., CAMCoS 10 (2015), doi:10.2140/camcos.2015.10.121.
+// This implementation uses second-order reconstruction and SSPRK2, with
+// optional recursive time subcycling and conservative synchronization.
+// Cell volumes must be additive across refinement levels. Split the spherical
+// quadrilateral into two triangles; this avoids subtracting nearly equal
+// corner angles, which loses accuracy on fine meshes.
+inline double amrAngularJacobian(Point p, double h)
+{
+    const double step=M_PI*h/2;
+    const double alpha=M_PI*(p[1]*h/2-0.25),beta=M_PI*(p[2]*h/2-0.25);
+    const double a0=tan(alpha),a1=tan(alpha+step),b0=tan(beta),b1=tan(beta+step);
+    const double r00=sqrt(1+a0*a0+b0*b0),r10=sqrt(1+a1*a1+b0*b0);
+    const double r11=sqrt(1+a1*a1+b1*b1),r01=sqrt(1+a0*a0+b1*b1);
+    const double diagonal=1+a0*a1+b0*b1;
+    const double first=r00*r10*r11+(1+a0*a1+b0*b0)*r11
+        +(1+a1*a1+b0*b1)*r00+diagonal*r10;
+    const double second=r00*r11*r01+diagonal*r01
+        +(1+a0*a1+b1*b1)*r00+(1+a0*a0+b0*b1)*r11;
+    // tan(x+step)-tan(x) = sin(step)/(cos(x)*cos(x+step)).
+    const double sine=sin(step);
+    const double determinant=sine*sine/(cos(alpha)*cos(alpha+step)*cos(beta)*cos(beta+step));
+    return (2*atan2(determinant,first)+2*atan2(determinant,second))/(h*h);
+}
+
+inline double amrSlope(double left,double center,double right)
+{
+    const double a=center-left,b=right-center;
+    if (a*b<=0) return 0;
+    return (a>0 ? 1.0 : -1.0)*std::min({2*abs(a),2*abs(b),0.5*abs(a+b)});
+}
+
+// These arrays are copied as patch data. Only the primitive donor participates
+// in panel exchange; other state/scratch arrays need no separate panel buffers.
+inline Array<Point,DIM+1> amrPatchGhosts(Point ghost)
+{
+    Array<Point,DIM+1> result;
+    result.fill(Point::Zeros());result[0]=ghost;
+    return result;
+}
+
+class CubedSphereAMR
+{
+public:
+    using OP=BoxOp_EulerCubedSphere<double,MBMap_CubedSphereShell<HOST>,HOST>;
+    using Level=MBLevelBoxData<double,NUMCOMPS,HOST>;
+    using ScalarLevel=MBLevelBoxData<double,1,HOST>;
+    using Register=MBLevelFluxRegister<double,NUMCOMPS,HOST>;
+    struct GridLevel
+    {
+        unsigned number;
+        Point ratio;
+        MBDisjointBoxLayout layout;
+        OP::LevelGeometry geometry;
+        OP::MapT& map;
+        OP::OpT& op;
+        Level state,stage,primitive,donor,rhs,first;
+        const Level* preparedState=nullptr;
+        std::unique_ptr<Level> old,predictor;
+        double startTime=0,stepDt=0,preparedTime=0;
+        int substeps=1;
+        bool timeInterpolated=false;
+        ScalarLevel volume,jacobian;
+        MBInterpOp interp;
+        MBBoundaryRegister<double,NUMCOMPS,HOST> panelFlux;
+        std::vector<std::unique_ptr<Array<State,DIM>>> flux;
+
+        GridLevel(const MBDisjointBoxLayout& grid,unsigned level,bool parent,Point refinement=Point::Ones(2))
+            :number(level),ratio(refinement),layout(grid),geometry(makeGeometry(grid)),map(*geometry.map),op(*geometry.op),
+             state(grid,amrPatchGhosts(OP::ghost())),stage(grid,amrPatchGhosts(OP::ghost())),
+             primitive(grid,amrPatchGhosts(Point::Ones(level && !parent ? 2 : 4))),
+             donor(grid,primitive.ghost()[0]+Point(0,2,2)),
+             rhs(grid,Point::Zeros()),first(grid,Point::Zeros()),
+             volume(grid,amrPatchGhosts(primitive.ghost()[0]+Point::Basis(0,2))),
+             jacobian(grid,amrPatchGhosts(level && !parent ? Point::Zeros() : Point::Ones(4))),
+             panelFlux(grid,1,Point::Zeros())
+        {
+            PR_TIMERS("HelioCubed::AMR::GridLevel");
+            interp=level ? fineInterpolation(grid,donor,primitive.ghost()[0],refinement[1]>1 || !parent)
+                        : CubedSphereShell::MHDInterpOp<HOST>(grid,Point(4,6,6),4);
+            for (auto index : layout)
+            {
+                const Box box=volume[index].box();
+                Scalar radius(box); Vector dr(box),area(box);
+                op[index].radialMetrics(radius,dr,area,volume[index],box);
+                const double h=op[index].dx()[1];
+                const Box jacBox=jacobian[index].box();
+                Point high=jacBox.high();high[0]=jacBox.low()[0];
+                const Box plane(jacBox.low(),high);
+                Scalar angular(plane);
+                for(auto p : plane) angular(p)=amrAngularJacobian(p,h);
+                for (auto p : jacobian[index].box())
+                    jacobian[index](p)=volume[index](p)*angular(Point(jacBox.low()[0],p[1],p[2]));
+                flux.push_back(std::make_unique<Array<State,DIM>>());
+                for (int d=0; d<DIM; ++d)
+                    (*flux.back())[d].define(layout[index].extrude(d));
+            }
+        }
+
+        static OP::LevelGeometry makeGeometry(const MBDisjointBoxLayout& layout)
+        {
+            OP::LevelGeometry geometry;
+            geometry.map=std::make_unique<OP::MapT>(CubedSphereShell::Map(layout,OP::ghost()));
+            geometry.op=std::make_unique<OP::OpT>(
+                CubedSphereShell::Operator<BoxOp_EulerCubedSphere,double,HOST>(*geometry.map));
+            return geometry;
+        }
+
+        static MBInterpOp fineInterpolation(const MBDisjointBoxLayout& grid,Level& donor,Point ghost,bool coarseDonors)
+        {
+            PR_TIMERS("HelioCubed::AMR::fineInterpolation");
+            // At a panel/refinement corner the full fine stencil may not
+            // exist. Retain the second-order coarse fill there. Use the normal
+            // cubed-sphere interpolation wherever its fine donors are present.
+            using PolarMap=MBLevelMap<MBMap_CubedSphereShellPolar<HOST>,HOST>;
+            std::vector<std::unique_ptr<PolarMap>> maps;
+            for(unsigned block=0;block<6;++block)
+            {
+                maps.push_back(std::make_unique<PolarMap>());
+                maps.back()->define(grid,ghost+Point(0,2,2),block);
+            }
+            MBInterpOp result(ghost,4);
+            std::vector<Point> footprint;
+            for(auto p : Box(Point(0,-1,-1),Point(0,1,1))) footprint.push_back(p);
+            for(int d=1;d<DIM;++d) {footprint.push_back(Point::Basis(d,2));footprint.push_back(Point::Basis(d,-2));}
+            const auto& domain=grid.domain();
+            for(auto index : grid)
+            {
+                const auto block=grid.block(index);
+                const auto& map=*maps[block];
+                const Box physical=domain.getBlock(block).box(),valid=grid[index];
+                Point angularGhost=ghost*Point(0,1,1);
+                Point low=valid.low()-angularGhost,high=valid.high()+angularGhost;
+                high[0]=low[0];
+                for(auto target : Box(low,high))
+                {
+                    if(physical.containsPoint(target)) continue;
+                    auto center=map.op(0).findValid(domain,MBPoint(target,block));
+                    bool available=true;
+                    for(auto offset : footprint)
+                    {
+                        MBPoint source(center.point+offset,center.block);
+                        if(!domain.getBlock(source.block).box().containsPoint(source.point))
+                        {
+                            const Point dir=domain.getBlock(source.block).box().whichBoundaryContains(source.point);
+                            const auto boundaries=domain.boundaries(source.block,dir);
+                            if(dir.codim()==1 && boundaries.size()==1)
+                            {
+                                const auto neighbor=boundaries[0].dstBlock;
+                                source.point=domain.convertPoint(source.point,source.block,neighbor,PR_CELL);
+                                source.block=neighbor;
+                            }
+                            else source=map.op(0).findValid(domain,source);
+                        }
+                        const Point local=domain.convertPoint(source.point,source.block,block,PR_CELL);
+                        if(source.block==block)
+                        {
+                            if(!donor[index].box().containsPoint(local)) available=false;
+                            if(!coarseDonors && grid.find(source.point/grid.boxSize(source.block),source.block)==*grid.end())
+                                available=false;
+                        }
+                        else
+                        {
+                            const auto neighbor=grid.find(source.point/grid.boxSize(source.block),source.block);
+                            if(neighbor==*grid.end()) {available=false;break;}
+                            const Point dir=grid.connectivity(index,neighbor);
+                            bool found=false;
+                            if(dir!=Point::Zeros()) for(const auto& boundary : donor.bounds(index,dir))
+                                if(boundary.adjIndex==neighbor && boundary.localData->box().containsPoint(local)) found=true;
+                            if(!found) available=false;
+                        }
+                        if(!available) break;
+                    }
+                    if(!available) continue;
+                    auto first=std::make_shared<MBPointInterpOp>(MBDataPoint(index,target,grid),ghost+Point(0,2,2),map,4);
+                    result.insert(first);
+                    for(int radial=valid.low()[0]+1;radial<=valid.high()[0];++radial)
+                    {
+                        const Point shift=Point::Basis(0,radial-valid.low()[0]);
+                        std::vector<MBDataPoint> sources;
+                        for(const auto& point : first->sources()) sources.push_back(point.shift(shift,grid));
+                        result.insert(std::make_shared<MBPointInterpOp>(first->target().shift(shift,grid),sources,first->coefs()));
+                    }
+                }
+            }
+            return result;
+        }
+    };
+
+    explicit CubedSphereAMR(MBProblemDomain domain,Point boxSize,const std::string& restart="")
+        :m_domain(domain),m_boxSize(boxSize)
+    {
+        configureHierarchy();
+        MBDisjointBoxLayout layout(m_domain,m_boxSize);
+        m_levels.push_back(std::make_unique<GridLevel>(layout,0,!m_ratios.empty()));
+        if(!restart.empty()) {read(restart);return;}
+        initialize(*m_levels[0]);
+        regrid(0,true);
+    }
+
+    unsigned numLevels() const {return m_levels.size();}
+    GridLevel& level(unsigned l) {return *m_levels.at(l);}
+    const GridLevel& level(unsigned l) const {return *m_levels.at(l);}
+
+    void advance(double dt,double time)
+    {
+        PR_TIMERS("HelioCubed::AMR::advance");
+        if(m_effectiveDt.size()!=numLevels()) timestep();
+        bool subcycle=false;
+        if(ParseInputs::get_amr_subcycling())
+            for(unsigned l=1;l<numLevels();++l)
+                if(dt>m_effectiveDt.at(l)) {subcycle=true;break;}
+        if(subcycle)
+        {
+            beginStep(0,dt,time);
+            completeStep(0);
+        }
+        else advanceSynchronous(dt,time);
+        for(auto* grid : levels())
+            if(!OP::validConservedState(grid->state))
+                throw std::runtime_error("Invalid conserved AMR state after SSPRK2 step");
+    }
+
+    double timestep()
+    {
+        double dt=std::numeric_limits<double>::max();
+        m_effectiveDt.assign(numLevels(),dt);
+        for(auto* grid : levels())
+        {
+            OP::GeometryScope geometry(grid->geometry);
+            Level cflState(grid->layout,Point::Zeros());
+            for(auto index : grid->layout)
+            {
+                const double h=grid->op[index].dx()[1];
+                auto det=CubedSphereShell::detA<double,HOST>(grid->layout[index],h,0);
+                auto& out=cflState[index];
+                const auto& state=grid->state[index];
+                const auto& volume=grid->volume[index];
+                const auto& jacobian=grid->jacobian[index];
+                for(auto p : grid->layout[index])
+                    for(int c=0;c<NUMCOMPS;++c)
+                        out(p,c)=state(p,c)*(volume(p)*det(p)/jacobian(p));
+            }
+            m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFLSecondOrderHost(cflState,grid->volume);
+        }
+        for(unsigned l=numLevels()-1;l>0;--l)
+        {
+            const double factor=ParseInputs::get_amr_subcycling() ? maxRatio(m_ratios[l-1]) : 1;
+            m_effectiveDt[l-1]=std::min(m_effectiveDt[l-1],factor*m_effectiveDt[l]);
+        }
+        return m_effectiveDt[0];
+    }
+
+    void regrid(double time,bool initial=false)
+    {
+        PR_TIMERS("HelioCubed::AMR::regrid");
+        averageDown();
+        prepareStates(time);
+        std::vector<PatchSet> desired(m_ratios.size()+1);
+        for(unsigned l=1;l<desired.size();++l) desired[l]=taggedPatches(l-1);
+        bool changed=false;
+        while(true)
+        {
+            enforceNesting(desired);
+            const bool passChanged=realizeHierarchy(desired,time,initial);
+            changed=passChanged||changed;
+            averageDown();
+            const unsigned available=std::min(numLevels(),unsigned(m_ratios.size()));
+            if(ParseInputs::get_amr_threshold()<0 || !passChanged) break;
+            prepareStates(time);
+            bool newTags=false;
+            // New patches on an existing intermediate level also need tagging.
+            // Grow monotonically within this regrid so a newly exposed feature
+            // reaches every requested level without waiting for another step.
+            for(unsigned l=1;l<available;++l)
+                for(auto key : taggedPatches(l)) newTags=desired[l+1].insert(key).second||newTags;
+            if(!newTags) break;
+        }
+        if(changed || initial)
+        {
+            pout(0)<<"AMR regrid: levels="<<numLevels();
+            for(auto* grid : levels()) pout(0)<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes();
+            pout(0)<<std::endl;
+        }
+    }
+
+    void averageDown()
+    {
+        for(unsigned l=numLevels()-1;l>0;--l)
+            level(l).state.coarsenTo(level(l-1).state,m_ratios[l-1]);
+    }
+
+    Array<double,NUMCOMPS> integral() const
+    {
+        Array<double,NUMCOMPS+1> local; local.fill(0);
+        for (auto* level : levels())
+        {
+            auto dx=level->layout.dx(0);
+            const double dv=dx[0]*dx[1]*dx[2];
+            for (auto index : level->layout)
+            {
+                const auto& state=level->state[index];
+                const auto block=level->layout.block(index);
+                for (auto p : level->layout[index])
+                {
+                    if (covered(level->number,p,block)) continue;
+                    for (int c=0;c<NUMCOMPS;++c) local[c]+=dv*state(p,c);
+                }
+            }
+        }
+        local[NUMCOMPS]=m_localBoundaryMass;
+        Array<double,NUMCOMPS+1> global=local;
+#ifdef PR_MPI
+        MPI_Allreduce(local.data(),global.data(),NUMCOMPS+1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
+#endif
+        m_boundaryMass=global[NUMCOMPS];
+        Array<double,NUMCOMPS> result;
+        for(int c=0;c<NUMCOMPS;++c) result[c]=global[c];
+        return result;
+    }
+
+    double boundaryMass() const {return m_boundaryMass;}
+
+    void write(int iteration,double time,double dt,bool checkpoint)
+    {
+        PR_TIMERS("HelioCubed::AMR::write");
+        HDF5Handler h5;
+        h5.setTime(time); h5.setTimestep(dt); h5.setIter(iteration);
+        const std::string prefix=(checkpoint ? ParseInputs::get_checkpoint_file_prefix()
+                                             : ParseInputs::get_data_file_prefix())
+            +"_amr_"+std::to_string(iteration);
+        if(!checkpoint)
+        {
+            prepareStates(time);
+            using PlotLevel=MBLevelBoxData<double,NUMCOMPS+2,HOST>;
+            std::vector<std::unique_ptr<PlotLevel>> storage;
+            std::vector<const PlotLevel*> output;
+            std::vector<const OP::MapT*> maps;
+            unsigned number=0;
+            for (auto* level : levels())
+            {
+                storage.push_back(std::make_unique<PlotLevel>(level->layout,amrPatchGhosts(Point::Zeros())));
+                auto& plot=*storage.back();
+                const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+                for (auto index : level->layout)
+                    for (auto p : level->layout[index])
+                    {
+                        for (int c=0;c<NUMCOMPS;++c) plot[index](p,c)=level->primitive[index](p,c);
+                        if (magnetic) plot[index](p,iBX)+=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
+                        plot[index](p,NUMCOMPS)=covered(level->number,p,level->layout.block(index)) ? 0 : 1;
+                        plot[index](p,NUMCOMPS+1)=number;
+                    }
+                output.push_back(&plot);
+                maps.push_back(&level->map);
+                ++number;
+            }
+            const std::vector<Point> ratios(m_ratios.begin(),m_ratios.begin()+number-1);
+            h5.writeMBAMRData({"density","Vx","Vy","Vz","P","Bx","By","Bz","active","amr_level"},
+                maps,output,ratios,prefix);
+            return;
+        }
+        int number=0;
+        for (auto* level : levels())
+            h5.writeMBLevel(level->state,prefix+"_L"+std::to_string(number++));
+        int manifestError=0;
+        if (checkpoint && procID()==0)
+        {
+            std::ofstream file(prefix+".amr");
+            file<<"HelioCubedAMR 2\n"<<iteration<<' '<<std::setprecision(17)<<time<<' '<<dt<<'\n';
+            file<<number<<' '<<m_ratios.size()<<'\n';
+            for(int d=0;d<DIM;++d) file<<m_domain.getBlock(0).sizes()[d]<<' ';
+            for(int d=0;d<DIM;++d) file<<m_boxSize[d]<<' ';
+            file<<'\n'<<ParseInputs::get_inner_radius()<<' '<<ParseInputs::get_outer_radius()<<' '
+                <<ParseInputs::get_radial_stretch()<<' '<<ParseInputs::get_gamma()<<' '
+                <<ParseInputs::get_init_condition_type()<<'\n';
+            for(auto ratio : m_ratios) file<<ratio[0]<<' '<<ratio[1]<<' '<<ratio[2]<<'\n';
+            for(unsigned l=1;l<numLevels();++l)
+            {
+                const auto patches=level(l).layout.patches();
+                file<<patches.size()<<'\n';
+                for(auto patch : patches) file<<patch.block<<' '<<patch.point[0]<<' '
+                    <<patch.point[1]<<' '<<patch.point[2]<<'\n';
+            }
+            file.close();
+            if (!file) manifestError=1;
+        }
+#ifdef PR_MPI
+        if(checkpoint) MPI_Bcast(&manifestError,1,MPI_INT,0,MPI_COMM_WORLD);
+#endif
+        if(manifestError) throw std::runtime_error("Could not write AMR checkpoint manifest");
+        if(checkpoint)
+        {
+            m_checkpoints.emplace_back(prefix,number);
+            const unsigned keep=std::max(1,ParseInputs::get_max_checkpoint_files());
+            while(m_checkpoints.size()>keep)
+            {
+                if(procID()==0)
+                {
+                    std::remove((m_checkpoints.front().first+".amr").c_str());
+                    for(unsigned level=0;level<m_checkpoints.front().second;++level)
+                        std::remove((m_checkpoints.front().first+"_L"+std::to_string(level)+".hdf5").c_str());
+                }
+                m_checkpoints.erase(m_checkpoints.begin());
+            }
+        }
+    }
+
+    int restartIteration=0;
+    double restartTime=0,restartDt=0;
+
+private:
+    using PatchKey=std::array<int,4>;
+    struct PatchLess
+    {
+        bool operator()(const PatchKey& a,const PatchKey& b) const
+        {for(int d : {0,3,2,1}) if(a[d]!=b[d]) return a[d]<b[d];return false;}
+    };
+    using PatchSet=std::set<PatchKey,PatchLess>;
+    struct Region {unsigned level;int block;Box cells;};
+    MBProblemDomain m_domain;
+    Point m_boxSize;
+    std::vector<Point> m_ratios,m_boxSizes,m_cumulative;
+    std::vector<MBProblemDomain> m_domains;
+    std::vector<std::unique_ptr<GridLevel>> m_levels;
+    std::vector<std::unique_ptr<Register>> m_registers;
+    std::vector<Region> m_regions;
+    std::vector<double> m_effectiveDt;
+    std::vector<std::pair<std::string,unsigned>> m_checkpoints;
+    double m_localBoundaryMass=0;
+    mutable double m_boundaryMass=0;
+
+    static int maxRatio(Point ratio)
+    {int result=1;for(int d=0;d<DIM;++d) result=std::max(result,ratio[d]);return result;}
+
+    void accumulateFlux(GridLevel& grid,double weight)
+    {
+        unsigned local=0;
+        for(auto index : grid.layout)
+        {
+            for(int d=0;d<DIM;++d)
+            {
+                if(grid.number+1<numLevels())
+                    m_registers[grid.number]->incrementCoarseRegister((*grid.flux[local])[d],index,d,weight);
+                if(grid.number)
+                    m_registers[grid.number-1]->incrementFineRegister((*grid.flux[local])[d],index,d,weight);
+            }
+            ++local;
+        }
+    }
+
+    void accumulateInterfaceFlux(unsigned l,bool fine,double weight)
+    {
+        auto& grid=level(l+unsigned(fine));
+        unsigned local=0;
+        for(auto index : grid.layout)
+        {
+            for(int d=0;d<DIM;++d)
+                if(fine) m_registers[l]->incrementFineRegister((*grid.flux[local])[d],index,d,weight);
+                else m_registers[l]->incrementCoarseRegister((*grid.flux[local])[d],index,d,weight);
+            ++local;
+        }
+    }
+
+    void prepareAtTime(unsigned l,double time)
+    {
+        auto& grid=level(l);
+        if(grid.timeInterpolated && grid.preparedTime==time) return;
+        if(!grid.old || !(grid.stepDt>0)) throw std::runtime_error("AMR parent has no interpolation interval");
+        const double end=grid.startTime+grid.stepDt;
+        const double tolerance=32*std::numeric_limits<double>::epsilon()
+            *std::max({1.0,abs(time),abs(grid.startTime),abs(end)});
+        if(time<grid.startTime-tolerance || time>end+tolerance)
+            throw std::runtime_error("AMR fine stage lies outside its parent time interval");
+        const double alpha=std::clamp((time-grid.startTime)/grid.stepDt,0.0,1.0);
+        if(alpha==0) grid.old->copyTo(grid.stage);
+        // Dense RK2 output: the linear term uses the composite first-stage
+        // derivative; the coarse RK stage difference supplies the curvature.
+        // Interpolating the unrefluxed coarse endpoint would introduce an
+        // O(dt) error at coarse-fine interfaces on a fixed spatial mesh.
+        else for(auto index : grid.layout) for(auto p : grid.layout[index])
+            for(int c=0;c<NUMCOMPS;++c)
+                grid.stage[index](p,c)=(*grid.old)[index](p,c)
+                    +alpha*grid.stepDt*(*grid.predictor)[index](p,c)
+                    +0.5*alpha*alpha*grid.stepDt*(grid.rhs[index](p,c)-grid.first[index](p,c));
+        if(l) prepareAtTime(l-1,time);
+        prepare(grid,grid.stage,time,l ? &level(l-1) : nullptr);
+        grid.preparedTime=time;grid.timeInterpolated=true;
+    }
+
+    void evaluateStage(unsigned l,int stage,double time)
+    {
+        auto& grid=level(l);
+        grid.state.copyTo(grid.stage);
+        if(stage) grid.stage.increment(grid.predictor ? *grid.predictor : grid.first,grid.stepDt);
+        if(l) prepareAtTime(l-1,time);
+        prepare(grid,grid.stage,time,l ? &level(l-1) : nullptr);
+        evaluate(grid);
+        accumulateFlux(grid,0.5*grid.stepDt);
+        m_localBoundaryMass+=0.5*grid.stepDt*radialMassFlux(&grid);
+        if(!stage)
+        {
+            grid.rhs.copyTo(grid.first);
+            // Children can reuse this preparation at the start of the step.
+            grid.preparedTime=time;grid.timeInterpolated=true;
+        }
+    }
+
+    void beginStep(unsigned l,double dt,double time)
+    {
+        PR_TIMERS("HelioCubed::AMR::beginStep");
+        if(!(dt>0) || !(time+dt>time)) throw std::runtime_error("AMR substep cannot advance floating-point time");
+        auto& grid=level(l);
+        grid.startTime=time;grid.stepDt=dt;grid.timeInterpolated=false;
+        if(l+1<numLevels())
+        {
+            if(!grid.old) grid.old=std::make_unique<Level>(grid.layout,Point::Zeros());
+            if(!grid.predictor) grid.predictor=std::make_unique<Level>(grid.layout,Point::Zeros());
+            grid.state.copyTo(*grid.old);
+            auto& reg=*m_registers[l];
+            reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
+            const double fraction=dt/m_effectiveDt[l+1];
+            const double roundoff=32*std::numeric_limits<double>::epsilon()*std::max(1.0,fraction);
+            if(!std::isfinite(fraction) || fraction>maxRatio(m_ratios[l])+roundoff)
+                throw std::runtime_error("AMR parent timestep exceeds the fine-level CFL bound");
+            grid.substeps=std::max(1,int(ceil(fraction-roundoff)));
+        }
+        evaluateStage(l,0,time);
+        if(l+1<numLevels())
+        {
+            beginStep(l+1,dt/grid.substeps,time);
+            // The coarse predictor must use the same instantaneous composite
+            // derivative as the fine mesh. Keep the coarse derivative in first
+            // for the conservative RK update and its time-integrated reflux.
+            grid.first.copyTo(*grid.predictor);
+            auto& child=level(l+1);
+            auto& reg=*m_registers[l];
+            accumulateInterfaceFlux(l,true,0.5*(dt-child.stepDt));
+            reg.applyRefluxCorrection(*grid.predictor,2.0/dt);
+            (child.predictor ? *child.predictor : child.first).coarsenTo(*grid.predictor,m_ratios[l]);
+            reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
+            accumulateInterfaceFlux(l,false,0.5*dt);
+            accumulateInterfaceFlux(l,true,0.5*child.stepDt);
+        }
+    }
+
+    void completeStep(unsigned l)
+    {
+        PR_TIMERS("HelioCubed::AMR::completeStep");
+        auto& grid=level(l);
+        evaluateStage(l,1,grid.startTime+grid.stepDt);
+        grid.state.increment(grid.first,0.5*grid.stepDt);
+        grid.state.increment(grid.rhs,0.5*grid.stepDt);
+        if(l+1<numLevels())
+        {
+            completeStep(l+1);
+            const double fineDt=grid.stepDt/grid.substeps;
+            for(int n=1;n<grid.substeps;++n)
+            {
+                beginStep(l+1,fineDt,grid.startTime+n*fineDt);
+                completeStep(l+1);
+            }
+            // Both registers contain RK-weighted time integrals. Synchronize
+            // this interface only after every descendant reaches the endpoint.
+            m_registers[l]->applyRefluxCorrection(grid.state,1.0);
+            level(l+1).state.coarsenTo(grid.state,m_ratios[l]);
+        }
+        grid.timeInterpolated=false;
+    }
+
+    void advanceSynchronous(double dt,double time)
+    {
+        for(int stage=0;stage<2;++stage)
+        {
+            for(auto* grid : levels())
+            {
+                grid->state.copyTo(grid->stage);
+                if(stage) grid->stage.increment(grid->first,dt);
+            }
+            for(unsigned l=numLevels()-1;l>0;--l)
+                level(l).stage.coarsenTo(level(l-1).stage,m_ratios[l-1]);
+            for(unsigned l=0;l<numLevels();++l)
+                prepare(level(l),level(l).stage,time+stage*dt,l ? &level(l-1) : nullptr);
+            for(auto* grid : levels()) evaluate(*grid);
+            m_localBoundaryMass+=0.5*dt*radialMassFlux();
+            for(auto& reg : m_registers)
+            {reg->initCoarseRegisters();reg->initFineRegisters();reg->initIncrement();}
+            for(auto* grid : levels()) accumulateFlux(*grid,1.0);
+            for(unsigned l=numLevels()-1;l>0;--l)
+            {
+                m_registers[l-1]->applyRefluxCorrection(level(l-1).rhs,1.0);
+                level(l).rhs.coarsenTo(level(l-1).rhs,m_ratios[l-1]);
+            }
+            if(!stage) for(auto* grid : levels()) grid->rhs.copyTo(grid->first);
+        }
+        for(auto* grid : levels())
+        {
+            grid->state.increment(grid->first,0.5*dt);
+            grid->state.increment(grid->rhs,0.5*dt);
+        }
+        averageDown();
+    }
+
+    void prepareStates(double time)
+    {
+        for(unsigned l=0;l<numLevels();++l)
+            prepare(level(l),level(l).state,time,l ? &level(l-1) : nullptr);
+    }
+
+    double radialMassFlux(const GridLevel* selected=nullptr) const
+    {
+        // Track the physical boundary contribution independently of reflux.
+        // Accumulate locally and combine it with the existing integral
+        // reduction, avoiding additional global collectives at RK stages.
+        double sum=0;
+        for(auto* level : levels())
+        {
+            if(selected && selected!=level) continue;
+            unsigned local=0;
+            const auto dx=level->layout.dx(0);
+            for(auto index : level->layout)
+            {
+                const Box valid=level->layout[index];
+                const auto block=level->layout.block(index);
+                const Box domain=level->layout.domain().getBlock(block).box();
+                const auto& flux=(*level->flux[local++])[0];
+                for(auto side : {Side::Lo,Side::Hi})
+                {
+                    if(side==Side::Lo ? valid.low()[0]!=domain.low()[0]
+                                      : valid.high()[0]!=domain.high()[0]) continue;
+                    const Point shift=side==Side::Lo ? Point::Zeros() : Point::Basis(0);
+                    const double sign=side==Side::Lo ? 1.0 : -1.0;
+                    for(auto p : valid.face(0,side))
+                    {
+                        if(covered(level->number,p,block)) continue;
+                        sum+=sign*dx[1]*dx[2]*flux(p+shift,iRHO);
+                    }
+                }
+            }
+        }
+        return sum;
+    }
+    static void trace(const char* message)
+    {
+#ifdef HELIOCUBED_AMR_TRACE
+        std::cerr<<"AMR rank "<<procID()<<": "<<message<<std::endl;
+#endif
+    }
+
+    void read(const std::string& filename)
+    {
+        PR_TIMERS("HelioCubed::AMR::restart");
+        std::ifstream file(filename);
+        std::string magic;int version,number;
+        Point sizes,patchSize;
+        double inner,outer,stretch,gamma;int problem;
+        if(!(file>>magic>>version>>restartIteration>>restartTime>>restartDt>>number)
+            || magic!="HelioCubedAMR" || (version!=1 && version!=2)
+            || number<1 || unsigned(number)>m_ratios.size()+1 || (version==1 && number>2)
+            || restartIteration<0 || !std::isfinite(restartTime) || restartTime<0
+            || !std::isfinite(restartDt) || restartDt<0)
+            throw std::invalid_argument("Invalid AMR checkpoint manifest or configured maximum level");
+        if(version==2)
+        {
+            int maximum;file>>maximum;
+            if(!file || maximum<0 || unsigned(maximum)!=m_ratios.size())
+                throw std::invalid_argument("AMR restart maximum level differs from checkpoint");
+        }
+        for(int d=0;d<DIM;++d) file>>sizes[d];
+        for(int d=0;d<DIM;++d) file>>patchSize[d];
+        file>>inner>>outer>>stretch>>gamma>>problem;
+        if(!file || sizes!=m_domain.getBlock(0).sizes() || patchSize!=m_boxSize
+            || inner!=ParseInputs::get_inner_radius() || outer!=ParseInputs::get_outer_radius()
+            || stretch!=ParseInputs::get_radial_stretch() || gamma!=ParseInputs::get_gamma()
+            || problem!=ParseInputs::get_init_condition_type())
+            throw std::invalid_argument("AMR restart geometry or physical model differs from checkpoint");
+        if(version==2)
+            for(auto expected : m_ratios)
+            {
+                Point ratio;file>>ratio[0]>>ratio[1]>>ratio[2];
+                if(!file || ratio!=expected) throw std::invalid_argument("AMR restart refinement ratios differ from checkpoint");
+            }
+        else if(number==2 && m_ratios[0]!=Point::Ones(2))
+            throw std::invalid_argument("Version-one AMR checkpoints require ratio two at the first interface");
+        std::vector<PatchSet> desired(m_ratios.size()+1);
+        for(unsigned l=1;l<unsigned(number);++l)
+        {
+            size_t count;file>>count;
+            const Box patchDomain=m_domains[l].getBlock(0).box().coarsen(m_boxSizes[l]);
+            if(!file || count==0 || count>6*patchDomain.size())
+                throw std::invalid_argument("Invalid AMR checkpoint patch count");
+            for(size_t n=0;n<count;++n)
+            {
+                int block;Point p;file>>block>>p[0]>>p[1]>>p[2];
+                if(!file || block<0 || block>=6 || !patchDomain.containsPoint(p)
+                    || !desired[l].insert({block,p[0],p[1],p[2]}).second)
+                    throw std::invalid_argument("Invalid or duplicate AMR checkpoint patch");
+            }
+            MBDisjointBoxLayout layout(m_domains[l],patchVector(desired[l]),std::vector<Point>(6,m_boxSizes[l]));
+            m_levels.push_back(std::make_unique<GridLevel>(layout,l,l<m_ratios.size(),m_ratios[l-1]));
+        }
+        auto nested=desired;enforceNesting(nested);
+        if(nested!=desired) throw std::invalid_argument("AMR checkpoint hierarchy is not properly nested");
+        rebuildRegisters();
+        std::string prefix=filename;
+        if(prefix.size()<4 || prefix.substr(prefix.size()-4)!=".amr")
+            throw std::invalid_argument("restart_file must name the .amr checkpoint manifest");
+        prefix.resize(prefix.size()-4);
+        HDF5Handler h5;
+        for(unsigned l=0;l<numLevels();++l)
+        {
+            h5.readMBLevel(level(l).state,prefix+"_L"+std::to_string(l));
+            if(!OP::validConservedState(level(l).state)) throw std::runtime_error("Invalid AMR restart state");
+        }
+    }
+
+    static std::vector<int> ratioList(std::string text,unsigned count,const char* name)
+    {
+        std::replace(text.begin(),text.end(),',',' ');
+        std::istringstream input(text);std::vector<int> values;std::string word;
+        while(input>>word)
+        {
+            size_t used=0;long long value;
+            try {value=std::stoll(word,&used);} catch(...) {throw std::invalid_argument(std::string(name)+" requires positive integer ratios");}
+            if(used!=word.size() || value<1 || value>std::numeric_limits<int>::max())
+                throw std::invalid_argument(std::string(name)+" requires positive integer ratios");
+            values.push_back(int(value));
+        }
+        if(values.empty() || (values.size()!=1 && values.size()!=count))
+            throw std::invalid_argument(std::string(name)+" needs one ratio or one ratio per fine level");
+        return values;
+    }
+
+    void configureHierarchy()
+    {
+        const unsigned maximum=ParseInputs::get_amr_max_level();
+        const auto radial=ratioList(ParseInputs::get_amr_ref_ratio_rad(),maximum,"amr_ref_ratio_rad");
+        const auto angular=ratioList(ParseInputs::get_amr_ref_ratio_nonrad(),maximum,"amr_ref_ratio_nonrad");
+        m_domains.push_back(m_domain);m_boxSizes.push_back(m_boxSize);m_cumulative.push_back(Point::Ones());
+        for(unsigned l=0;l<maximum;++l)
+        {
+            Point ratio=Point::Ones(angular[angular.size()==1 ? 0 : l]);
+            ratio[0]=radial[radial.size()==1 ? 0 : l];
+            if(maxRatio(ratio)==1) throw std::invalid_argument("Every AMR interface must refine at least one direction");
+            Point sizes=m_domains.back().getBlock(0).sizes(),box,cumulative=m_cumulative.back();
+            size_t count=1;
+            for(int d=0;d<DIM;++d)
+            {
+                if(sizes[d]>(std::numeric_limits<int>::max()-32)/ratio[d])
+                    throw std::invalid_argument("AMR domain exceeds the integer coordinate range");
+                sizes[d]*=ratio[d];cumulative[d]*=ratio[d];
+                if(count>size_t(std::numeric_limits<std::ptrdiff_t>::max())/6/size_t(sizes[d]))
+                    throw std::invalid_argument("AMR logical domain exceeds the 64-bit indexing range");
+                count*=sizes[d];
+                long long width=static_cast<long long>(m_boxSize[d]/std::gcd(m_boxSize[d],ratio[d]))*ratio[d];
+                if(ratio[d]>1 && width/ratio[d]<2)
+                {
+                    int divisor=2;
+                    while(m_boxSizes.back()[d]%divisor) ++divisor;
+                    width*=divisor;
+                }
+                // Avoid enormous patches when an odd base extent and a large
+                // ratio have a large LCM. Any coarse-patch divisor gives an
+                // aligned tile; prefer one close to the base patch size.
+                const long long refinedParent=static_cast<long long>(m_boxSizes.back()[d])*ratio[d];
+                if(width>2LL*m_boxSize[d] || refinedParent%width)
+                {
+                    const int parentWidth=m_boxSizes.back()[d];
+                    if(refinedParent%width) width=0;
+                    auto consider=[&](int coarseCells)
+                    {
+                        const long long candidate=static_cast<long long>(coarseCells)*ratio[d];
+                        if(candidate<8 || (ratio[d]>1 && coarseCells<2)) return;
+                        if(!width || abs(candidate-m_boxSize[d])<abs(width-m_boxSize[d])) width=candidate;
+                    };
+                    for(int q=1;static_cast<long long>(q)*q<=parentWidth;++q)
+                        if(parentWidth%q==0) {consider(q);consider(parentWidth/q);}
+                }
+                if(width<8 || width>std::numeric_limits<int>::max() || width>sizes[d]
+                    || sizes[d]%width || (static_cast<long long>(m_boxSizes.back()[d])*ratio[d])%width)
+                    throw std::invalid_argument("AMR ratios cannot tile this domain with aligned fine patches");
+                box[d]=int(width);
+                if(sizes[d]/box[d]>(uint64_t(1)<<(64/DIM)))
+                    throw std::invalid_argument("AMR patch coordinates exceed the 64-bit Morton range");
+            }
+            // Native multiblock output packs six panels along the radial index
+            // with one panel-width gap between them.
+            if(sizes[0]>(std::numeric_limits<int>::max()-32)/12)
+                throw std::invalid_argument("AMR radial domain exceeds the mapped-output integer range");
+            m_ratios.push_back(ratio);m_domains.push_back(m_domains.back().refine(ratio));
+            m_boxSizes.push_back(box);m_cumulative.push_back(cumulative);
+        }
+        std::string raw=ParseInputs::get_amr_refine_regions();
+        std::replace(raw.begin(),raw.end(),',',' ');
+        std::istringstream entries(raw);std::string entry;
+        while(std::getline(entries,entry,';'))
+        {
+            if(entry.find_first_not_of(" \t")==std::string::npos) continue;
+            std::istringstream row(entry);std::vector<int> values;std::string token;
+            while(row>>token)
+            {
+                size_t used=0;long long value;
+                try {value=std::stoll(token,&used);} catch(...)
+                {throw std::invalid_argument("AMR region indices must be integers");}
+                if(used!=token.size() || value<std::numeric_limits<int>::min() || value>std::numeric_limits<int>::max())
+                    throw std::invalid_argument("AMR region index exceeds integer range or is not an integer");
+                values.push_back(int(value));
+            }
+            if(!row.eof() || (values.size()!=7 && values.size()!=8))
+                throw std::invalid_argument("AMR regions require [level,]block,ilo,jlo,klo,ihi,jhi,khi");
+            const unsigned shift=values.size()==8 ? 1 : 0;
+            const int target=shift ? values[0] : 1,block=values[shift];
+            if(target<1 || unsigned(target)>maximum || block< -1 || block>=6)
+                throw std::invalid_argument("AMR region level or block is outside the configured hierarchy");
+            Point low,high;
+            for(int d=0;d<DIM;++d) {low[d]=values[shift+1+d];high[d]=values[shift+4+d];}
+            const Box cells(low,high);
+            if(cells.empty() || !m_domains[target-1].getBlock(0).box().containsBox(cells))
+                throw std::invalid_argument("AMR region lies outside its parent-level domain");
+            m_regions.push_back({unsigned(target),block,cells});
+        }
+    }
+
+    std::vector<GridLevel*> levels() const
+    {
+        std::vector<GridLevel*> result;
+        for(const auto& grid : m_levels) result.push_back(grid.get());
+        return result;
+    }
+
+    bool covered(unsigned l,Point p,unsigned block) const
+    {
+        return l+1<numLevels() && level(l+1).layout.find((p*m_ratios[l])/m_boxSizes[l+1],block)
+            !=*level(l+1).layout.end();
+    }
+
+    static PatchKey patchKey(MBPoint patch)
+    {return {int(patch.block),patch.point[0],patch.point[1],patch.point[2]};}
+
+    static std::vector<MBPoint> patchVector(const PatchSet& patches)
+    {
+        std::vector<MBPoint> result;
+        for(auto key : patches) result.emplace_back(Point(key[1],key[2],key[3]),key[0]);
+        return result;
+    }
+
+    static bool samePatches(const PatchSet& patches,const MBDisjointBoxLayout& layout)
+    {
+        if(patches.size()!=layout.numBoxes()) return false;
+        for(auto patch : layout.patches()) if(!patches.count(patchKey(patch))) return false;
+        return true;
+    }
+
+    void initialize(GridLevel& level)
+    {
+        PR_TIMERS("HelioCubed::AMR::initialize");
+        const bool fileBC=ParseInputs::get_init_condition_type()==0;
+        const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+        Level boundary;
+        State unused;
+        if (fileBC)
+        {
+            boundary.define(level.layout,Point::Basis(0)+level.primitive.ghost()[0]*Point(0,1,1));
+            BC_global.BoxData_to_BC(boundary,level.map,0.0);
+        }
+        for (auto index : level.layout)
+        {
+            auto& op=level.op[index];
+            const auto block=level.layout.block(index);
+            const auto dx=op.dx();
+            const Box box=level.volume[index].box();
+            Scalar radius(box); Vector dr(box),area(box);
+            op.radialMetrics(radius,dr,area,level.volume[index],box);
+            auto cart=forall_p<double,DIM,HOST>(f_cubedSphereMap3,box,radius,dx,0.5,0.5,block);
+            State w(box),ju;
+            op.initialize(w,fileBC ? boundary[index] : unused,radius,cart,
+                ParseInputs::get_gamma(),level.layout.domain().getBlock(block).sizes()[0],dx[2],block);
+            op.primToCons(ju,w,level.volume[index],ParseInputs::get_gamma(),dx[2],block);
+            if (magnetic)
+            {
+                State background(box),mapped;
+                w.copyTo(background);
+                forallInPlace([] PROTO_LAMBDA(Var<double,NUMCOMPS,HOST>& state)
+                {state(iRHO)=c_TEST_RHO0;state(iVX)=state(iVY)=state(iVZ)=0;state(iP)=c_TEST_P0;},background);
+                op.primToCons(mapped,background,level.volume[index],ParseInputs::get_gamma(),dx[2],block);
+                for (auto p : level.layout[index])
+                {ju(p,iE)-=mapped(p,iE);for(int d=0;d<DIM;++d) ju(p,iBX+d)-=mapped(p,iBX+d);}
+            }
+            auto det=CubedSphereShell::detA<double,HOST>(level.layout[index],dx[1],0);
+            for (auto p : level.layout[index])
+                for (int c=0;c<NUMCOMPS;++c)
+                    level.state[index](p,c)=ju(p,c)*level.jacobian[index](p)/(level.volume[index](p)*det(p));
+        }
+    }
+
+    void prepare(GridLevel& level,const Level& state,double time,GridLevel* parent=nullptr)
+    {
+        PR_TIMERS("HelioCubed::AMR::prepare");
+        OP::GeometryScope geometry(level.geometry);
+        level.timeInterpolated=false;
+        level.preparedState=&state;
+        if (parent)
+        {
+            // Integrate a tensor quadratic over each fine cell. For offset x
+            // from its parent's center and ratio r, q=x*x+(1/r^2-1)/12 and
+            // the weights are ((q-x)/2,1-q,(q+x)/2). This reduces exactly to
+            // (-s/8,1,s/8) at ratio two and identity in unrefined directions.
+            // Interpolate JU and J together before recovering primitives.
+            MBLevelBoxData<double,NUMCOMPS+1,HOST> mapped(parent->layout,amrPatchGhosts(Point::Ones(4)));
+            const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+            const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
+            const double gamma=ParseInputs::get_gamma();
+            PROTO_ASSERT(parent->preparedState,"Coarse AMR stage was not prepared");
+            for(auto index : parent->layout)
+            {
+                auto& out=mapped[index];
+                const auto& w=parent->primitive[index];
+                const auto& jacobian=parent->jacobian[index];
+                const auto& state=(*parent->preparedState)[index];
+                const Box valid=parent->layout[index];
+                for(auto p : out.box())
+                {
+                    const double j=jacobian(p);
+                    double ke=0,me=0;
+                    out(p,NUMCOMPS)=j;
+                    out(p,iRHO)=j*w(p,iRHO);
+                    for(int d=0;d<DIM;++d)
+                    {
+                        out(p,iMOMX+d)=j*w(p,iRHO)*w(p,iVX+d);
+                        out(p,iBX+d)=j*w(p,iBX+d);
+                        ke+=0.5*w(p,iRHO)*w(p,iVX+d)*w(p,iVX+d);
+                        me+=w(p,iBX+d)*w(p,iBX+d)/(8*M_PI);
+                    }
+                    out(p,iE)=j*((w(p,iP)-(magnetic ? c_TEST_P0 : 0))/(gamma-1)
+                        +ke+me+b0*w(p,iBX)/(4*M_PI));
+                    if(valid.containsPoint(p))
+                    {
+                        out(p,NUMCOMPS)=jacobian(p);
+                        for(int c=0;c<NUMCOMPS;++c) out(p,c)=state(p,c);
+                    }
+                }
+            }
+            const Point ratio=level.ratio;
+            const auto cfLayout=level.layout.coarsen(ratio);
+            Point sourceGhost;
+            for(int d=0;d<DIM;++d) sourceGhost[d]=std::max(4,(level.donor.ghost()[0][d]+ratio[d]-1)/ratio[d]+1);
+            MBLevelBoxData<double,NUMCOMPS+1,HOST> source(cfLayout,amrPatchGhosts(sourceGhost));
+            source.setVal(std::numeric_limits<double>::quiet_NaN());
+            mapped.copyToFull(source);
+            level.donor.setVal(0);
+            for (auto index : level.layout)
+            {
+                const auto& src=source[index];
+                auto& out=level.donor[index];
+                const Box owned=level.layout[index];
+                for (auto p : out.box())
+                {
+                    if(owned.containsPoint(p)) continue;
+                    // Floor division is required for physical ghost indices.
+                    Point q;double weights[DIM][3];
+                    for(int d=0;d<DIM;++d)
+                    {
+                        q[d]=int(floor(double(p[d])/ratio[d]));
+                        const double x=(p[d]+0.5)/ratio[d]-(q[d]+0.5);
+                        const double quadratic=x*x+(1.0/(double(ratio[d])*ratio[d])-1)/12;
+                        weights[d][0]=0.5*(quadratic-x);
+                        weights[d][1]=1-quadratic;
+                        weights[d][2]=0.5*(quadratic+x);
+                    }
+                    // Extra angular donors on an unrefined angular grid may
+                    // extend beyond the parent's panel ghosts. Interpolation
+                    // there is enabled only for stencils with owned donors;
+                    // the subsequent exchange supplies those values.
+                    if(!std::isfinite(src(q,NUMCOMPS))) continue;
+                    LocalFaceState<double> u,w;
+                    for(int c=0;c<NUMCOMPS;++c) u(c)=0;
+                    double j=0;
+                    for(auto offset : Box::Kernel(1))
+                    {
+                        double weight=1;
+                        for(int d=0;d<DIM;++d) weight*=weights[d][offset[d]+1];
+                        if(weight==0) continue;
+                        j+=weight*src(q+offset,NUMCOMPS);
+                        for(int c=0;c<NUMCOMPS;++c) u(c)+=weight*src(q+offset,c);
+                    }
+                    bool valid=j>0 && std::isfinite(j);
+                    for(int c=0;c<NUMCOMPS;++c) {u(c)/=j;valid&=std::isfinite(u(c));}
+                    double thermal=u(iE)+(magnetic ? c_TEST_P0/(gamma-1) : 0);
+                    if(u(iRHO)>0)
+                        for(int d=0;d<DIM;++d) thermal-=0.5*u(iMOMX+d)*u(iMOMX+d)/u(iRHO)+u(iBX+d)*u(iBX+d)/(8*M_PI);
+                    thermal-=b0*u(iBX)/(4*M_PI);
+                    valid&=u(iRHO)>=RHO00 && thermal>=0 && std::isfinite(thermal);
+                    if(!valid) for(int c=0;c<NUMCOMPS;++c) u(c)=src(q,c)/src(q,NUMCOMPS);
+                    cartesianPrimitiveFromConserved(w,u,1.0,gamma,magnetic,b0);
+                    for(int c=0;c<NUMCOMPS;++c) out(p,c)=w(c);
+                }
+            }
+        }
+        else for (auto index : level.layout) level.donor[index].setVal(0);
+        const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+        for (auto index : level.layout)
+            forallInPlace([] PROTO_LAMBDA(Var<double,NUMCOMPS,HOST>& out,
+                const Var<double,NUMCOMPS,HOST>& in,const Var<double,1,HOST>& j,
+                double gamma,bool magnetic,double b0)
+            {cartesianPrimitiveFromConserved(out,in,1/j(0),gamma,magnetic,b0);},
+                level.layout[index],level.donor[index],state[index],level.jacobian[index],
+                ParseInputs::get_gamma(),magnetic,testProblemBackgroundBx(ParseInputs::get_init_condition_type()));
+        level.donor.exchange();
+        for (auto index : level.layout) level.donor[index].copyTo(level.primitive[index]);
+        level.interp.apply(level.primitive,level.donor);
+        for (auto index : level.layout)
+            forallInPlace([] PROTO_LAMBDA(Var<double,NUMCOMPS,HOST>& w)
+            {w(iRHO)=std::max(w(iRHO),double(RHO00));w(iP)=std::max(w(iP),0.0);},level.primitive[index]);
+        OP::fillRadialPrimitiveBoundaries(level.primitive,level.volume,time);
+    }
+
+    void evaluate(GridLevel& level)
+    {
+        PR_TIMERS("HelioCubed::AMR::evaluate");
+        level.rhs.setVal(0);
+        level.panelFlux.clear();
+        unsigned local=0;
+        for (auto index : level.layout)
+        {
+            auto& op=level.op[index];
+            if (ParseInputs::get_Sun_gravity()) op.gravitySecondOrderPrimitives(level.rhs[index],level.primitive[index]);
+            op(level.rhs[index],*level.flux[local],level.primitive[index],1.0,1.0,-1,true);
+            level.panelFlux.increment(*level.flux[local],index,1.0);
+            ++local;
+        }
+        level.panelFlux.reflux(level.rhs);
+        // Refluxing the RHS is only half of panel reconciliation: the AMR
+        // register must also see the common flux, including at a panel/CF edge.
+        local=0;
+        for (auto index : level.layout)
+        {
+            for (const auto& boundary : level.panelFlux.bounds(index))
+            {
+                if (boundary.localDir.codim()!=1) continue;
+                const auto face=boundary.localFace();
+                const auto inverse=boundary.adjToLocal.inverse();
+                const int sign=inverse(Point::Basis(face.dir)).dot(Point::Ones());
+                const Point adjacentNormal=-inverse(Point::Basis(face.dir,face.side));
+                const int dp=adjacentNormal.dot(adjacentNormal*adjacentNormal);
+                const Point shift=dp*(2*face.side-1)==1 ? Point::Basis(face.dir) : Point::Zeros();
+                const Box box=level.layout[index].extrude(face.dir).face(face.dir,face.side)&boundary.localData->box();
+                for (auto p : box) for(int c=0;c<NUMCOMPS;++c)
+                    (*level.flux[local])[face.dir](p,c)=0.5*((*boundary.localData)(p,c)+sign*(*boundary.adjData)(p-shift,c));
+            }
+            ++local;
+        }
+    }
+
+    PatchSet gatherPatches(PatchSet local) const
+    {
+#ifdef PR_MPI
+        if(local.size()>size_t(std::numeric_limits<int>::max()/4))
+            throw std::runtime_error("Too many local AMR tags for an MPI message");
+        std::vector<int> send;
+        for(auto key : local) send.insert(send.end(),key.begin(),key.end());
+        const int count=send.size();
+        std::vector<int> counts(numProc()),offsets(numProc());
+        MPI_Allgather(&count,1,MPI_INT,counts.data(),1,MPI_INT,MPI_COMM_WORLD);
+        size_t total=0;
+        for(unsigned p=0;p<counts.size();++p)
+        {
+            if(total+counts[p]>size_t(std::numeric_limits<int>::max()))
+                throw std::runtime_error("Too many global AMR tags for an MPI message");
+            offsets[p]=total;total+=counts[p];
+        }
+        std::vector<int> receive(total);
+        MPI_Allgatherv(send.data(),count,MPI_INT,receive.data(),counts.data(),offsets.data(),MPI_INT,MPI_COMM_WORLD);
+        local.clear();
+        for(size_t n=0;n<total;n+=4) local.insert({receive[n],receive[n+1],receive[n+2],receive[n+3]});
+#endif
+        return local;
+    }
+
+    PatchSet taggedPatches(unsigned parent)
+    {
+        PR_TIMERS("HelioCubed::AMR::tag");
+        PatchSet patches;
+        const auto ratio=m_ratios[parent],boxSize=m_boxSizes[parent+1];
+        const Box domain=m_domains[parent].getBlock(0).box();
+        auto tag=[&](const Box& cells,unsigned block)
+        {
+            const Box region=cells.grow(ParseInputs::get_amr_buffer())&domain;
+            if(region.empty()) return;
+            for(auto patch : region.refine(ratio).coarsen(boxSize)) patches.insert({int(block),patch[0],patch[1],patch[2]});
+        };
+        if(parent<numLevels() && ParseInputs::get_amr_threshold()>=0)
+        {
+            const auto& grid=level(parent);
+            for(auto index : grid.layout) for(auto p : grid.layout[index])
+            {
+                const auto& w=grid.primitive[index];double indicator=0;
+                for(int c : {iRHO,iP}) for(int d=0;d<DIM;++d)
+                {
+                    const double low=w(p-Point::Basis(d),c),high=w(p+Point::Basis(d),c);
+                    const double scale=std::max({abs(low),abs(high),abs(w(p,c)),1e-100});
+                    indicator=std::max(indicator,abs(high-low)/scale);
+                }
+                if(indicator>ParseInputs::get_amr_threshold()) tag(Box(p,p),grid.layout.block(index));
+            }
+        }
+        if(procID()==0) for(const auto& region : m_regions)
+            if(region.level==parent+1)
+                for(unsigned block=0;block<6;++block)
+                    if(region.block<0 || unsigned(region.block)==block) tag(region.cells,block);
+        return gatherPatches(std::move(patches));
+    }
+
+    static void insertMappedPatch(PatchSet& output,MBPoint patch,const MBProblemDomain& domain)
+    {
+        // Include both paths around a panel corner. Crossing angular faces can
+        // lead to different valid neighbors there; all are legitimate donors.
+        std::vector<MBPoint> pending{patch};PatchSet visited;
+        while(!pending.empty())
+        {
+            const auto current=pending.back();pending.pop_back();
+            if(!visited.insert(patchKey(current)).second) continue;
+            const Box bounds=domain.getBlock(current.block).box();
+            if(current.point[0]<bounds.low()[0] || current.point[0]>bounds.high()[0]) continue;
+            if(bounds.containsPoint(current.point)) {output.insert(patchKey(current));continue;}
+            for(int d=1;d<DIM;++d)
+            {
+                const int side=current.point[d]<bounds.low()[d] ? -1 : current.point[d]>bounds.high()[d] ? 1 : 0;
+                if(!side) continue;
+                for(const auto& face : domain.boundaries(current.block,Point::Basis(d,side)))
+                    pending.emplace_back(domain.convertPoint(current.point,current.block,face.dstBlock,PR_CELL),face.dstBlock);
+            }
+        }
+    }
+
+    void enforceNesting(std::vector<PatchSet>& desired) const
+    {
+        for(unsigned child=m_ratios.size();child>1;--child)
+        {
+            const unsigned parent=child-1;
+            const auto ratio=m_ratios[parent];
+            const int ghost=child==m_ratios.size() ? 2 : 4;
+            Point support;
+            for(int d=0;d<DIM;++d)
+            {
+                const int donors=ghost+(d ? 2 : 0);
+                support[d]=ratio[d]==1 ? donors : (donors+ratio[d]-1)/ratio[d]+1;
+            }
+            const auto patchDomain=m_domains[parent].coarsen(m_boxSizes[parent]);
+            for(auto key : desired[child])
+            {
+                const Box footprint=Box(Point(key[1],key[2],key[3]),Point(key[1],key[2],key[3]))
+                    .refine(m_boxSizes[child]).coarsen(ratio).grow(support).coarsen(m_boxSizes[parent]);
+                for(auto patch : footprint) insertMappedPatch(desired[parent],MBPoint(patch,key[0]),patchDomain);
+            }
+        }
+    }
+
+    void rebuildRegisters()
+    {
+        m_registers.clear();
+        for(unsigned l=0;l+1<numLevels();++l)
+        {
+            auto dx=level(l).layout.dx(0);
+            m_registers.push_back(std::make_unique<Register>(level(l).layout,level(l+1).layout,m_ratios[l],dx));
+        }
+        m_effectiveDt.clear();
+    }
+
+    bool realizeHierarchy(const std::vector<PatchSet>& desired,double time,bool initial)
+    {
+        bool changed=false;
+        for(unsigned l=1;l<desired.size();++l)
+        {
+            if(desired[l].empty())
+            {
+                if(numLevels()>l) {m_registers.clear();m_levels.resize(l);changed=true;}
+                break;
+            }
+            if(l<numLevels() && samePatches(desired[l],level(l).layout)) continue;
+            m_registers.clear();
+            MBDisjointBoxLayout layout(m_domains[l],patchVector(desired[l]),std::vector<Point>(6,m_boxSizes[l]));
+            auto replacement=std::make_unique<GridLevel>(layout,l,l<m_ratios.size(),m_ratios[l-1]);
+            if(initial) initialize(*replacement);
+            else
+            {
+                // Ancestor data must already be prepared at this synchronized
+                // time, including when an intermediate sparse level changes.
+                for(unsigned p=0;p<l;++p)
+                    prepare(level(p),level(p).state,time,p ? &level(p-1) : nullptr);
+                prolong(*replacement,level(l-1),m_ratios[l-1]);
+            }
+            if(l<numLevels())
+            {
+                level(l).state.copyTo(replacement->state);
+                m_levels[l]=std::move(replacement);
+            }
+            else m_levels.push_back(std::move(replacement));
+            changed=true;
+        }
+        if(changed) rebuildRegisters();
+        return changed;
+    }
+
+    void prolong(GridLevel& target,GridLevel& parentGrid,Point ratio)
+    {
+        PR_TIMERS("HelioCubed::AMR::prolong");
+        // Prolong physical Cartesian conserved values, then subtract the
+        // volume-weighted child offset. This conserves every parent integral
+        // and preserves constant physical states on the mapped grid.
+        Level physical(parentGrid.layout,amrPatchGhosts(Point::Ones(2)));
+        for (auto index : parentGrid.layout)
+            for(auto p : physical[index].box())
+            {
+                const auto& w=parentGrid.primitive[index];
+                double rho=w(p,iRHO),ke=0,me=0;
+                const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+                const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
+                physical[index](p,iRHO)=rho;
+                for(int d=0;d<DIM;++d)
+                {
+                    physical[index](p,iMOMX+d)=rho*w(p,iVX+d);
+                    physical[index](p,iBX+d)=w(p,iBX+d);
+                    ke+=0.5*rho*w(p,iVX+d)*w(p,iVX+d);
+                    me+=w(p,iBX+d)*w(p,iBX+d)/(8*M_PI);
+                }
+                physical[index](p,iE)=(w(p,iP)-(magnetic ? c_TEST_P0 : 0))/(ParseInputs::get_gamma()-1)+ke+me+b0*w(p,iBX)/(4*M_PI);
+            }
+        // Owned values come directly from JU; primitive floors must never
+        // change the conserved parent that is being split.
+        for(auto index : parentGrid.layout) for(auto p : parentGrid.layout[index])
+            for(int c=0;c<NUMCOMPS;++c) physical[index](p,c)=parentGrid.state[index](p,c)/parentGrid.jacobian[index](p);
+        const auto cfLayout=target.layout.coarsen(ratio);
+        Level source(cfLayout,amrPatchGhosts(Point::Ones(1)));
+        physical.copyToFull(source);
+        ScalarLevel parentJacobian(cfLayout,Point::Zeros());
+        parentGrid.jacobian.copyTo(parentJacobian);
+        int invalid=0;
+        for(auto index : target.layout)
+        {
+            for(auto parent : cfLayout[index])
+            {
+                const Box children=Box(parent,parent).refine(ratio);
+                Array<double,DIM> mean;mean.fill(0);double sumJ=0;
+                for(auto p : children)
+                {
+                    const double j=target.jacobian[index](p);sumJ+=j;
+                    for(int d=0;d<DIM;++d) mean[d]+=j*((p[d]+0.5)/ratio[d]-(parent[d]+0.5));
+                }
+                for(int d=0;d<DIM;++d) mean[d]/=sumJ;
+                // Remove the floating-point nonadditivity of independently
+                // evaluated analytic volumes, including on very fine grids.
+                const double normalization=double(ratio[0])*ratio[1]*ratio[2]*parentJacobian[index](parent)/sumJ;
+                for(int c=0;c<NUMCOMPS;++c)
+                {
+                    double slope[DIM];
+                    for(int d=0;d<DIM;++d) slope[d]=amrSlope(source[index](parent-Point::Basis(d),c),
+                        source[index](parent,c),source[index](parent+Point::Basis(d),c));
+                    for(auto p : children)
+                    {
+                        double u=normalization*source[index](parent,c);
+                        for(int d=0;d<DIM;++d) u+=slope[d]*(((p[d]+0.5)/ratio[d]-(parent[d]+0.5))-mean[d]);
+                        target.state[index](p,c)=target.jacobian[index](p)*u;
+                    }
+                }
+                const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+                const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
+                auto admissible=[&](double theta)
+                {
+                    for(auto p : children)
+                    {
+                        double u[NUMCOMPS];
+                        for(int c=0;c<NUMCOMPS;++c) u[c]=normalization*source[index](parent,c)+theta*
+                            (target.state[index](p,c)/target.jacobian[index](p)-normalization*source[index](parent,c));
+                        if(!(u[iRHO]>=RHO00)) return false;
+                        double thermal=u[iE]+(magnetic ? c_TEST_P0/(ParseInputs::get_gamma()-1) : 0);
+                        for(int d=0;d<DIM;++d) thermal-=0.5*u[iMOMX+d]*u[iMOMX+d]/u[iRHO]+u[iBX+d]*u[iBX+d]/(8*M_PI);
+                        thermal-=b0*u[iBX]/(4*M_PI);
+                        if(!std::isfinite(thermal) || thermal<0) return false;
+                    }
+                    return true;
+                };
+                if(!admissible(1))
+                {
+                    if(!admissible(0)) {invalid=1;continue;}
+                    double lo=0,hi=1;
+                    for(int n=0;n<48;++n)
+                    {const double theta=0.5*(lo+hi);if(admissible(theta)) lo=theta;else hi=theta;}
+                    for(auto p : children) for(int c=0;c<NUMCOMPS;++c)
+                    {
+                        const double j=target.jacobian[index](p),center=normalization*source[index](parent,c);
+                        target.state[index](p,c)=j*(center+lo*(target.state[index](p,c)/j-center));
+                    }
+                }
+            }
+        }
+#ifdef PR_MPI
+        MPI_Allreduce(MPI_IN_PLACE,&invalid,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
+#endif
+        if(invalid) throw std::runtime_error("Cannot conservatively refine a parent with negative internal energy");
+    }
+};
+
+inline void runCubedSphereAMR()
+{
+    using OP=CubedSphereAMR::OP;
+    if(ParseInputs::get_spatial_order()!=2 || ParseInputs::get_temporal_order()!=2
+        || !OP::usesSecondOrderPrimitives() || ParseInputs::get_boundary_reflux()!=1)
+        throw std::invalid_argument("AMR requires spatial_order=2, temporal_order=2, no artificial viscosity, and boundary_reflux=1");
+    if(ParseInputs::get_convTestType()!=0 || ParseInputs::get_CME_type()!=0 || ParseInputs::get_num_probes()!=0
+        || ParseInputs::get_output_divB()!=0 || ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
+        || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R()
+        || ParseInputs::get_P_floor_cadence()<=ParseInputs::get_max_iter())
+        throw std::invalid_argument("Initial AMR driver does not yet support convergence mode, CME insertion, probes, slices, pressure-floor events, or divB output");
+    if(ParseInputs::get_write_cadence()<=0 || ParseInputs::get_checkpoint_cadence()<=0
+        || !std::isfinite(ParseInputs::get_write_time_cadence()) || ParseInputs::get_write_time_cadence()<=0
+        || !std::isfinite(ParseInputs::get_CFL()) || ParseInputs::get_CFL()<=0
+        || !std::isfinite(ParseInputs::get_max_time()) || ParseInputs::get_max_time()<0)
+        throw std::invalid_argument("AMR requires positive output cadences/CFL and a finite nonnegative max_time");
+    Point box=Point::Ones(ParseInputs::get_boxSize_nonrad());box[0]=ParseInputs::get_boxSize_rad();
+    Point domain=Point::Ones(ParseInputs::get_domainSize());domain[0]=ParseInputs::get_thickness();
+    for(int d=0;d<DIM;++d)
+        if(domain[d]<12 || box[d]<8 || domain[d]%box[d])
+            throw std::invalid_argument("AMR domain sizes must be at least 12 and divisible by patch sizes of at least 8");
+    CubedSphereAMR simulation(CubedSphereShell::Domain(domain[1],domain[0],0),box,ParseInputs::get_restart_file());
+    double time=simulation.restartTime,dt=simulation.restartDt;
+    const double maximum=ParseInputs::get_max_time();
+    const auto initial=simulation.integral();
+    pout(0)<<"AMR initial mass = "<<std::setprecision(17)<<initial[iRHO]<<std::endl;
+    int writeTrigger=int(floor(time/ParseInputs::get_write_time_cadence()));
+    for(int iteration=simulation.restartIteration+1;iteration<=ParseInputs::get_max_iter() && time<maximum;++iteration)
+    {
+        const auto start=std::chrono::steady_clock::now();
+        dt=std::min(simulation.timestep(),maximum-time);
+        if(!std::isfinite(dt) || !(dt>0) || !(time+dt>time)) throw std::runtime_error("Invalid AMR timestep");
+        simulation.advance(dt,time);
+        time=dt>=maximum-time ? maximum : time+dt;
+        const int cadence=ParseInputs::get_amr_regrid_interval();
+        if(cadence && iteration%cadence==0) simulation.regrid(time);
+        const bool last=iteration==ParseInputs::get_max_iter() || time==maximum;
+        const int nextTrigger=int(floor(time/ParseInputs::get_write_time_cadence()));
+        if(last || iteration%ParseInputs::get_write_cadence()==0 || nextTrigger!=writeTrigger)
+        {simulation.write(iteration,time,dt,false);writeTrigger=nextTrigger;}
+        if(last || iteration%ParseInputs::get_checkpoint_cadence()==0) simulation.write(iteration,time,dt,true);
+        const auto sum=simulation.integral();
+        pout(0)<<"AMR iter = "<<iteration<<" dt = "<<std::setprecision(17)<<dt<<" time = "<<time
+               <<" mass = "<<sum[iRHO]<<" relative_mass_change = "<<(sum[iRHO]-initial[iRHO])/initial[iRHO]
+               <<" mass_balance_error = "<<(sum[iRHO]-initial[iRHO]-simulation.boundaryMass())/initial[iRHO]
+               <<" Time_taken = "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<std::endl;
+    }
+}
+#else
+inline void runCubedSphereAMR()
+{throw std::invalid_argument("Build with PR_AMR to enable cubed-sphere AMR");}
+#endif
+}

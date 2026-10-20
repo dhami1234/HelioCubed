@@ -5,6 +5,7 @@
 #include "MHD_CME.H"
 #include "MHD_CME_Schedule.H"
 #include "MHD_LevelRK.H"
+#include "MHD_AMR.H"
 #include <chrono> // Used by timer
 
 MHDReader BC_global;
@@ -65,6 +66,22 @@ int main(int argc, char *argv[])
   string BC_file = ParseInputs::get_BC_file();
   string restart_file = ParseInputs::get_restart_file();
   if (init_condition_type == 0) BC_global.file_to_BoxData_vec(BC_file);
+  if (ParseInputs::get_amr_max_level())
+  {
+    PR_TIMER_SETFILE("CubedSphere_AMR.time.table");
+    int status=0;
+    try { HelioCubed::runCubedSphereAMR(); }
+    catch (const std::exception& error)
+    {
+      pout(0)<<"Error: "<<error.what()<<endl;
+      status=1;
+    }
+    PR_TIMER_REPORT();
+#ifdef PR_MPI
+    MPI_Finalize();
+#endif
+    return status;
+  }
   
   double probe_cadence = ParseInputs::get_Probe_cadence();
   auto num_probes  = ParseInputs::get_num_probes();

@@ -6,6 +6,7 @@ blis
 blt
 *.hdf5
 *.h5
+*.amr
 *.vtk
 *.d
 *.o

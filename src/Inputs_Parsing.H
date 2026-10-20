@@ -114,6 +114,16 @@ private:
     int radial_refinement = 0; // 0: refine in all directions by 2 for convergence studies;
                            // 1 refine only in radial direction.
     int MBInterp_define;   // old define (0) new define (1)
+    // Second-order AMR. Each ratio list has one value (broadcast) or one per
+    // level interface. Both angular coordinates share the nonradial ratio.
+    int amr_max_level = 0;
+    string amr_ref_ratio_rad = "2";
+    string amr_ref_ratio_nonrad = "2";
+    int amr_subcycling = 1;
+    int amr_regrid_interval = 4;
+    int amr_buffer = 2;
+    double amr_threshold = 0.05;
+    string amr_refine_regions;
     string BC_file;
     int num_probes = 0;                                
     std::vector<std::string> probe_filenames;           
@@ -205,6 +215,14 @@ public:
     static string get_restart_file() {return getInstance().restart_file;}
     static double get_gamma() {return getInstance().gamma;}
     static int get_spatial_order() {return getInstance().spatial_order;}
+    static int get_amr_max_level() {return getInstance().amr_max_level;}
+    static const string& get_amr_ref_ratio_rad() {return getInstance().amr_ref_ratio_rad;}
+    static const string& get_amr_ref_ratio_nonrad() {return getInstance().amr_ref_ratio_nonrad;}
+    static int get_amr_subcycling() {return getInstance().amr_subcycling;}
+    static int get_amr_regrid_interval() {return getInstance().amr_regrid_interval;}
+    static int get_amr_buffer() {return getInstance().amr_buffer;}
+    static double get_amr_threshold() {return getInstance().amr_threshold;}
+    static const string& get_amr_refine_regions() {return getInstance().amr_refine_regions;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
     static bool uses_second_order_limiter()
@@ -302,6 +320,14 @@ public:
         args.add("boundary_reflux", boundary_reflux);
         args.add("radial_refinement", radial_refinement);
         args.add("MBInterp_define", MBInterp_define);
+        args.add("amr_max_level", amr_max_level);
+        args.add("amr_ref_ratio_rad", amr_ref_ratio_rad);
+        args.add("amr_ref_ratio_nonrad", amr_ref_ratio_nonrad);
+        args.add("amr_subcycling", amr_subcycling);
+        args.add("amr_regrid_interval", amr_regrid_interval);
+        args.add("amr_buffer", amr_buffer);
+        args.add("amr_threshold", amr_threshold);
+        args.add("amr_refine_regions", amr_refine_regions);
         args.add("BC_file", BC_file);
         args.add("num_probes", num_probes); 
         constexpr int MAX_PROBES = 32; // or more if needed
@@ -339,6 +365,13 @@ public:
         args.parse(argc, argv);
         if (spatial_order != 2 && spatial_order != 4) {
             throw std::invalid_argument("spatial_order must be 2 or 4.");
+        }
+        if (amr_max_level < 0 || amr_regrid_interval < 0
+            || amr_buffer < 0 || !std::isfinite(amr_threshold)) {
+            throw std::invalid_argument("AMR requires nonnegative max level, regrid interval, and buffer, and a finite threshold.");
+        }
+        if (amr_subcycling != 0 && amr_subcycling != 1) {
+            throw std::invalid_argument("amr_subcycling must be 0 or 1.");
         }
         if (limiter < 0 || limiter > 3) {
             throw std::invalid_argument("limiter must be 0 (unlimited), 1 (O4 limiter; minmod at O2), 2 (minmod), or 3 (MC at O2).");
@@ -465,6 +498,14 @@ public:
         pout(0) << "restart_file: " << restart_file << endl;
         pout(0) << "gamma: " << gamma << endl;
         pout(0) << "spatial_order: " << spatial_order << endl;
+        if (amr_max_level) {
+            pout(0) << "AMR: max level " << amr_max_level << ", radial ratios " << amr_ref_ratio_rad
+                    << ", angular ratios " << amr_ref_ratio_nonrad << ", SSPRK2 with "
+                    << (amr_subcycling ? "CFL-based time subcycling" : "a common timestep")
+                    << "; regrid interval "
+                    << amr_regrid_interval << ", buffer " << amr_buffer
+                    << ", relative density/pressure gradient threshold " << amr_threshold << endl;
+        }
         if (spatial_order == 2) {
             const char* name = limiter == 0 ? "unlimited" : limiter == 3 ? "MC (monotonized central)" : "minmod";
             pout(0) << "Spatial reconstruction: Cartesian PLM with " << name

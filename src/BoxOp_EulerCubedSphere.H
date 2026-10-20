@@ -315,10 +315,35 @@ public:
     std::unique_ptr<OpT> op;
   };
 
+  // An AMR hierarchy owns several geometries simultaneously. Bind its level
+  // while using shared boundary/CFL helpers, without replacing the single-
+  // level driver's retained geometry or rebuilding maps at every stage.
+  static LevelGeometry*& boundLevelGeometry()
+  {
+    static thread_local LevelGeometry* bound = nullptr;
+    return bound;
+  }
+  class GeometryScope
+  {
+    LevelGeometry* previous;
+  public:
+    explicit GeometryScope(LevelGeometry& geometry)
+      :previous(boundLevelGeometry()) {boundLevelGeometry()=&geometry;}
+    ~GeometryScope() {boundLevelGeometry()=previous;}
+    GeometryScope(const GeometryScope&)=delete;
+    GeometryScope& operator=(const GeometryScope&)=delete;
+  };
+
   // All stages use the same immutable grid geometry. The partition remains
   // owned by the cached map; its identity also detects a new convergence grid.
   static LevelGeometry& levelGeometry(const LayoutT& layout)
   {
+    if (auto* bound=boundLevelGeometry())
+    {
+      PROTO_ASSERT(&bound->map->layout().partition()==&layout.partition(),
+          "The bound AMR geometry does not match the requested level");
+      return *bound;
+    }
     static LevelGeometry cached;
     if (!cached.map || &cached.map->layout().partition() != &layout.partition())
     {
