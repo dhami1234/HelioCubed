@@ -500,7 +500,7 @@ public:
         pout(0) << "spatial_order: " << spatial_order << endl;
         if (amr_max_level) {
             pout(0) << "AMR: max level " << amr_max_level << ", radial ratios " << amr_ref_ratio_rad
-                    << ", angular ratios " << amr_ref_ratio_nonrad << ", SSPRK2 with "
+                    << ", angular ratios " << amr_ref_ratio_nonrad << (temporal_order==4 ? ", RK4 with " : temporal_order==3 ? ", RK3 with " : ", SSPRK2 with ")
                     << (amr_subcycling ? "CFL-based time subcycling" : "a common timestep")
                     << "; regrid interval "
                     << amr_regrid_interval << ", buffer " << amr_buffer

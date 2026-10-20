@@ -1,6 +1,7 @@
 #pragma once
 
 #include "BoxOp_EulerCubedSphere.H"
+#include "MHD_AMRInterpolation.H"
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -13,8 +14,10 @@ namespace HelioCubed
 #ifdef PR_AMR
 // Multiblock flux reconciliation and mapped conservative transfer follow
 // McCorquodale et al., CAMCoS 10 (2015), doi:10.2140/camcos.2015.10.121.
-// This implementation uses second-order reconstruction and SSPRK2, with
-// optional recursive time subcycling and conservative synchronization.
+// The O2 path uses Cartesian PLM and SSPRK2. The O4 path uses the existing
+// fourth-order mapped flux operators and conservative quartic transfers.
+// Time stepping supports SSPRK2, Kutta RK3, and classical RK4, with
+// conservative multirate extrapolation at temporal orders three and four.
 // Cell volumes must be additive across refinement levels. Split the spherical
 // quadrilateral into two triangles; this avoids subtracting nearly equal
 // corner angles, which loses accuracy on fine meshes.
@@ -59,6 +62,7 @@ public:
     using Level=MBLevelBoxData<double,NUMCOMPS,HOST>;
     using ScalarLevel=MBLevelBoxData<double,1,HOST>;
     using Register=MBLevelFluxRegister<double,NUMCOMPS,HOST>;
+    static bool fourthOrder() {return ParseInputs::get_spatial_order()==4;}
     struct GridLevel
     {
         unsigned number;
@@ -67,10 +71,17 @@ public:
         OP::LevelGeometry geometry;
         OP::MapT& map;
         OP::OpT& op;
+        // state/stage store mapped Cartesian conserved averages <JU>.
+        // The O2 operator consumes Cartesian primitives; the O4 operators
+        // consume native-basis conserved averages and reconstruct W internally.
         Level state,stage,primitive,donor,rhs,first;
         const Level* preparedState=nullptr;
         std::unique_ptr<Level> old,predictor;
+        std::unique_ptr<Level> cartesian; // O4 Cartesian conserved averages <U>.
+        std::array<std::unique_ptr<Level>,4> rk;
         double startTime=0,stepDt=0,preparedTime=0;
+        double preparedChildStart=0,preparedChildDt=0;
+        int preparedChildStage=-1;
         int substeps=1;
         bool timeInterpolated=false;
         ScalarLevel volume,jacobian;
@@ -81,16 +92,18 @@ public:
         GridLevel(const MBDisjointBoxLayout& grid,unsigned level,bool parent,Point refinement=Point::Ones(2))
             :number(level),ratio(refinement),layout(grid),geometry(makeGeometry(grid)),map(*geometry.map),op(*geometry.op),
              state(grid,amrPatchGhosts(OP::ghost())),stage(grid,amrPatchGhosts(OP::ghost())),
-             primitive(grid,amrPatchGhosts(Point::Ones(level && !parent ? 2 : 4))),
-             donor(grid,primitive.ghost()[0]+Point(0,2,2)),
+             primitive(grid,amrPatchGhosts(fourthOrder() ? OP::ghost()+Point::Ones(ParseInputs::get_seam_pressure_correction()) : Point::Ones(level && !parent ? 2 : 4))),
+             donor(grid,primitive.ghost()[0]+(fourthOrder() ? Point::Ones() : Point::Zeros())+Point(0,2,2)),
              rhs(grid,Point::Zeros()),first(grid,Point::Zeros()),
              volume(grid,amrPatchGhosts(primitive.ghost()[0]+Point::Basis(0,2))),
-             jacobian(grid,amrPatchGhosts(level && !parent ? Point::Zeros() : Point::Ones(4))),
+             jacobian(grid,amrPatchGhosts(fourthOrder() ? Point::Ones(5) : level && !parent ? Point::Zeros() : Point::Ones(4))),
              panelFlux(grid,1,Point::Zeros())
         {
             PR_TIMERS("HelioCubed::AMR::GridLevel");
-            interp=level ? fineInterpolation(grid,donor,primitive.ghost()[0],refinement[1]>1 || !parent)
-                        : CubedSphereShell::MHDInterpOp<HOST>(grid,Point(4,6,6),4);
+            const Point interpolationGhost=primitive.ghost()[0]+(fourthOrder() ? Point::Ones() : Point::Zeros());
+            if(fourthOrder()) cartesian=std::make_unique<Level>(grid,amrPatchGhosts(interpolationGhost));
+            interp=level ? fineInterpolation(grid,donor,interpolationGhost,refinement[1]>1 || (!parent && !fourthOrder()))
+                        : CubedSphereShell::MHDInterpOp<HOST>(grid,donor.ghost()[0],4);
             for (auto index : layout)
             {
                 const Box box=volume[index].box();
@@ -123,8 +136,8 @@ public:
         {
             PR_TIMERS("HelioCubed::AMR::fineInterpolation");
             // At a panel/refinement corner the full fine stencil may not
-            // exist. Retain the second-order coarse fill there. Use the normal
-            // cubed-sphere interpolation wherever its fine donors are present.
+            // exist. Retain the coarse fill there, at the selected spatial
+            // order. Use panel interpolation where its fine donors exist.
             using PolarMap=MBLevelMap<MBMap_CubedSphereShellPolar<HOST>,HOST>;
             std::vector<std::unique_ptr<PolarMap>> maps;
             for(unsigned block=0;block<6;++block)
@@ -219,10 +232,23 @@ public:
     {
         PR_TIMERS("HelioCubed::AMR::advance");
         if(m_effectiveDt.size()!=numLevels()) timestep();
+        const int order=ParseInputs::get_temporal_order();
         bool subcycle=false;
         if(ParseInputs::get_amr_subcycling())
             for(unsigned l=1;l<numLevels();++l)
                 if(dt>m_effectiveDt.at(l)) {subcycle=true;break;}
+        if(order>=3)
+        {
+            if(subcycle)
+            {
+                if(order==3) {PR_TIMERS("HelioCubed::AMR::ThirdOrderSubcycled");advanceExtrapolated(dt,time,3);}
+                else {PR_TIMERS("HelioCubed::AMR::FourthOrderSubcycled");advanceExtrapolated(dt,time,4);}
+            }
+            else advanceRungeKuttaSynchronous(dt,time,order);
+            for(auto* grid : levels())
+                if(!OP::validConservedState(grid->state)) throw std::runtime_error("Invalid conserved AMR state after Runge-Kutta step");
+            return;
+        }
         if(subcycle)
         {
             beginStep(0,dt,time);
@@ -241,6 +267,11 @@ public:
         for(auto* grid : levels())
         {
             OP::GeometryScope geometry(grid->geometry);
+            if(fourthOrder())
+            {
+                m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFL(grid->state,grid->interp,grid->volume);
+                continue;
+            }
             Level cflState(grid->layout,Point::Zeros());
             for(auto index : grid->layout)
             {
@@ -356,13 +387,17 @@ public:
                 auto& plot=*storage.back();
                 const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
                 for (auto index : level->layout)
+                {
+                    State fourth;
+                    if(fourthOrder()) fourth=fourthOrderPrimitives(*level,index);
                     for (auto p : level->layout[index])
                     {
-                        for (int c=0;c<NUMCOMPS;++c) plot[index](p,c)=level->primitive[index](p,c);
+                        for (int c=0;c<NUMCOMPS;++c) plot[index](p,c)=fourthOrder() ? fourth(p,c) : level->primitive[index](p,c);
                         if (magnetic) plot[index](p,iBX)+=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
                         plot[index](p,NUMCOMPS)=covered(level->number,p,level->layout.block(index)) ? 0 : 1;
                         plot[index](p,NUMCOMPS+1)=number;
                     }
+                }
                 output.push_back(&plot);
                 maps.push_back(&level->map);
                 ++number;
@@ -422,6 +457,12 @@ public:
     double restartTime=0,restartDt=0;
 
 private:
+    void prepareFourthOrder(GridLevel&,const Level&,double,GridLevel*,bool=false);
+    void prolongFourthOrder(GridLevel&,GridLevel&,Point);
+    void advanceRungeKuttaSynchronous(double,double,int);
+    void advanceExtrapolated(double,double,int);
+    void prepareExtrapolatedRK2Stage(unsigned,double,double,int);
+    State fourthOrderPrimitives(const GridLevel&,const MBIndex&) const;
     using PatchKey=std::array<int,4>;
     struct PatchLess
     {
@@ -438,6 +479,7 @@ private:
     std::vector<std::unique_ptr<Register>> m_registers;
     std::vector<Region> m_regions;
     std::vector<double> m_effectiveDt;
+    std::vector<int> m_extrapolationSubsteps;
     std::vector<std::pair<std::string,unsigned>> m_checkpoints;
     double m_localBoundaryMass=0;
     mutable double m_boundaryMass=0;
@@ -504,8 +546,13 @@ private:
     {
         auto& grid=level(l);
         grid.state.copyTo(grid.stage);
-        if(stage) grid.stage.increment(grid.predictor ? *grid.predictor : grid.first,grid.stepDt);
-        if(l) prepareAtTime(l-1,time);
+        if(stage) grid.stage.increment(l+1<numLevels() ? *grid.predictor : grid.first,grid.stepDt);
+        if(l)
+        {
+            if(!m_extrapolationSubsteps.empty())
+                prepareExtrapolatedRK2Stage(l-1,grid.startTime,grid.stepDt,stage);
+            else prepareAtTime(l-1,time);
+        }
         prepare(grid,grid.stage,time,l ? &level(l-1) : nullptr);
         evaluate(grid);
         accumulateFlux(grid,0.5*grid.stepDt);
@@ -515,6 +562,7 @@ private:
             grid.rhs.copyTo(grid.first);
             // Children can reuse this preparation at the start of the step.
             grid.preparedTime=time;grid.timeInterpolated=true;
+            grid.preparedChildStage=-1;
         }
     }
 
@@ -535,7 +583,7 @@ private:
             const double roundoff=32*std::numeric_limits<double>::epsilon()*std::max(1.0,fraction);
             if(!std::isfinite(fraction) || fraction>maxRatio(m_ratios[l])+roundoff)
                 throw std::runtime_error("AMR parent timestep exceeds the fine-level CFL bound");
-            grid.substeps=std::max(1,int(ceil(fraction-roundoff)));
+            grid.substeps=m_extrapolationSubsteps.empty() ? std::max(1,int(ceil(fraction-roundoff))) : m_extrapolationSubsteps[l];
         }
         evaluateStage(l,0,time);
         if(l+1<numLevels())
@@ -549,7 +597,7 @@ private:
             auto& reg=*m_registers[l];
             accumulateInterfaceFlux(l,true,0.5*(dt-child.stepDt));
             reg.applyRefluxCorrection(*grid.predictor,2.0/dt);
-            (child.predictor ? *child.predictor : child.first).coarsenTo(*grid.predictor,m_ratios[l]);
+            (l+2<numLevels() ? *child.predictor : child.first).coarsenTo(*grid.predictor,m_ratios[l]);
             reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
             accumulateInterfaceFlux(l,false,0.5*dt);
             accumulateInterfaceFlux(l,true,0.5*child.stepDt);
@@ -908,6 +956,7 @@ private:
     void prepare(GridLevel& level,const Level& state,double time,GridLevel* parent=nullptr)
     {
         PR_TIMERS("HelioCubed::AMR::prepare");
+        if(fourthOrder()) {prepareFourthOrder(level,state,time,parent);return;}
         OP::GeometryScope geometry(level.geometry);
         level.timeInterpolated=false;
         level.preparedState=&state;
@@ -1035,8 +1084,21 @@ private:
         for (auto index : level.layout)
         {
             auto& op=level.op[index];
-            if (ParseInputs::get_Sun_gravity()) op.gravitySecondOrderPrimitives(level.rhs[index],level.primitive[index]);
-            op(level.rhs[index],*level.flux[local],level.primitive[index],1.0,1.0,-1,true);
+            if (ParseInputs::get_Sun_gravity())
+            {
+                if(fourthOrder()) op.Gravity_Euler(level.rhs[index],level.primitive[index]);
+                else op.gravitySecondOrderPrimitives(level.rhs[index],level.primitive[index]);
+            }
+            if(fourthOrder() && ParseInputs::get_spatial_operator()==2)
+                for(int d=0;d<DIM;++d) (*level.flux[local])[d].setVal(0);
+            op(level.rhs[index],*level.flux[local],level.primitive[index],1.0,1.0,-1,!fourthOrder());
+            if(fourthOrder() && (ParseInputs::get_linear_viscosity() || ParseInputs::get_nonlinear_viscosity()))
+            {
+                Array<State,DIM> viscosity;
+                for(int d=0;d<DIM;++d) viscosity[d].define(level.layout[index].extrude(d),0.0);
+                op.viscFlux(level.rhs[index],viscosity,level.primitive[index],1.0);
+                for(int d=0;d<DIM;++d) (*level.flux[local])[d]-=viscosity[d];
+            }
             level.panelFlux.increment(*level.flux[local],index,1.0);
             ++local;
         }
@@ -1103,16 +1165,22 @@ private:
         if(parent<numLevels() && ParseInputs::get_amr_threshold()>=0)
         {
             const auto& grid=level(parent);
-            for(auto index : grid.layout) for(auto p : grid.layout[index])
+            for(auto index : grid.layout)
             {
-                const auto& w=grid.primitive[index];double indicator=0;
-                for(int c : {iRHO,iP}) for(int d=0;d<DIM;++d)
+                State fourth;
+                if(fourthOrder()) fourth=fourthOrderPrimitives(grid,index);
+                const auto& w=fourthOrder() ? fourth : grid.primitive[index];
+                for(auto p : grid.layout[index])
                 {
-                    const double low=w(p-Point::Basis(d),c),high=w(p+Point::Basis(d),c);
-                    const double scale=std::max({abs(low),abs(high),abs(w(p,c)),1e-100});
-                    indicator=std::max(indicator,abs(high-low)/scale);
+                    double indicator=0;
+                    for(int c : {iRHO,iP}) for(int d=0;d<DIM;++d)
+                    {
+                        const double low=w(p-Point::Basis(d),c),high=w(p+Point::Basis(d),c);
+                        const double scale=std::max({abs(low),abs(high),abs(w(p,c)),1e-100});
+                        indicator=std::max(indicator,abs(high-low)/scale);
+                    }
+                    if(indicator>ParseInputs::get_amr_threshold()) tag(Box(p,p),grid.layout.block(index));
                 }
-                if(indicator>ParseInputs::get_amr_threshold()) tag(Box(p,p),grid.layout.block(index));
             }
         }
         if(procID()==0) for(const auto& region : m_regions)
@@ -1150,12 +1218,12 @@ private:
         {
             const unsigned parent=child-1;
             const auto ratio=m_ratios[parent];
-            const int ghost=child==m_ratios.size() ? 2 : 4;
+            const int ghost=fourthOrder() ? OP::ghost()[0]+ParseInputs::get_seam_pressure_correction()+1 : child==m_ratios.size() ? 2 : 4;
             Point support;
             for(int d=0;d<DIM;++d)
             {
                 const int donors=ghost+(d ? 2 : 0);
-                support[d]=ratio[d]==1 ? donors : (donors+ratio[d]-1)/ratio[d]+1;
+                support[d]=ratio[d]==1 ? donors : (donors+ratio[d]-1)/ratio[d]+(fourthOrder() ? 2 : 1);
             }
             const auto patchDomain=m_domains[parent].coarsen(m_boxSizes[parent]);
             for(auto key : desired[child])
@@ -1216,6 +1284,7 @@ private:
     void prolong(GridLevel& target,GridLevel& parentGrid,Point ratio)
     {
         PR_TIMERS("HelioCubed::AMR::prolong");
+        if(fourthOrder()) {prolongFourthOrder(target,parentGrid,ratio);return;}
         // Prolong physical Cartesian conserved values, then subtract the
         // volume-weighted child offset. This conserves every parent integral
         // and preserves constant physical states on the mapped grid.
@@ -1315,9 +1384,13 @@ private:
 inline void runCubedSphereAMR()
 {
     using OP=CubedSphereAMR::OP;
-    if(ParseInputs::get_spatial_order()!=2 || ParseInputs::get_temporal_order()!=2
-        || !OP::usesSecondOrderPrimitives() || ParseInputs::get_boundary_reflux()!=1)
-        throw std::invalid_argument("AMR requires spatial_order=2, temporal_order=2, no artificial viscosity, and boundary_reflux=1");
+    const bool fourth=ParseInputs::get_spatial_order()==4;
+    const int order=ParseInputs::get_temporal_order();
+    if((!fourth && ((order!=2 && order!=3) || !OP::usesSecondOrderPrimitives()))
+        || (fourth && order!=3 && order!=4) || ParseInputs::get_boundary_reflux()!=1)
+        throw std::invalid_argument("AMR requires temporal_order=2 or 3 at O2, temporal_order=3 or 4 at O4, and boundary_reflux=1; O2 requires no artificial viscosity");
+    if(fourth && ParseInputs::get_state_conversion()!=1)
+        throw std::invalid_argument("Fourth-order AMR requires state_conversion=1 (Cartesian conserved state)");
     if(ParseInputs::get_convTestType()!=0 || ParseInputs::get_CME_type()!=0 || ParseInputs::get_num_probes()!=0
         || ParseInputs::get_output_divB()!=0 || ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
         || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R()
@@ -1333,6 +1406,8 @@ inline void runCubedSphereAMR()
     for(int d=0;d<DIM;++d)
         if(domain[d]<12 || box[d]<8 || domain[d]%box[d])
             throw std::invalid_argument("AMR domain sizes must be at least 12 and divisible by patch sizes of at least 8");
+    if(fourth && domain[1]<20)
+        throw std::invalid_argument("Fourth-order AMR requires at least 20 angular cells per panel for its extended interpolation stencils");
     CubedSphereAMR simulation(CubedSphereShell::Domain(domain[1],domain[0],0),box,ParseInputs::get_restart_file());
     double time=simulation.restartTime,dt=simulation.restartDt;
     const double maximum=ParseInputs::get_max_time();
@@ -1365,3 +1440,8 @@ inline void runCubedSphereAMR()
 {throw std::invalid_argument("Build with PR_AMR to enable cubed-sphere AMR");}
 #endif
 }
+
+#ifdef PR_AMR
+#include "MHD_AMRRungeKutta.H"
+#include "MHD_AMRFourthOrder.H"
+#endif
