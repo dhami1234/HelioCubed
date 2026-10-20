@@ -8,16 +8,22 @@ inline void CubedSphereAMR::prepareFourthOrder(GridLevel& grid,const Level& stat
     PR_TIMERS("HelioCubed::AMR::prepareFourthOrder");
     OP::GeometryScope geometry(grid.geometry);
     grid.timeInterpolated=false;grid.preparedState=&state;
-    grid.donor.setVal(0);
+    amrSetValLocal(grid.donor,0);
     if(parent)
     {
-        const auto coarseLayout=grid.layout.coarsen(grid.ratio);
-        Point ghost;
-        for(int d=0;d<DIM;++d)
-            ghost[d]=(grid.donor.ghost()[0][d]+grid.ratio[d]-1)/grid.ratio[d]+(grid.ratio[d]>1 ? 2 : 0);
-        Level source(coarseLayout,amrPatchGhosts(ghost));
-        source.setVal(std::numeric_limits<double>::quiet_NaN());
-        parent->cartesian->copyToFullUnique(source);
+        if(!grid.coarseSource4)
+        {
+            const auto coarseLayout=grid.layout.coarsen(grid.ratio);
+            Point ghost;
+            for(int d=0;d<DIM;++d)
+                ghost[d]=(grid.donor.ghost()[0][d]+grid.ratio[d]-1)/grid.ratio[d]+(grid.ratio[d]>1 ? 2 : 0);
+            grid.coarseSource4=std::make_unique<Level>(coarseLayout,amrPatchGhosts(ghost));
+            amrSetValLocal(*grid.coarseSource4,std::numeric_limits<double>::quiet_NaN());
+            grid.coarseCopy4=std::make_unique<AMRTransferCopier<NUMCOMPS,true>>(
+                *parent->cartesian,*grid.coarseSource4,true);
+        }
+        auto& source=*grid.coarseSource4;
+        grid.coarseCopy4->copy(*parent->cartesian,source);
         for(auto index : grid.layout)
         {
             auto interpolated=amrInterpolateFourthOrder<NUMCOMPS>(source[index],grid.donor[index].box(),grid.ratio);
@@ -33,7 +39,8 @@ inline void CubedSphereAMR::prepareFourthOrder(GridLevel& grid,const Level& stat
 
     // Recover <U> from <JU>, including the average-product correction. Only
     // same-block JU can be exchanged: its Jacobian belongs to that block.
-    Level mapped(grid.layout,amrPatchGhosts(Point::Ones(2)));
+    if(!grid.mapped4) grid.mapped4=std::make_unique<Level>(grid.layout,amrPatchGhosts(Point::Ones(2)));
+    auto& mapped=*grid.mapped4;
     for(auto index : grid.layout)
     {
         auto& out=mapped[index];out.setVal(0);
@@ -214,7 +221,7 @@ inline void CubedSphereAMR::prolongFourthOrder(GridLevel& target,GridLevel& pare
     }
     const auto coarseLayout=target.layout.coarsen(ratio);
     Mapped source(coarseLayout,amrPatchGhosts(Point::Ones(2)));
-    source.setVal(std::numeric_limits<double>::quiet_NaN());mapped.copyToFullUnique(source);
+    amrSetValLocal(source,std::numeric_limits<double>::quiet_NaN());mapped.copyToFullUnique(source);
     const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
     const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
     const double gamma=ParseInputs::get_gamma();

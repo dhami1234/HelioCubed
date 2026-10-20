@@ -106,6 +106,36 @@
 # Legacy interpolation selector (0/1); unused by the current driver.
 -MBInterp_define                1
 
+# === Adaptive mesh refinement (AMR) ===
+
+# 0=single level; N allows fine levels L1,...,LN. Requires PR_AMR.
+# O2: RK2/3. O4: RK3/4, state_conversion=1, domainSize>=20.
+# AMR needs boundary_reflux=1, convTestType/CME_type/num_probes/output_divB=0,
+# slices=none and P_floor_cadence>max_iter. Adjust those options when enabling.
+-amr_max_level                  0
+# One ratio for all interfaces, or a list such as 2,4,8; 1 leaves a direction alone.
+-amr_ref_ratio_rad              2
+-amr_ref_ratio_nonrad           2
+-amr_subcycling                 1
+# Regrid every N base steps (0=initial mesh only); buffer is in parent cells.
+-amr_regrid_interval            4
+-amr_buffer                     2
+
+# Any criterion can tag: relative two-neighbor change in rho, p, |B| or |v|.
+# Negative disables; zero tags any change. Omitted rho/p use legacy amr_threshold.
+-amr_refine_density_thresh      0.05
+-amr_refine_pressure_thresh     0.05
+-amr_refine_B_thresh            -1
+-amr_refine_V_thresh            -1
+# Finest child level per criterion: -1=amr_max_level, 0=disabled.
+-amr_refine_density_maxlevel    -1
+-amr_refine_pressure_maxlevel   -1
+-amr_refine_B_maxlevel          -1
+-amr_refine_V_maxlevel          -1
+# Optional regions: [level,]block,lo_r,lo_j,lo_k,hi_r,hi_j,hi_k (parent cells).
+#-amr_refine_regions            1,5,4,4,4,7,7,7
+# AMR output: *_amr_<step>.hdf5 + .map.hdf5; restart from *_amr_<step>.amr.
+
 # === Convergence controls ===
 
 # Other modes: convTestType=3 compares initial states; 4 initializes one grid only.

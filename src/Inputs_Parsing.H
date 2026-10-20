@@ -114,7 +114,7 @@ private:
     int radial_refinement = 0; // 0: refine in all directions by 2 for convergence studies;
                            // 1 refine only in radial direction.
     int MBInterp_define;   // old define (0) new define (1)
-    // Second-order AMR. Each ratio list has one value (broadcast) or one per
+    // Mapped multiblock AMR. Each ratio list has one value (broadcast) or one per
     // level interface. Both angular coordinates share the nonradial ratio.
     int amr_max_level = 0;
     string amr_ref_ratio_rad = "2";
@@ -122,7 +122,21 @@ private:
     int amr_subcycling = 1;
     int amr_regrid_interval = 4;
     int amr_buffer = 2;
+    // Legacy fallback for density/pressure when their individual options are
+    // omitted. Negative thresholds disable a criterion; zero tags any change.
     double amr_threshold = 0.05;
+    string amr_refine_density_thresh_raw, amr_refine_pressure_thresh_raw;
+    string amr_refine_B_thresh_raw, amr_refine_V_thresh_raw;
+    double amr_refine_density_thresh = 0.05;
+    double amr_refine_pressure_thresh = 0.05;
+    double amr_refine_B_thresh = -1;
+    double amr_refine_V_thresh = -1;
+    // Finest level a criterion may create. -1 uses the hierarchy maximum;
+    // zero disables that criterion without changing its threshold.
+    int amr_refine_density_maxlevel = -1;
+    int amr_refine_pressure_maxlevel = -1;
+    int amr_refine_B_maxlevel = -1;
+    int amr_refine_V_maxlevel = -1;
     string amr_refine_regions;
     string BC_file;
     int num_probes = 0;                                
@@ -222,6 +236,25 @@ public:
     static int get_amr_regrid_interval() {return getInstance().amr_regrid_interval;}
     static int get_amr_buffer() {return getInstance().amr_buffer;}
     static double get_amr_threshold() {return getInstance().amr_threshold;}
+    static double get_amr_refine_density_thresh() {return getInstance().amr_refine_density_thresh;}
+    static double get_amr_refine_pressure_thresh() {return getInstance().amr_refine_pressure_thresh;}
+    static double get_amr_refine_B_thresh() {return getInstance().amr_refine_B_thresh;}
+    static double get_amr_refine_V_thresh() {return getInstance().amr_refine_V_thresh;}
+    static int get_amr_refine_density_maxlevel()
+    {return getInstance().amr_refine_density_maxlevel < 0 ? get_amr_max_level() : getInstance().amr_refine_density_maxlevel;}
+    static int get_amr_refine_pressure_maxlevel()
+    {return getInstance().amr_refine_pressure_maxlevel < 0 ? get_amr_max_level() : getInstance().amr_refine_pressure_maxlevel;}
+    static int get_amr_refine_B_maxlevel()
+    {return getInstance().amr_refine_B_maxlevel < 0 ? get_amr_max_level() : getInstance().amr_refine_B_maxlevel;}
+    static int get_amr_refine_V_maxlevel()
+    {return getInstance().amr_refine_V_maxlevel < 0 ? get_amr_max_level() : getInstance().amr_refine_V_maxlevel;}
+    static bool uses_amr_tagging()
+    {
+        return (get_amr_refine_density_thresh() >= 0 && get_amr_refine_density_maxlevel() > 0)
+            || (get_amr_refine_pressure_thresh() >= 0 && get_amr_refine_pressure_maxlevel() > 0)
+            || (get_amr_refine_B_thresh() >= 0 && get_amr_refine_B_maxlevel() > 0)
+            || (get_amr_refine_V_thresh() >= 0 && get_amr_refine_V_maxlevel() > 0);
+    }
     static const string& get_amr_refine_regions() {return getInstance().amr_refine_regions;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
@@ -327,6 +360,14 @@ public:
         args.add("amr_regrid_interval", amr_regrid_interval);
         args.add("amr_buffer", amr_buffer);
         args.add("amr_threshold", amr_threshold);
+        args.add("amr_refine_density_thresh", amr_refine_density_thresh_raw);
+        args.add("amr_refine_pressure_thresh", amr_refine_pressure_thresh_raw);
+        args.add("amr_refine_B_thresh", amr_refine_B_thresh_raw);
+        args.add("amr_refine_V_thresh", amr_refine_V_thresh_raw);
+        args.add("amr_refine_density_maxlevel", amr_refine_density_maxlevel);
+        args.add("amr_refine_pressure_maxlevel", amr_refine_pressure_maxlevel);
+        args.add("amr_refine_B_maxlevel", amr_refine_B_maxlevel);
+        args.add("amr_refine_V_maxlevel", amr_refine_V_maxlevel);
         args.add("amr_refine_regions", amr_refine_regions);
         args.add("BC_file", BC_file);
         args.add("num_probes", num_probes); 
@@ -413,6 +454,21 @@ public:
                 throw std::invalid_argument(string(name) + " must be a number.");
             }
         };
+        auto refinementThreshold = [&](const string& raw, const char* name, double fallback) {
+            const double value = parsePreciseValue(raw, name, fallback);
+            if (!std::isfinite(value))
+                throw std::invalid_argument(string(name) + " must be finite.");
+            return value;
+        };
+        amr_refine_density_thresh = refinementThreshold(amr_refine_density_thresh_raw,
+            "amr_refine_density_thresh", amr_threshold);
+        amr_refine_pressure_thresh = refinementThreshold(amr_refine_pressure_thresh_raw,
+            "amr_refine_pressure_thresh", amr_threshold);
+        amr_refine_B_thresh = refinementThreshold(amr_refine_B_thresh_raw, "amr_refine_B_thresh", -1);
+        amr_refine_V_thresh = refinementThreshold(amr_refine_V_thresh_raw, "amr_refine_V_thresh", -1);
+        if (amr_refine_density_maxlevel < -1 || amr_refine_pressure_maxlevel < -1
+            || amr_refine_B_maxlevel < -1 || amr_refine_V_maxlevel < -1)
+            throw std::invalid_argument("AMR variable maxlevels must be -1 (hierarchy maximum) or nonnegative.");
         BC_start_epoch = parseCalendarEpoch(BC_start_time_raw, "BC_start_time");
         CalendarEpoch cmeEpoch = parseCalendarEpoch(CME_Enter_Time_raw, "CME_Enter_Time");
         BC_start_time = BC_start_epoch.decimalYear();
@@ -503,8 +559,17 @@ public:
                     << ", angular ratios " << amr_ref_ratio_nonrad << (temporal_order==4 ? ", RK4 with " : temporal_order==3 ? ", RK3 with " : ", SSPRK2 with ")
                     << (amr_subcycling ? "CFL-based time subcycling" : "a common timestep")
                     << "; regrid interval "
-                    << amr_regrid_interval << ", buffer " << amr_buffer
-                    << ", relative density/pressure gradient threshold " << amr_threshold << endl;
+                    << amr_regrid_interval << ", buffer " << amr_buffer << endl;
+            auto criterion = [&](const char* name, double threshold, int maxLevel) {
+                pout(0) << "AMR relative-change criterion " << name << ": ";
+                if (threshold < 0 || maxLevel == 0) pout(0) << "disabled";
+                else pout(0) << "threshold " << threshold << ", finest level " << std::min(maxLevel, amr_max_level);
+                pout(0) << endl;
+            };
+            criterion("density", amr_refine_density_thresh, get_amr_refine_density_maxlevel());
+            criterion("pressure", amr_refine_pressure_thresh, get_amr_refine_pressure_maxlevel());
+            criterion("|B|", amr_refine_B_thresh, get_amr_refine_B_maxlevel());
+            criterion("|v|", amr_refine_V_thresh, get_amr_refine_V_maxlevel());
         }
         if (spatial_order == 2) {
             const char* name = limiter == 0 ? "unlimited" : limiter == 3 ? "MC (monotonized central)" : "minmod";

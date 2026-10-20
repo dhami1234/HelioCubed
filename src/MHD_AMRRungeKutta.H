@@ -19,11 +19,11 @@ inline void CubedSphereAMR::advanceRungeKuttaSynchronous(double dt,double time,i
     {
         for(auto* grid : levels())
         {
-            grid->state.copyTo(grid->stage);
+            amrCopyValid(grid->state,grid->stage);
             for(int previous=0;previous<stage;++previous)
                 if(a[stage][previous]) grid->stage.increment(*grid->rk[previous],dt*a[stage][previous]);
         }
-        for(unsigned l=numLevels()-1;l>0;--l) level(l).stage.coarsenTo(level(l-1).stage,m_ratios[l-1]);
+        for(unsigned l=numLevels()-1;l>0;--l) restrictTo(l,level(l).stage,level(l-1).stage);
         for(unsigned l=0;l<numLevels();++l) prepare(level(l),level(l).stage,time+c[stage]*dt,l ? &level(l-1) : nullptr);
         for(auto* grid : levels()) evaluate(*grid);
         m_localBoundaryMass+=dt*b[stage]*radialMassFlux();
@@ -32,9 +32,9 @@ inline void CubedSphereAMR::advanceRungeKuttaSynchronous(double dt,double time,i
         for(unsigned l=numLevels()-1;l>0;--l)
         {
             m_registers[l-1]->applyRefluxCorrection(level(l-1).rhs,1.0);
-            level(l).rhs.coarsenTo(level(l-1).rhs,m_ratios[l-1]);
+            restrictTo(l,level(l).rhs,level(l-1).rhs);
         }
-        for(auto* grid : levels()) grid->rhs.copyTo(*grid->rk[stage]);
+        for(auto* grid : levels()) amrCopyValid(grid->rhs,*grid->rk[stage]);
     }
     for(auto* grid : levels()) for(int stage=0;stage<order;++stage) grid->state.increment(*grid->rk[stage],dt*b[stage]);
     averageDown();
@@ -96,13 +96,18 @@ inline void CubedSphereAMR::advanceExtrapolated(double dt,double time,int order)
         if(count>maxRatio(m_ratios[l])) throw std::runtime_error("Extrapolated subcycling exceeds its child CFL bound");
         m_extrapolationSubsteps.push_back(count);parentDt/=count;
     }
-    struct Reset {std::vector<int>& steps;~Reset() {steps.clear();}} reset{m_extrapolationSubsteps};
-    std::vector<std::unique_ptr<Level>> initial,increment;
+    struct Reset
+    {
+        std::vector<int>& steps;bool& capture;bool& reuse;
+        ~Reset() {steps.clear();capture=false;reuse=false;}
+    } reset{m_extrapolationSubsteps,m_captureInitial,m_reuseInitial};
+    std::vector<Level*> initial,increment;
     for(auto* grid : levels())
     {
-        initial.push_back(std::make_unique<Level>(grid->layout,Point::Zeros()));
-        increment.push_back(std::make_unique<Level>(grid->layout,Point::Zeros()));
-        grid->state.copyTo(*initial.back());increment.back()->setVal(0);
+        for(int k=0;k<2;++k) if(!grid->rk[k])
+            grid->rk[k]=std::make_unique<Level>(grid->layout,Point::Zeros());
+        initial.push_back(grid->rk[0].get());increment.push_back(grid->rk[1].get());
+        amrCopyValid(grid->state,*initial.back());amrSetValLocal(*increment.back(),0);
     }
     const double boundaryAtStart=m_localBoundaryMass;
     double boundaryIncrement=0;
@@ -110,7 +115,9 @@ inline void CubedSphereAMR::advanceExtrapolated(double dt,double time,int order)
     const auto& weights=order==3 ? weights3 : weights4;
     for(int divisions=1;divisions<order;++divisions)
     {
-        if(divisions>1) for(unsigned l=0;l<numLevels();++l) initial[l]->copyTo(level(l).state);
+        m_captureInitial=divisions==1;m_reuseInitial=divisions>1;
+        for(auto* grid : levels()) grid->firstStageUsed=false;
+        if(divisions>1) for(unsigned l=0;l<numLevels();++l) amrCopyValid(*initial[l],level(l).state);
         m_localBoundaryMass=boundaryAtStart;
         const double step=dt/divisions;
         for(int part=0;part<divisions;++part)
@@ -123,7 +130,7 @@ inline void CubedSphereAMR::advanceExtrapolated(double dt,double time,int order)
     }
     for(unsigned l=0;l<numLevels();++l)
     {
-        initial[l]->copyTo(level(l).state);level(l).state.increment(*increment[l],1.0);
+        amrCopyValid(*initial[l],level(l).state);level(l).state.increment(*increment[l],1.0);
         level(l).timeInterpolated=false;
     }
     m_localBoundaryMass=boundaryAtStart+boundaryIncrement;

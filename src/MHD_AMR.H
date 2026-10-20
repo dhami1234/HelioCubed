@@ -2,6 +2,7 @@
 
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_AMRInterpolation.H"
+#include "MHD_AMRTransfers.H"
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -14,7 +15,7 @@ namespace HelioCubed
 #ifdef PR_AMR
 // Multiblock flux reconciliation and mapped conservative transfer follow
 // McCorquodale et al., CAMCoS 10 (2015), doi:10.2140/camcos.2015.10.121.
-// The O2 path uses Cartesian PLM and SSPRK2. The O4 path uses the existing
+// The O2 path uses Cartesian PLM. The O4 path uses the existing
 // fourth-order mapped flux operators and conservative quartic transfers.
 // Time stepping supports SSPRK2, Kutta RK3, and classical RK4, with
 // conservative multirate extrapolation at temporal orders three and four.
@@ -79,6 +80,15 @@ public:
         std::unique_ptr<Level> old,predictor;
         std::unique_ptr<Level> cartesian; // O4 Cartesian conserved averages <U>.
         std::array<std::unique_ptr<Level>,4> rk;
+        std::unique_ptr<Level> restricted,coarseSource4,mapped4;
+        std::unique_ptr<MBLevelBoxData<double,NUMCOMPS+1,HOST>> coarseMapped2,coarseSource2;
+        std::unique_ptr<AMRTransferCopier<NUMCOMPS>> restrictionCopy;
+        std::unique_ptr<AMRTransferCopier<NUMCOMPS,true>> coarseCopy4;
+        std::unique_ptr<AMRTransferCopier<NUMCOMPS+1,true>> coarseCopy2;
+        Stencil<double> restrictionStencil;
+        std::unique_ptr<Level> extrapolatedFirst;
+        std::vector<std::unique_ptr<Array<State,DIM>>> initialFlux;
+        bool firstStageUsed=false;
         double startTime=0,stepDt=0,preparedTime=0;
         double preparedChildStart=0,preparedChildDt=0;
         int preparedChildStage=-1;
@@ -310,7 +320,7 @@ public:
             changed=passChanged||changed;
             averageDown();
             const unsigned available=std::min(numLevels(),unsigned(m_ratios.size()));
-            if(ParseInputs::get_amr_threshold()<0 || !passChanged) break;
+            if(!ParseInputs::uses_amr_tagging() || !passChanged) break;
             prepareStates(time);
             bool newTags=false;
             // New patches on an existing intermediate level also need tagging.
@@ -331,7 +341,7 @@ public:
     void averageDown()
     {
         for(unsigned l=numLevels()-1;l>0;--l)
-            level(l).state.coarsenTo(level(l-1).state,m_ratios[l-1]);
+            restrictTo(l,level(l).state,level(l-1).state);
     }
 
     Array<double,NUMCOMPS> integral() const
@@ -457,6 +467,20 @@ public:
     double restartTime=0,restartDt=0;
 
 private:
+    void restrictTo(unsigned l,const Level& source,Level& destination)
+    {
+        PR_TIMERS("HelioCubed::AMR::restrict");
+        auto& grid=level(l);
+        if(!grid.restricted)
+        {
+            grid.restricted=std::make_unique<Level>(grid.layout.coarsen(grid.ratio),Point::Zeros());
+            grid.restrictionCopy=std::make_unique<AMRTransferCopier<NUMCOMPS>>(*grid.restricted,destination);
+            grid.restrictionStencil=Stencil<double>::AvgDown(grid.ratio);
+        }
+        for(auto index : grid.layout) (*grid.restricted)[index] |= grid.restrictionStencil(source[index]);
+        grid.restrictionCopy->copy(*grid.restricted,destination);
+    }
+
     void prepareFourthOrder(GridLevel&,const Level&,double,GridLevel*,bool=false);
     void prolongFourthOrder(GridLevel&,GridLevel&,Point);
     void advanceRungeKuttaSynchronous(double,double,int);
@@ -480,6 +504,7 @@ private:
     std::vector<Region> m_regions;
     std::vector<double> m_effectiveDt;
     std::vector<int> m_extrapolationSubsteps;
+    bool m_captureInitial=false,m_reuseInitial=false;
     std::vector<std::pair<std::string,unsigned>> m_checkpoints;
     double m_localBoundaryMass=0;
     mutable double m_boundaryMass=0;
@@ -527,7 +552,7 @@ private:
         if(time<grid.startTime-tolerance || time>end+tolerance)
             throw std::runtime_error("AMR fine stage lies outside its parent time interval");
         const double alpha=std::clamp((time-grid.startTime)/grid.stepDt,0.0,1.0);
-        if(alpha==0) grid.old->copyTo(grid.stage);
+        if(alpha==0) amrCopyValid(*grid.old,grid.stage);
         // Dense RK2 output: the linear term uses the composite first-stage
         // derivative; the coarse RK stage difference supplies the curvature.
         // Interpolating the unrefluxed coarse endpoint would introduce an
@@ -545,21 +570,51 @@ private:
     void evaluateStage(unsigned l,int stage,double time)
     {
         auto& grid=level(l);
-        grid.state.copyTo(grid.stage);
-        if(stage) grid.stage.increment(l+1<numLevels() ? *grid.predictor : grid.first,grid.stepDt);
-        if(l)
+        const bool first=!stage && !grid.firstStageUsed;
+        if(first && m_reuseInitial)
         {
-            if(!m_extrapolationSubsteps.empty())
-                prepareExtrapolatedRK2Stage(l-1,grid.startTime,grid.stepDt,stage);
-            else prepareAtTime(l-1,time);
+            // Every extrapolation branch starts from the same hierarchy and
+            // physical time. Reuse its initial derivative and reconciled faces;
+            // accumulate their branch-specific time weights below as before.
+            amrCopyValid(*grid.extrapolatedFirst,grid.rhs);
+            for(unsigned local=0;local<grid.flux.size();++local)
+                for(int d=0;d<DIM;++d) (*grid.initialFlux[local])[d].copyTo((*grid.flux[local])[d]);
         }
-        prepare(grid,grid.stage,time,l ? &level(l-1) : nullptr);
-        evaluate(grid);
+        else
+        {
+            amrCopyValid(grid.state,grid.stage);
+            if(stage) grid.stage.increment(l+1<numLevels() ? *grid.predictor : grid.first,grid.stepDt);
+            if(l)
+            {
+                if(!m_extrapolationSubsteps.empty())
+                    prepareExtrapolatedRK2Stage(l-1,grid.startTime,grid.stepDt,stage);
+                else prepareAtTime(l-1,time);
+            }
+            prepare(grid,grid.stage,time,l ? &level(l-1) : nullptr);
+            evaluate(grid);
+            if(first && m_captureInitial)
+            {
+                if(!grid.extrapolatedFirst)
+                {
+                    grid.extrapolatedFirst=std::make_unique<Level>(grid.layout,Point::Zeros());
+                    for(unsigned local=0;local<grid.flux.size();++local)
+                    {
+                        auto faces=std::make_unique<Array<State,DIM>>();
+                        for(int d=0;d<DIM;++d) (*faces)[d].define((*grid.flux[local])[d].box());
+                        grid.initialFlux.push_back(std::move(faces));
+                    }
+                }
+                amrCopyValid(grid.rhs,*grid.extrapolatedFirst);
+                for(unsigned local=0;local<grid.flux.size();++local)
+                    for(int d=0;d<DIM;++d) (*grid.flux[local])[d].copyTo((*grid.initialFlux[local])[d]);
+            }
+        }
         accumulateFlux(grid,0.5*grid.stepDt);
         m_localBoundaryMass+=0.5*grid.stepDt*radialMassFlux(&grid);
         if(!stage)
         {
-            grid.rhs.copyTo(grid.first);
+            amrCopyValid(grid.rhs,grid.first);
+            grid.firstStageUsed=true;
             // Children can reuse this preparation at the start of the step.
             grid.preparedTime=time;grid.timeInterpolated=true;
             grid.preparedChildStage=-1;
@@ -576,7 +631,7 @@ private:
         {
             if(!grid.old) grid.old=std::make_unique<Level>(grid.layout,Point::Zeros());
             if(!grid.predictor) grid.predictor=std::make_unique<Level>(grid.layout,Point::Zeros());
-            grid.state.copyTo(*grid.old);
+            amrCopyValid(grid.state,*grid.old);
             auto& reg=*m_registers[l];
             reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
             const double fraction=dt/m_effectiveDt[l+1];
@@ -592,12 +647,12 @@ private:
             // The coarse predictor must use the same instantaneous composite
             // derivative as the fine mesh. Keep the coarse derivative in first
             // for the conservative RK update and its time-integrated reflux.
-            grid.first.copyTo(*grid.predictor);
+            amrCopyValid(grid.first,*grid.predictor);
             auto& child=level(l+1);
             auto& reg=*m_registers[l];
             accumulateInterfaceFlux(l,true,0.5*(dt-child.stepDt));
             reg.applyRefluxCorrection(*grid.predictor,2.0/dt);
-            (l+2<numLevels() ? *child.predictor : child.first).coarsenTo(*grid.predictor,m_ratios[l]);
+            restrictTo(l+1,l+2<numLevels() ? *child.predictor : child.first,*grid.predictor);
             reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
             accumulateInterfaceFlux(l,false,0.5*dt);
             accumulateInterfaceFlux(l,true,0.5*child.stepDt);
@@ -623,7 +678,7 @@ private:
             // Both registers contain RK-weighted time integrals. Synchronize
             // this interface only after every descendant reaches the endpoint.
             m_registers[l]->applyRefluxCorrection(grid.state,1.0);
-            level(l+1).state.coarsenTo(grid.state,m_ratios[l]);
+            restrictTo(l+1,level(l+1).state,grid.state);
         }
         grid.timeInterpolated=false;
     }
@@ -634,11 +689,11 @@ private:
         {
             for(auto* grid : levels())
             {
-                grid->state.copyTo(grid->stage);
+                amrCopyValid(grid->state,grid->stage);
                 if(stage) grid->stage.increment(grid->first,dt);
             }
             for(unsigned l=numLevels()-1;l>0;--l)
-                level(l).stage.coarsenTo(level(l-1).stage,m_ratios[l-1]);
+                restrictTo(l,level(l).stage,level(l-1).stage);
             for(unsigned l=0;l<numLevels();++l)
                 prepare(level(l),level(l).stage,time+stage*dt,l ? &level(l-1) : nullptr);
             for(auto* grid : levels()) evaluate(*grid);
@@ -649,9 +704,9 @@ private:
             for(unsigned l=numLevels()-1;l>0;--l)
             {
                 m_registers[l-1]->applyRefluxCorrection(level(l-1).rhs,1.0);
-                level(l).rhs.coarsenTo(level(l-1).rhs,m_ratios[l-1]);
+                restrictTo(l,level(l).rhs,level(l-1).rhs);
             }
-            if(!stage) for(auto* grid : levels()) grid->rhs.copyTo(grid->first);
+            if(!stage) for(auto* grid : levels()) amrCopyValid(grid->rhs,grid->first);
         }
         for(auto* grid : levels())
         {
@@ -967,7 +1022,10 @@ private:
             // the weights are ((q-x)/2,1-q,(q+x)/2). This reduces exactly to
             // (-s/8,1,s/8) at ratio two and identity in unrefined directions.
             // Interpolate JU and J together before recovering primitives.
-            MBLevelBoxData<double,NUMCOMPS+1,HOST> mapped(parent->layout,amrPatchGhosts(Point::Ones(4)));
+            if(!level.coarseMapped2)
+                level.coarseMapped2=std::make_unique<MBLevelBoxData<double,NUMCOMPS+1,HOST>>(
+                    parent->layout,amrPatchGhosts(Point::Ones(4)));
+            auto& mapped=*level.coarseMapped2;
             const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
             const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
             const double gamma=ParseInputs::get_gamma();
@@ -1002,13 +1060,20 @@ private:
                 }
             }
             const Point ratio=level.ratio;
-            const auto cfLayout=level.layout.coarsen(ratio);
-            Point sourceGhost;
-            for(int d=0;d<DIM;++d) sourceGhost[d]=std::max(4,(level.donor.ghost()[0][d]+ratio[d]-1)/ratio[d]+1);
-            MBLevelBoxData<double,NUMCOMPS+1,HOST> source(cfLayout,amrPatchGhosts(sourceGhost));
-            source.setVal(std::numeric_limits<double>::quiet_NaN());
-            mapped.copyToFull(source);
-            level.donor.setVal(0);
+            if(!level.coarseSource2)
+            {
+                const auto cfLayout=level.layout.coarsen(ratio);
+                Point sourceGhost;
+                for(int d=0;d<DIM;++d) sourceGhost[d]=std::max(4,(level.donor.ghost()[0][d]+ratio[d]-1)/ratio[d]+1);
+                level.coarseSource2=std::make_unique<MBLevelBoxData<double,NUMCOMPS+1,HOST>>(
+                    cfLayout,amrPatchGhosts(sourceGhost));
+                amrSetValLocal(*level.coarseSource2,std::numeric_limits<double>::quiet_NaN());
+                level.coarseCopy2=std::make_unique<AMRTransferCopier<NUMCOMPS+1,true>>(
+                    mapped,*level.coarseSource2);
+            }
+            auto& source=*level.coarseSource2;
+            level.coarseCopy2->copy(mapped,source);
+            amrSetValLocal(level.donor,0);
             for (auto index : level.layout)
             {
                 const auto& src=source[index];
@@ -1078,7 +1143,7 @@ private:
     void evaluate(GridLevel& level)
     {
         PR_TIMERS("HelioCubed::AMR::evaluate");
-        level.rhs.setVal(0);
+        amrSetValLocal(level.rhs,0);
         level.panelFlux.clear();
         unsigned local=0;
         for (auto index : level.layout)
@@ -1162,9 +1227,17 @@ private:
             if(region.empty()) return;
             for(auto patch : region.refine(ratio).coarsen(boxSize)) patches.insert({int(block),patch[0],patch[1],patch[2]});
         };
-        if(parent<numLevels() && ParseInputs::get_amr_threshold()>=0)
+        if(parent<numLevels() && ParseInputs::uses_amr_tagging())
         {
             const auto& grid=level(parent);
+            // Each limit is the finest CHILD level that criterion can create.
+            const std::array<double,4> thresholds={
+                parent<unsigned(ParseInputs::get_amr_refine_density_maxlevel()) ? ParseInputs::get_amr_refine_density_thresh() : -1,
+                parent<unsigned(ParseInputs::get_amr_refine_pressure_maxlevel()) ? ParseInputs::get_amr_refine_pressure_thresh() : -1,
+                parent<unsigned(ParseInputs::get_amr_refine_B_maxlevel()) ? ParseInputs::get_amr_refine_B_thresh() : -1,
+                parent<unsigned(ParseInputs::get_amr_refine_V_maxlevel()) ? ParseInputs::get_amr_refine_V_thresh() : -1};
+            // Constant-field tests evolve the perturbation; tag the total field.
+            const double b0=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
             for(auto index : grid.layout)
             {
                 State fourth;
@@ -1172,14 +1245,26 @@ private:
                 const auto& w=fourthOrder() ? fourth : grid.primitive[index];
                 for(auto p : grid.layout[index])
                 {
-                    double indicator=0;
-                    for(int c : {iRHO,iP}) for(int d=0;d<DIM;++d)
+                    bool refine=false;
+                    for(unsigned variable=0;variable<thresholds.size() && !refine;++variable)
                     {
-                        const double low=w(p-Point::Basis(d),c),high=w(p+Point::Basis(d),c);
-                        const double scale=std::max({abs(low),abs(high),abs(w(p,c)),1e-100});
-                        indicator=std::max(indicator,abs(high-low)/scale);
+                        if(thresholds[variable]<0) continue;
+                        auto sample=[&](Point cell)
+                        {
+                            if(variable==0) return w(cell,iRHO);
+                            if(variable==1) return w(cell,iP);
+                            if(variable==2) return std::hypot(w(cell,iBX)+b0,w(cell,iBY),w(cell,iBZ));
+                            return std::hypot(w(cell,iVX),w(cell,iVY),w(cell,iVZ));
+                        };
+                        const double center=sample(p);
+                        for(int d=0;d<DIM;++d)
+                        {
+                            const double low=sample(p-Point::Basis(d)),high=sample(p+Point::Basis(d));
+                            const double scale=std::max({abs(low),abs(high),abs(center),1e-100});
+                            if(abs(high-low)/scale>thresholds[variable]) {refine=true;break;}
+                        }
                     }
-                    if(indicator>ParseInputs::get_amr_threshold()) tag(Box(p,p),grid.layout.block(index));
+                    if(refine) tag(Box(p,p),grid.layout.block(index));
                 }
             }
         }
@@ -1235,15 +1320,26 @@ private:
         }
     }
 
+    void resetTransfers()
+    {
+        for(auto* grid : levels())
+        {
+            grid->restrictionCopy.reset();grid->coarseCopy2.reset();grid->coarseCopy4.reset();
+            grid->restricted.reset();grid->coarseMapped2.reset();
+            grid->coarseSource2.reset();grid->coarseSource4.reset();
+        }
+        m_effectiveDt.clear();
+    }
+
     void rebuildRegisters()
     {
         m_registers.clear();
+        resetTransfers();
         for(unsigned l=0;l+1<numLevels();++l)
         {
             auto dx=level(l).layout.dx(0);
             m_registers.push_back(std::make_unique<Register>(level(l).layout,level(l+1).layout,m_ratios[l],dx));
         }
-        m_effectiveDt.clear();
     }
 
     bool realizeHierarchy(const std::vector<PatchSet>& desired,double time,bool initial)
@@ -1253,10 +1349,17 @@ private:
         {
             if(desired[l].empty())
             {
-                if(numLevels()>l) {m_registers.clear();m_levels.resize(l);changed=true;}
+                if(numLevels()>l)
+                {
+                    if(!changed) resetTransfers();
+                    m_registers.clear();m_levels.resize(l);changed=true;
+                }
                 break;
             }
             if(l<numLevels() && samePatches(desired[l],level(l).layout)) continue;
+            // Later replacements prepare retained ancestors. Invalidate their
+            // parent-dependent routes before any earlier parent is replaced.
+            if(!changed) resetTransfers();
             m_registers.clear();
             MBDisjointBoxLayout layout(m_domains[l],patchVector(desired[l]),std::vector<Point>(6,m_boxSizes[l]));
             auto replacement=std::make_unique<GridLevel>(layout,l,l<m_ratios.size(),m_ratios[l-1]);
