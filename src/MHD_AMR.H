@@ -3,6 +3,7 @@
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_AMRInterpolation.H"
 #include "MHD_AMRTransfers.H"
+#include "MHD_AMRTagging.H"
 #include "MHD_IO.H"
 #include "MHD_CME.H"
 #include "MHD_CME_Schedule.H"
@@ -1383,13 +1384,9 @@ private:
                             if(variable==2) return std::hypot(w(cell,iBX)+b0,w(cell,iBY),w(cell,iBZ));
                             return std::hypot(w(cell,iVX),w(cell,iVY),w(cell,iVZ));
                         };
-                        const double center=sample(p);
-                        for(int d=0;d<DIM;++d)
-                        {
-                            const double low=sample(p-Point::Basis(d)),high=sample(p+Point::Basis(d));
-                            const double scale=std::max({abs(low),abs(high),abs(center),1e-100});
-                            if(abs(high-low)/scale>thresholds[variable]) {refine=true;break;}
-                        }
+                        const double gradient=amrRelativeGradientMagnitude(p,domain,sample);
+                        // Preserve zero's documented "any change" behavior.
+                        if(gradient>0 && gradient>=thresholds[variable]) refine=true;
                     }
                     if(refine) tag(Box(p,p),grid.layout.block(index));
                 }

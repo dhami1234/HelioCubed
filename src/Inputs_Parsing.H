@@ -578,7 +578,7 @@ public:
                     << amr_regrid_interval << " base steps, time cadence " << amr_regrid_time_cadence
                     << "(s), buffer " << amr_buffer << endl;
             auto criterion = [&](const char* name, double threshold, int maxLevel) {
-                pout(0) << "AMR relative-change criterion " << name << ": ";
+                pout(0) << "AMR relative-gradient criterion " << name << ": ";
                 if (threshold < 0 || maxLevel == 0) pout(0) << "disabled";
                 else pout(0) << "threshold " << threshold << ", finest level " << std::min(maxLevel, amr_max_level);
                 pout(0) << endl;

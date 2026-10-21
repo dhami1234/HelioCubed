@@ -127,8 +127,8 @@
 # Convergence compares conservative composite projections; convTestType=1/2
 # runs three AMR meshes. convergence_level=0/1/2 runs one; 3 compares saved runs.
 
-# Any criterion can tag: relative two-neighbor change in rho, p, |B| or |v|.
-# Negative disables; zero tags any change. Omitted rho/p use legacy amr_threshold.
+# Any criterion can tag: MS-FLUKSS relative gradient of rho, p, |B| or |v|.
+# Negative disables; zero tags nonzero gradients. Omitted rho/p use amr_threshold.
 -amr_refine_density_thresh      0.05
 -amr_refine_pressure_thresh     0.05
 -amr_refine_B_thresh            -1
