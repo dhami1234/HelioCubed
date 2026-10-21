@@ -119,6 +119,9 @@
 # One ratio for all interfaces, or a list such as 2,4,8; 1 leaves a direction alone.
 -amr_ref_ratio_rad              2
 -amr_ref_ratio_nonrad           1
+# Fine patch cell counts: 0=automatic; one value or one per fine level.
+-amr_boxSize_rad                0
+-amr_boxSize_nonrad             0
 -amr_subcycling                 0
 -amr_verbosity                  1
 # Regrid by base steps or simulation seconds (0 disables each); buffer is in parent cells.

@@ -258,7 +258,7 @@ public:
         Point regionScale=Point::Ones(),std::string outputSuffix="")
         :m_domain(domain),m_boxSize(boxSize),m_regionScale(regionScale),m_outputSuffix(std::move(outputSuffix))
     {
-        configureHierarchy();
+        configureHierarchy(!restart.empty());
         MBDisjointBoxLayout layout(m_domain,m_boxSize);
         m_levels.push_back(std::make_unique<GridLevel>(layout,0,!m_ratios.empty()));
         if(!restart.empty()) {read(restart);writeGridSummary("restart",restartTime);return;}
@@ -507,7 +507,7 @@ public:
         if (checkpoint && procID()==0)
         {
             std::ofstream file(prefix+".amr");
-            file<<"HelioCubedAMR 3\n"<<iteration<<' '<<std::setprecision(17)<<time<<' '<<dt<<'\n';
+            file<<"HelioCubedAMR 4\n"<<iteration<<' '<<std::setprecision(17)<<time<<' '<<dt<<'\n';
             file<<number<<' '<<m_ratios.size()<<'\n';
             for(int d=0;d<DIM;++d) file<<m_domain.getBlock(0).sizes()[d]<<' ';
             for(int d=0;d<DIM;++d) file<<m_boxSize[d]<<' ';
@@ -515,6 +515,8 @@ public:
                 <<ParseInputs::get_radial_stretch()<<' '<<ParseInputs::get_gamma()<<' '
                 <<ParseInputs::get_init_condition_type()<<'\n';
             for(auto ratio : m_ratios) file<<ratio[0]<<' '<<ratio[1]<<' '<<ratio[2]<<'\n';
+            for(unsigned l=1;l<m_boxSizes.size();++l)
+                file<<m_boxSizes[l][0]<<' '<<m_boxSizes[l][1]<<' '<<m_boxSizes[l][2]<<'\n';
             file<<int(m_cmeSchedule.inserted())<<'\n';
             for(unsigned l=1;l<numLevels();++l)
             {
@@ -833,7 +835,11 @@ private:
         std::ostringstream lines;
         lines<<"AMR "<<event<<": levels="<<numLevels();
         for(const auto& grid : m_levels)
-            lines<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes();
+        {
+            const auto size=m_boxSizes[grid->number];
+            lines<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes()
+                <<" ["<<size[0]<<'x'<<size[1]<<'x'<<size[2]<<']';
+        }
         if(seconds>=0) lines<<" changed = "<<(changed ? "yes" : "no");
         lines<<" time = "<<formatProgressTime(time);
         // Wall times are root-local, like iteration timing; no added barriers.
@@ -920,7 +926,7 @@ private:
         Point sizes,patchSize;
         double inner,outer,stretch,gamma;int problem;
         if(!(file>>magic>>version>>restartIteration>>restartTime>>restartDt>>number)
-            || magic!="HelioCubedAMR" || (version<1 || version>3)
+            || magic!="HelioCubedAMR" || (version<1 || version>4)
             || number<1 || unsigned(number)>m_ratios.size()+1 || (version==1 && number>2)
             || restartIteration<0 || !std::isfinite(restartTime) || restartTime<0
             || !std::isfinite(restartDt) || restartDt<0)
@@ -947,6 +953,32 @@ private:
             }
         else if(number==2 && m_ratios[0]!=Point::Ones(2))
             throw std::invalid_argument("Version-one AMR checkpoints require ratio two at the first interface");
+        const auto requestedRadial=ratioList(ParseInputs::get_amr_boxSize_rad(),m_ratios.size(),"amr_boxSize_rad",0);
+        const auto requestedAngular=ratioList(ParseInputs::get_amr_boxSize_nonrad(),m_ratios.size(),"amr_boxSize_nonrad",0);
+        for(unsigned l=1;l<m_boxSizes.size();++l)
+        {
+            const int radial=requestedRadial[requestedRadial.size()==1 ? 0 : l-1];
+            const int angular=requestedAngular[requestedAngular.size()==1 ? 0 : l-1];
+            if(version<4)
+            {
+                if(radial || angular)
+                    throw std::invalid_argument("Older AMR checkpoints require automatic fine patch sizes (amr_boxSize_rad/nonrad=0)");
+                continue;
+            }
+            Point saved;file>>saved[0]>>saved[1]>>saved[2];
+            if(!file || saved[1]!=saved[2]) throw std::invalid_argument("Invalid AMR checkpoint fine patch sizes");
+            const Point domain=m_domains[l].getBlock(0).sizes(),ratio=m_ratios[l-1];
+            for(int d=0;d<DIM;++d)
+            {
+                const int requested=d==0 ? radial : angular;
+                if(saved[d]<8 || saved[d]>domain[d] || saved[d]%ratio[d]
+                    || (ratio[d]>1 && saved[d]/ratio[d]<2) || domain[d]%saved[d]
+                    || (static_cast<long long>(m_boxSizes[l-1][d])*ratio[d])%saved[d]
+                    || (requested && saved[d]!=requested))
+                    throw std::invalid_argument("AMR restart fine patch sizes are invalid or differ from the inputs");
+            }
+            m_boxSizes[l]=saved;
+        }
         if(version>=3)
         {
             int inserted;file>>inserted;
@@ -999,28 +1031,31 @@ private:
         }
     }
 
-    static std::vector<int> ratioList(std::string text,unsigned count,const char* name)
+    static std::vector<int> ratioList(std::string text,unsigned count,const char* name,int minimum=1)
     {
         std::replace(text.begin(),text.end(),',',' ');
         std::istringstream input(text);std::vector<int> values;std::string word;
         while(input>>word)
         {
             size_t used=0;long long value;
-            try {value=std::stoll(word,&used);} catch(...) {throw std::invalid_argument(std::string(name)+" requires positive integer ratios");}
-            if(used!=word.size() || value<1 || value>std::numeric_limits<int>::max())
-                throw std::invalid_argument(std::string(name)+" requires positive integer ratios");
+            const auto message=std::string(name)+(minimum ? " requires positive integer ratios" : " requires nonnegative integer patch sizes");
+            try {value=std::stoll(word,&used);} catch(...) {throw std::invalid_argument(message);}
+            if(used!=word.size() || value<minimum || value>std::numeric_limits<int>::max())
+                throw std::invalid_argument(message);
             values.push_back(int(value));
         }
         if(values.empty() || (values.size()!=1 && values.size()!=count))
-            throw std::invalid_argument(std::string(name)+" needs one ratio or one ratio per fine level");
+            throw std::invalid_argument(std::string(name)+" needs one value or one value per fine level");
         return values;
     }
 
-    void configureHierarchy()
+    void configureHierarchy(bool restarting=false)
     {
         const unsigned maximum=ParseInputs::get_amr_max_level();
         const auto radial=ratioList(ParseInputs::get_amr_ref_ratio_rad(),maximum,"amr_ref_ratio_rad");
         const auto angular=ratioList(ParseInputs::get_amr_ref_ratio_nonrad(),maximum,"amr_ref_ratio_nonrad");
+        const auto radialBoxes=ratioList(ParseInputs::get_amr_boxSize_rad(),maximum,"amr_boxSize_rad",0);
+        const auto angularBoxes=ratioList(ParseInputs::get_amr_boxSize_nonrad(),maximum,"amr_boxSize_nonrad",0);
         m_domains.push_back(m_domain);m_boxSizes.push_back(m_boxSize);m_cumulative.push_back(Point::Ones());
         for(unsigned l=0;l<maximum;++l)
         {
@@ -1037,8 +1072,11 @@ private:
                 if(count>size_t(std::numeric_limits<std::ptrdiff_t>::max())/6/size_t(sizes[d]))
                     throw std::invalid_argument("AMR logical domain exceeds the 64-bit indexing range");
                 count*=sizes[d];
-                long long width=static_cast<long long>(m_boxSize[d]/std::gcd(m_boxSize[d],ratio[d]))*ratio[d];
-                if(ratio[d]>1 && width/ratio[d]<2)
+                const int requested=d==0 ? radialBoxes[radialBoxes.size()==1 ? 0 : l]
+                                        : angularBoxes[angularBoxes.size()==1 ? 0 : l];
+                long long width=requested ? requested
+                    : static_cast<long long>(m_boxSize[d]/std::gcd(m_boxSize[d],ratio[d]))*ratio[d];
+                if(!requested && ratio[d]>1 && width/ratio[d]<2)
                 {
                     int divisor=2;
                     while(m_boxSizes.back()[d]%divisor) ++divisor;
@@ -1048,7 +1086,7 @@ private:
                 // ratio have a large LCM. Any coarse-patch divisor gives an
                 // aligned tile; prefer one close to the base patch size.
                 const long long refinedParent=static_cast<long long>(m_boxSizes.back()[d])*ratio[d];
-                if(width>2LL*m_boxSize[d] || refinedParent%width)
+                if(!requested && (width>2LL*m_boxSize[d] || refinedParent%width))
                 {
                     const int parentWidth=m_boxSizes.back()[d];
                     if(refinedParent%width) width=0;
@@ -1062,8 +1100,9 @@ private:
                         if(parentWidth%q==0) {consider(q);consider(parentWidth/q);}
                 }
                 if(width<8 || width>std::numeric_limits<int>::max() || width>sizes[d]
-                    || sizes[d]%width || (static_cast<long long>(m_boxSizes.back()[d])*ratio[d])%width)
-                    throw std::invalid_argument("AMR ratios cannot tile this domain with aligned fine patches");
+                    || width%ratio[d] || (ratio[d]>1 && width/ratio[d]<2)
+                    || sizes[d]%width || (!restarting && (static_cast<long long>(m_boxSizes.back()[d])*ratio[d])%width))
+                    throw std::invalid_argument("AMR fine patch sizes must be at least 8 cells, aligned with the refinement ratio, and tile the domain and each refined parent patch");
                 box[d]=int(width);
                 if(sizes[d]/box[d]>(uint64_t(1)<<(64/DIM)))
                     throw std::invalid_argument("AMR patch coordinates exceed the 64-bit Morton range");
@@ -1214,36 +1253,6 @@ private:
             const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
             const double gamma=ParseInputs::get_gamma();
             PROTO_ASSERT(parent->preparedState,"Coarse AMR stage was not prepared");
-            for(auto index : parent->layout)
-            {
-                auto& out=mapped[index];
-                const auto& w=parent->primitive[index];
-                const auto& jacobian=parent->jacobian[index];
-                const auto& state=(*parent->preparedState)[index];
-                const Box valid=parent->layout[index];
-                for(auto p : out.box())
-                {
-                    const double j=jacobian(p);
-                    if(valid.containsPoint(p))
-                    {
-                        out(p,NUMCOMPS)=j;
-                        for(int c=0;c<NUMCOMPS;++c) out(p,c)=state(p,c);
-                        continue;
-                    }
-                    double ke=0,me=0;
-                    out(p,NUMCOMPS)=j;
-                    out(p,iRHO)=j*w(p,iRHO);
-                    for(int d=0;d<DIM;++d)
-                    {
-                        out(p,iMOMX+d)=j*w(p,iRHO)*w(p,iVX+d);
-                        out(p,iBX+d)=j*w(p,iBX+d);
-                        ke+=0.5*w(p,iRHO)*w(p,iVX+d)*w(p,iVX+d);
-                        me+=w(p,iBX+d)*w(p,iBX+d)/(8*M_PI);
-                    }
-                    out(p,iE)=j*((w(p,iP)-(magnetic ? c_TEST_P0 : 0))/(gamma-1)
-                        +ke+me+b0*w(p,iBX)/(4*M_PI));
-                }
-            }
             const Point ratio=level.ratio;
             if(!level.coarseSource2)
             {
@@ -1254,7 +1263,41 @@ private:
                     cfLayout,amrPatchGhosts(sourceGhost));
                 amrSetValLocal(*level.coarseSource2,std::numeric_limits<double>::quiet_NaN());
                 level.coarseCopy2=std::make_unique<AMRTransferCopier<NUMCOMPS+1,true>>(
-                    mapped,*level.coarseSource2);
+                    mapped,*level.coarseSource2,false,true);
+            }
+            {
+                PR_TIMERS("HelioCubed::AMR::prepareCoarseDonors");
+                for(const auto& needed : level.coarseCopy2->sources())
+                {
+                    const auto index=needed.index;
+                    auto& out=mapped[index];
+                    const auto& w=parent->primitive[index];
+                    const auto& jacobian=parent->jacobian[index];
+                    const auto& state=(*parent->preparedState)[index];
+                    const Box valid=parent->layout[index];
+                    for(const auto& box : needed.boxes) for(auto p : box)
+                    {
+                        const double j=jacobian(p);
+                        if(valid.containsPoint(p))
+                        {
+                            out(p,NUMCOMPS)=j;
+                            for(int c=0;c<NUMCOMPS;++c) out(p,c)=state(p,c);
+                            continue;
+                        }
+                        double ke=0,me=0;
+                        out(p,NUMCOMPS)=j;
+                        out(p,iRHO)=j*w(p,iRHO);
+                        for(int d=0;d<DIM;++d)
+                        {
+                            out(p,iMOMX+d)=j*w(p,iRHO)*w(p,iVX+d);
+                            out(p,iBX+d)=j*w(p,iBX+d);
+                            ke+=0.5*w(p,iRHO)*w(p,iVX+d)*w(p,iVX+d);
+                            me+=w(p,iBX+d)*w(p,iBX+d)/(8*M_PI);
+                        }
+                        out(p,iE)=j*((w(p,iP)-(magnetic ? c_TEST_P0 : 0))/(gamma-1)
+                            +ke+me+b0*w(p,iBX)/(4*M_PI));
+                    }
+                }
             }
             auto& source=*level.coarseSource2;
             level.coarseCopy2->copy(mapped,source);

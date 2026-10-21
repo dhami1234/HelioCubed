@@ -120,6 +120,8 @@ private:
     int amr_max_level = 0;
     string amr_ref_ratio_rad = "2";
     string amr_ref_ratio_nonrad = "2";
+    string amr_boxSize_rad = "0";
+    string amr_boxSize_nonrad = "0";
     int amr_subcycling = 1;
     int amr_verbosity = 1; // 0: coarse steps, 1: level summaries, 2: individual events.
     int amr_regrid_interval = 4;
@@ -237,6 +239,8 @@ public:
     static int get_amr_max_level() {return getInstance().amr_max_level;}
     static const string& get_amr_ref_ratio_rad() {return getInstance().amr_ref_ratio_rad;}
     static const string& get_amr_ref_ratio_nonrad() {return getInstance().amr_ref_ratio_nonrad;}
+    static const string& get_amr_boxSize_rad() {return getInstance().amr_boxSize_rad;}
+    static const string& get_amr_boxSize_nonrad() {return getInstance().amr_boxSize_nonrad;}
     static int get_amr_subcycling() {return getInstance().amr_subcycling;}
     static int get_amr_verbosity() {return getInstance().amr_verbosity;}
     static int get_amr_regrid_interval() {return getInstance().amr_regrid_interval;}
@@ -364,6 +368,8 @@ public:
         args.add("amr_max_level", amr_max_level);
         args.add("amr_ref_ratio_rad", amr_ref_ratio_rad);
         args.add("amr_ref_ratio_nonrad", amr_ref_ratio_nonrad);
+        args.add("amr_boxSize_rad", amr_boxSize_rad);
+        args.add("amr_boxSize_nonrad", amr_boxSize_nonrad);
         args.add("amr_subcycling", amr_subcycling);
         args.add("amr_verbosity", amr_verbosity);
         args.add("amr_regrid_interval", amr_regrid_interval);
@@ -594,6 +600,8 @@ public:
                     << "; regrid interval "
                     << amr_regrid_interval << " base steps, time cadence " << amr_regrid_time_cadence
                     << "(s), buffer " << amr_buffer << endl;
+            pout(0) << "AMR fine patch sizes: radial " << amr_boxSize_rad
+                    << ", angular " << amr_boxSize_nonrad << " (0=automatic)" << endl;
             auto criterion = [&](const char* name, double threshold, int maxLevel) {
                 pout(0) << "AMR relative-gradient criterion " << name << ": ";
                 if (threshold < 0 || maxLevel == 0) pout(0) << "disabled";

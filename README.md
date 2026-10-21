@@ -187,6 +187,30 @@ then 4, and angularly by 1 then 2. Ratios such as 2, 4, and 8 are supported;
 1 leaves a direction unchanged. Every interface must refine at least one
 direction, and ratios must allow aligned fine patches to tile the domain.
 
+Fine patches can have different cell counts from base patches. Set
+`amr_boxSize_rad` and `amr_boxSize_nonrad` to one value for every fine level
+or a comma-separated list. Zero retains the existing automatic patch sizing.
+Positive sizes must be at least 8 cells, divisible by that level's refinement
+ratio, and tile both the refined domain and a refined parent patch; a refined
+patch must contain at least two parent cells in each refined direction.
+
+For a base grid of 45 angular by 120 radial cells, base patches of 15 angular
+by 30 radial cells, and refinement ratios 2 angular / 4 radial, use:
+
+```text
+-amr_boxSize_rad            20
+-amr_boxSize_nonrad         0
+```
+
+This divides a 60×30×30 fine patch into three patches of 20×30×30. Setting
+`amr_boxSize_nonrad=10` instead creates 27 patches of 20×10×10 and spreads very
+sparse fine work across more ranks. Smaller patches increase ghost-cell and
+message overhead, so the best sizes depend on the number of ranks and fine
+patches. Automatic tagging may cover a different region when the patch
+dimensions change; fixed regions that tile both layouts allow a comparison
+with identical refined cells. Patch dimensions are printed in the AMR grid
+summary.
+
 With `amr_subcycling=0`, all levels share the finest required timestep. With
 `1`, finer levels take extra steps only when their CFL limits require them.
 RK3/RK4 subcycling uses extrapolated SSPRK2 advances, which adds work; its
@@ -302,6 +326,10 @@ Keep the manifest and every matching `_L*.hdf5` file together, and set:
 
 Keep the original base grid, patch sizes, shell geometry, gamma,
 `init_condition_type`, configured maximum AMR level, and refinement ratios.
+New checkpoints also save the fine patch sizes. Zero-valued fine-size inputs
+restore those saved dimensions; explicit positive sizes must match them.
+For checkpoints written before fine-size support, keep both fine-size inputs
+at zero to retain the original automatic layout.
 The restart restores the saved hierarchy, iteration, simulation time, and CME
 insertion state. Set stopping limits beyond the saved step/time to continue.
 Plot files are for visualization; restart uses the checkpoint manifest and
