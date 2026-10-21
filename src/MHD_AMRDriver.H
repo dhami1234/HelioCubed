@@ -90,8 +90,8 @@ inline void runCubedSphereAMR()
         throw std::invalid_argument("convergence_dt must be -1 or a finite positive value");
     if(convergence && !split && !ParseInputs::get_restart_file().empty())
         throw std::invalid_argument("AMR convergence restart requires a single convergence_level=0, 1, or 2");
-    if(ParseInputs::get_P_floor_cadence()<=ParseInputs::get_max_iter())
-        throw std::invalid_argument("AMR pressure-floor events are not yet supported; use P_floor_cadence>max_iter");
+    if(ParseInputs::get_P_floor_cadence()<=0)
+        throw std::invalid_argument("P_floor_cadence must be positive");
     const bool slices=ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
         || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R();
     if(slices && (ParseInputs::get_slice_cadence()<=0
@@ -188,6 +188,12 @@ inline void runCubedSphereAMR()
             for(++iteration;iteration<=lastIteration && time<maximum;++iteration)
             {
                 const auto start=std::chrono::steady_clock::now();
+                if(iteration%ParseInputs::get_P_floor_cadence()==0)
+                {
+                    const auto repaired=simulation.applyPressureFloor();
+                    pout(0)<<"AMR pressure floor at iteration "<<iteration
+                        <<": repaired composite cells = "<<repaired<<std::endl;
+                }
                 const double cflDt=simulation.timestep();
                 dt=std::min(convergence ? fixedDt : cflDt,maximum-time);
                 const double event=simulation.nextCMETime();

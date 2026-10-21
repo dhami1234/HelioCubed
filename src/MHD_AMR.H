@@ -270,6 +270,70 @@ public:
     void writeProbes(int iteration,double time,bool giveSpace);
     void writeSlices(int iteration,double time);
 
+    long long applyPressureFloor()
+    {
+        PR_TIMERS("HelioCubed::AMR::pressureFloor");
+        const double gamma=ParseInputs::get_gamma();
+        const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+        const double background=magnetic ? c_TEST_P0 : 0;
+        const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
+        long long counts[2]={0,0}; // Repaired leaf cells and invalid states.
+        for(auto* grid : levels()) for(auto index : grid->layout)
+        {
+            auto& state=grid->state[index];
+            const auto& jacobian=grid->jacobian[index];
+            const auto block=grid->layout.block(index);
+            for(auto p : grid->layout[index])
+            {
+                if(covered(grid->number,p,block)) continue;
+                const double j=jacobian(p);
+                if(!(j>0) || !std::isfinite(j)) {++counts[1];continue;}
+                const double inverseJ=1/j,rho=state(p,iRHO)*inverseJ;
+                if(!(rho>0) || !std::isfinite(rho)) {++counts[1];continue;}
+                double kinetic=0,magneticEnergy=0;
+                for(int d=0;d<DIM;++d)
+                {
+                    const double velocity=state(p,iMOMX+d)*inverseJ/rho;
+                    const double field=state(p,iBX+d)*inverseJ;
+                    kinetic+=0.5*rho*velocity*velocity;
+                    magneticEnergy+=field*field/(8*M_PI);
+                }
+                magneticEnergy+=b0*(state(p,iBX)*inverseJ)/(4*M_PI);
+                auto pressure=[&](double energy)
+                {return background+(gamma-1)*(energy*inverseJ-kinetic-magneticEnergy);};
+                const double original=state(p,iE),current=pressure(original);
+                if(!std::isfinite(current)) {++counts[1];continue;}
+                if(current>=0) continue;
+                // JU contains Cartesian conserved cell averages at both
+                // orders. Restore zero cell-average pressure by changing
+                // only energy, including the magnetic test equilibrium.
+                double energy=std::max(original,j*(kinetic+magneticEnergy-background/(gamma-1)));
+                // Round upward when storing J*E would otherwise leave a
+                // negative pressure by a few ulps. No positive floor is added.
+                while(std::isfinite(energy) && pressure(energy)<0)
+                    energy=std::nextafter(energy,std::numeric_limits<double>::infinity());
+                if(!std::isfinite(energy) || !std::isfinite(pressure(energy)))
+                {++counts[1];continue;}
+                state(p,iE)=energy;++counts[0];
+            }
+        }
+#ifdef PR_MPI
+        MPI_Allreduce(MPI_IN_PLACE,counts,2,MPI_LONG_LONG,MPI_SUM,MPI_COMM_WORLD);
+#endif
+        if(counts[1]) throw std::runtime_error("Invalid conserved AMR state during pressure repair");
+        if(counts[0])
+        {
+            averageDown();
+            m_effectiveDt.clear();
+            for(auto* grid : levels())
+            {
+                grid->preparedState=nullptr;grid->timeInterpolated=false;
+                grid->preparedChildStage=-1;grid->firstStageUsed=false;
+            }
+        }
+        return counts[0];
+    }
+
     void advance(double dt,double time)
     {
         PR_TIMERS("HelioCubed::AMR::advance");
