@@ -90,6 +90,9 @@ does not need boundary data or a checkpoint:
 -gamma                     1.5
 -domainSize                24
 -thickness                 24
+-inner_radius              1.4964e12
+-outer_radius              1.61124e13
+-radial_stretch            0
 -boxSize_nonrad            12
 -boxSize_rad               12
 -spatial_order             2
@@ -119,8 +122,10 @@ mpirun -np 8 ./cubedSphereTest.exe inputs_run     # MPI build
 Volume output is written at initialization and at the final step. `max_iter`
 and `max_time` are absolute stopping limits, including elapsed steps/time when
 restarting. Time inputs are in seconds and shell radii are in centimeters.
-Override the compiled shell defaults with `inner_radius`, `outer_radius`, and
-`radial_stretch` when needed.
+Every input file must explicitly set `inner_radius`, `outer_radius`, and
+`radial_stretch`; a missing or commented setting stops the run with an error.
+Use `radial_stretch=0` for uniform radial spacing or a nonzero value for
+exponential stretching. These settings do not come from the Makefile.
 
 The established input files provide more complete configurations:
 

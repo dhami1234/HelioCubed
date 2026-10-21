@@ -1,7 +1,7 @@
 # HelioCubed inputs: Local solar-wind run
 # Format: -option value. Keep explanations on separate comment lines.
 # Paths are relative to the working directory used to launch the executable.
-# Omitted options retain code or Makefile defaults.
+# Shell geometry is required; other omitted options retain code defaults.
 
 # === Run type and physical model ===
 
@@ -22,8 +22,6 @@
 
 # === Grid and shell geometry ===
 
-# Geometry overrides below remain commented; uncomment to use runtime values.
-
 # Cells along each angular direction on each cubed-sphere panel.
 -domainSize                     30
 # Total radial cells across the shell.
@@ -32,12 +30,12 @@
 -boxSize_nonrad                 30
 # Radial cells per MPI patch; divides thickness.
 -boxSize_rad                    90
-# Inner shell radius (cm); uncomment to override the Makefile default.
-#-inner_radius                  1.4964e12
+# Inner shell radius (cm).
+-inner_radius                   1.4964e12
 # Outer shell radius (cm); must exceed inner_radius.
-#-outer_radius                  1.61124e13
+-outer_radius                   1.61124e13
 # Radial spacing: 0=uniform, nonzero=exponential stretching.
-#-radial_stretch                1.5
+-radial_stretch                 1.5
 
 # === Spatial scheme and Riemann solver ===
 

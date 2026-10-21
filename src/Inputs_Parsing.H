@@ -51,8 +51,8 @@ private:
     int init_condition_type = 0;
     int domainSize; // Number of cells in non radial direction
     int thickness; // Number of cells in radial direction
-    // Empty strings retain the Makefile defaults. Parse overrides with stod
-    // because InputArgs converts double inputs through single precision.
+    // Required runtime geometry. Parse with stod because InputArgs converts
+    // double inputs through single precision.
     string inner_radius;
     string outer_radius;
     string radial_stretch;
@@ -414,6 +414,16 @@ public:
         args.add("CME_a1", CME_a1);
         args.add("CME_shift", CME_shift);
         args.parse(argc, argv);
+        auto requireGeometry = [](const string& raw, const char* name) {
+            if (raw.empty()) {
+                throw std::invalid_argument(
+                    "HelioCubed requires -inner_radius, -outer_radius, and -radial_stretch "
+                    "in the inputs file; -" + string(name) + " is missing or commented out.");
+            }
+        };
+        requireGeometry(inner_radius, "inner_radius");
+        requireGeometry(outer_radius, "outer_radius");
+        requireGeometry(radial_stretch, "radial_stretch");
         if (spatial_order != 2 && spatial_order != 4) {
             throw std::invalid_argument("spatial_order must be 2 or 4.");
         }
@@ -502,10 +512,9 @@ public:
         }
         CME_insertion_time = CME_type == 1 && cmeEpoch.year != 0
             ? secondsBetweenEpochs(BC_start_epoch, cmeEpoch) : 0.0;
-        geometry.r0 = parsePreciseValue(inner_radius, "inner_radius", geometry.r0);
-        geometry.r1 = parsePreciseValue(outer_radius, "outer_radius", geometry.r1);
-        geometry.radialStretch = parsePreciseValue(
-            radial_stretch, "radial_stretch", geometry.radialStretch);
+        geometry.r0 = parsePreciseValue(inner_radius, "inner_radius", 0.0);
+        geometry.r1 = parsePreciseValue(outer_radius, "outer_radius", 0.0);
+        geometry.radialStretch = parsePreciseValue(radial_stretch, "radial_stretch", 0.0);
         if (!std::isfinite(geometry.r0) || !std::isfinite(geometry.r1)
             || geometry.r0 <= 0.0 || geometry.r1 <= geometry.r0) {
             throw std::invalid_argument(
@@ -531,7 +540,7 @@ public:
         pout(0) << "Git hash: " << GIT_HASH << endl; 
         pout(0) << "Commit message: " << GIT_MESSAGE << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
-        pout(0) << "Running with the following Cubed Sphere inputs (inputs file overrides Makefile defaults)" << endl;
+        pout(0) << "Running with the following Cubed Sphere geometry from inputs" << endl;
         pout(0) << setw(75) << setfill('-') << "-" << endl;
         pout(0) << "Inner Radius: " << get_inner_radius()/c_SR << " SR" << endl;
         pout(0) << "Outer Radius: " << get_outer_radius()/c_SR << " SR" << endl;
