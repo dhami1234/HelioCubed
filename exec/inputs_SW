@@ -16,7 +16,7 @@
 # Perturbation strength for analytic wind and spherical-shock tests.
 -strength                       100.
 # Ratio of specific heats (dimensionless).
--gamma                          1.6666666666666666666667
+-gamma                          1.5
 # Solar gravitational source: 0=off, 1=on.
 -Sun_gravity                    1
 
@@ -25,13 +25,13 @@
 # Geometry overrides below remain commented; uncomment to use runtime values.
 
 # Cells along each angular direction on each cubed-sphere panel.
--domainSize                     15
+-domainSize                     60
 # Total radial cells across the shell.
--thickness                      45
+-thickness                      60
 # Angular cells per MPI patch; divides domainSize.
--boxSize_nonrad                 15
+-boxSize_nonrad                 20
 # Radial cells per MPI patch; divides thickness.
--boxSize_rad                    45
+-boxSize_rad                    20
 # Inner shell radius (cm); uncomment to override the Makefile default.
 #-inner_radius                  1.4964e12
 # Outer shell radius (cm); must exceed inner_radius.
@@ -48,14 +48,14 @@
 # At order 2: limiter=0 is unlimited PLM, 1/2=minmod, 3=MC (monotonized central).
 # Order 2 uses Cartesian interpolation/reconstruction.
 # state_conversion, spatial_operator, Berta and seam-pressure settings apply at order 4.
--spatial_order                  4
+-spatial_order                  2
 # Spatial scheme at order 4: 1=standard FV, 2=Berta WENOZ.
 -spatial_operator               1
 # Limiter at order 4 (standard scheme): 0=none, 1=fourth-order, 2=minmod.
 # At order 2: 0=unlimited, 1/2=minmod, 3=MC. MC requires spatial_order=2.
--limiter                        1
+-limiter                        3
 # Riemann solver for either scheme: 1=Rusanov, 2=Roe eight-wave.
--Riemann_solver_type            1
+-Riemann_solver_type            2
 # Roe entropy-fix coefficient: nonnegative; 0 disables the fix.
 -entropy_fix_coeff              0.3
 
@@ -70,15 +70,15 @@
 # === Time integration and stopping limits ===
 
 # Time integrator: 1=Euler, 2=SSPRK2, 3=classical RK3, 4=classical RK4.
--temporal_order                 3
+-temporal_order                 2
 # Multiplier of the wave-speed/viscosity timestep estimate.
--CFL                            0.5
+-CFL                            1.5
 # Maximum step number; stops when this or max_time is reached.
 -max_iter                       100000
 # Maximum elapsed simulation time (s), including time before a restart.
 -max_time                       360000.0
 # Calendar start epoch (UTC): decimal year or DD-MM-YYYYTHH:MM:SS.
--BC_start_time                  2024.206170309654
+-BC_start_time                  16-03-2024T12:00:00
 
 # === Divergence control and artificial viscosity ===
 
@@ -86,15 +86,15 @@
 -divergence_cleaning            1
 # Artificial viscosity switches are ignored for O2 with minmod or MC (limiter != 0).
 # Linear artificial viscosity: 0=off, 1=on.
--linear_viscosity               1
+-linear_viscosity               0
 # Nonlinear artificial viscosity: 0=off, 1=on.
--nonlinear_viscosity            1
+-nonlinear_viscosity            0
 # Linear artificial-viscosity order: 3 or 5.
 -viscosity_order                5
 # Viscosity scaling: 0=radius-independent, 1=radius-scaled.
 -scale_viscosity_with_r         1
 # Pressure-repair cadence; AMR also repairs density and enforces floors at regrids.
--P_floor_cadence                5000000
+-P_floor_cadence                1
 
 # === State conversion and block boundaries ===
 
@@ -102,13 +102,13 @@
 # radial symmetry exactly. Optional BC treatments add work and default to off.
 
 # State interpolation at order 4: 0=preserve spherical symmetry, 1=Cartesian U.
--state_conversion               0
+-state_conversion               1
 # Reconcile fluxes at panel boundaries: 0=off, 1=on.
 -boundary_reflux                1
 # File BCs: 0=legacy sampling, 1=centered sampling/conserved averages.
--BC_conserved_averages          0
-# Angular ghost energy correction to interpolated pressure: 0=off, 1=on.
--seam_pressure_correction       0
+-BC_conserved_averages          1
+# Angular ghost energy correction to interpolated pressure: 0=off, 1=on. Not used for O2.
+-seam_pressure_correction       1
 # Legacy interpolation selector (0/1); unused by the current driver.
 -MBInterp_define                1
 
@@ -117,24 +117,25 @@
 # 0=single level; N allows fine levels L1,...,LN. Requires PR_AMR.
 # O2: RK2/3. O4: RK3/4, state_conversion=1, domainSize>=20.
 # AMR needs boundary_reflux=1.
--amr_max_level                  0
+-amr_max_level                  1
 # One ratio for all interfaces, or a list such as 2,4,8; 1 leaves a direction alone.
 -amr_ref_ratio_rad              2
--amr_ref_ratio_nonrad           2
--amr_subcycling                 1
+-amr_ref_ratio_nonrad           1
+-amr_subcycling                 0
+-amr_verbosity                  1
 # Regrid by base steps or simulation seconds (0 disables each); buffer is in parent cells.
--amr_regrid_interval            4
--amr_regrid_time_cadence        0
+-amr_regrid_interval            1000000
+-amr_regrid_time_cadence        3600
 -amr_buffer                     2
 # Convergence compares conservative composite projections; convTestType=1/2
 # runs three AMR meshes. convergence_level=0/1/2 runs one; 3 compares saved runs.
 
 # Any criterion can tag: MS-FLUKSS relative gradient of rho, p, |B| or |v|.
 # Negative disables; zero tags nonzero gradients. Omitted rho/p use amr_threshold.
--amr_refine_density_thresh      0.05
--amr_refine_pressure_thresh     0.05
+-amr_refine_density_thresh      -1
+-amr_refine_pressure_thresh     -1
 -amr_refine_B_thresh            -1
--amr_refine_V_thresh            -1
+-amr_refine_V_thresh            0.2
 # Finest child level per criterion: -1=amr_max_level, 0=disabled.
 -amr_refine_density_maxlevel    -1
 -amr_refine_pressure_maxlevel   -1
@@ -184,7 +185,7 @@
 # Slice output interval in elapsed simulation time (s).
 -slice_time_cadence             10800
 # Slice selection: any combination of X, Y, Z (planes) and R (shell).
-#-slices                        X Y Z R
+-slices                        X Y Z R
 # Output: 0=unscaled CGS, 1=radius scaling and presentation units.
 -scale_data_with_r              1
 # Append physical div(B) to volume output: 0=no, 1=yes.
@@ -199,7 +200,7 @@
 # Number of recent checkpoints targeted for retention.
 -max_checkpoint_files           3
 # Uncomment to resume from this checkpoint instead of initializing.
-#-restart_file                  checkpoint_1000.hdf5
+-restart_file                  checkpoint_amr_600.amr
 
 # === Trajectory probes ===
 
@@ -226,10 +227,10 @@
 # Checkpoints retain insertion state to prevent duplicate CMEs on restart.
 
 # CME insertion: 0=off, 1=insert the scheduled flux rope.
--CME_type                       0
+-CME_type                       1
 # Insertion epoch (UTC): decimal year or DD-MM-YYYYTHH:MM:SS.
 # Use 0 or an epoch <= BC_start_time to insert at startup.
--CME_Enter_Time                 2021.015
+-CME_Enter_Time                 17-03-2024T12:00:00
 # FRiED flux-rope axis distance scale (solar radii).
 -CME_r1                         46.67
 # Flux-rope cross-section radius scale (solar radii).
@@ -257,6 +258,6 @@
 # Magnetic helicity sign: +1 or -1.
 -CME_helicity_sign              1.00
 # Magnetic-field normalization (G).
--CME_a1                         0.0276
+-CME_a1                         0.00276
 # Displacement along the flux-rope axis (solar radii).
 -CME_shift                      0.0
