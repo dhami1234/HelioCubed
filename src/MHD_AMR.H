@@ -51,12 +51,14 @@ inline double amrSlope(double left,double center,double right)
     return (a>0 ? 1.0 : -1.0)*std::min({2*abs(a),2*abs(b),0.5*abs(a+b)});
 }
 
-// Storing and recovering J*U can move a zero-pressure parent by a few ulps.
+// Storing and recovering J*U can move density at its floor and zero pressure
+// by a few ulps.
 // Allow that margin only for the constant conservative fallback; interpolated
 // trial children still use the strict positivity test. No energy is added.
 inline bool amrAdmissibleParent(const double* u,double gamma,bool magnetic,double b0)
 {
-    if(!(u[iRHO]>=RHO00) || !std::isfinite(u[iRHO])) return false;
+    if(!(u[iRHO]>=RHO00*(1-64*std::numeric_limits<double>::epsilon()))
+        || !std::isfinite(u[iRHO])) return false;
     const double background=magnetic ? c_TEST_P0/(gamma-1) : 0;
     double thermal=u[iE]+background,scale=abs(u[iE])+abs(background);
     for(int d=0;d<DIM;++d)
@@ -271,14 +273,20 @@ public:
     void writeProbes(int iteration,double time,bool giveSpace);
     void writeSlices(int iteration,double time);
 
-    long long applyPressureFloor()
+    struct FloorRepairs
     {
-        PR_TIMERS("HelioCubed::AMR::pressureFloor");
+        long long density=0,pressure=0;
+        bool changed() const {return density || pressure;}
+    };
+
+    FloorRepairs applyFloors(bool repairPressure=true)
+    {
+        PR_TIMERS("HelioCubed::AMR::floors");
         const double gamma=ParseInputs::get_gamma();
         const bool magnetic=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
         const double background=magnetic ? c_TEST_P0 : 0;
         const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
-        long long counts[2]={0,0}; // Repaired leaf cells and invalid states.
+        long long counts[3]={0,0,0}; // Density repairs, pressure repairs, invalid states.
         for(auto* grid : levels()) for(auto index : grid->layout)
         {
             auto& state=grid->state[index];
@@ -288,9 +296,25 @@ public:
             {
                 if(covered(grid->number,p,block)) continue;
                 const double j=jacobian(p);
-                if(!(j>0) || !std::isfinite(j)) {++counts[1];continue;}
-                const double inverseJ=1/j,rho=state(p,iRHO)*inverseJ;
-                if(!(rho>0) || !std::isfinite(rho)) {++counts[1];continue;}
+                if(!(j>0) || !std::isfinite(j)) {++counts[2];continue;}
+                const double inverseJ=1/j;
+                double rho=state(p,iRHO)*inverseJ;
+                if(!std::isfinite(rho)) {++counts[2];continue;}
+                const bool lowDensity=rho<RHO00 || state(p,iRHO)/j<RHO00;
+                if(!repairPressure && !lowDensity) continue;
+                bool finite=true;
+                for(int c=0;c<NUMCOMPS;++c) finite=finite && std::isfinite(state(p,c));
+                if(!finite) {++counts[2];continue;}
+                if(lowDensity)
+                {
+                    // Add mass without changing momentum, B or total energy.
+                    // Recheck both recovery forms to avoid rounding below RHO00.
+                    double mapped=std::max(state(p,iRHO),j*RHO00);
+                    while(mapped*inverseJ<RHO00 || mapped/j<RHO00)
+                        mapped=std::nextafter(mapped,std::numeric_limits<double>::infinity());
+                    if(!std::isfinite(mapped)) {++counts[2];continue;}
+                    state(p,iRHO)=mapped;rho=mapped*inverseJ;++counts[0];
+                }
                 double kinetic=0,magneticEnergy=0;
                 for(int d=0;d<DIM;++d)
                 {
@@ -303,7 +327,7 @@ public:
                 auto pressure=[&](double energy)
                 {return background+(gamma-1)*(energy*inverseJ-kinetic-magneticEnergy);};
                 const double original=state(p,iE),current=pressure(original);
-                if(!std::isfinite(current)) {++counts[1];continue;}
+                if(!std::isfinite(current)) {++counts[2];continue;}
                 if(current>=0) continue;
                 // JU contains Cartesian conserved cell averages at both
                 // orders. Restore zero cell-average pressure by changing
@@ -314,15 +338,15 @@ public:
                 while(std::isfinite(energy) && pressure(energy)<0)
                     energy=std::nextafter(energy,std::numeric_limits<double>::infinity());
                 if(!std::isfinite(energy) || !std::isfinite(pressure(energy)))
-                {++counts[1];continue;}
-                state(p,iE)=energy;++counts[0];
+                {++counts[2];continue;}
+                state(p,iE)=energy;++counts[1];
             }
         }
 #ifdef PR_MPI
-        MPI_Allreduce(MPI_IN_PLACE,counts,2,MPI_LONG_LONG,MPI_SUM,MPI_COMM_WORLD);
+        MPI_Allreduce(MPI_IN_PLACE,counts,3,MPI_LONG_LONG,MPI_SUM,MPI_COMM_WORLD);
 #endif
-        if(counts[1]) throw std::runtime_error("Invalid conserved AMR state during pressure repair");
-        if(counts[0])
+        if(counts[2]) throw std::runtime_error("Invalid conserved AMR state during density/pressure repair");
+        if(counts[0] || counts[1])
         {
             averageDown();
             m_effectiveDt.clear();
@@ -332,10 +356,12 @@ public:
                 grid->preparedChildStage=-1;grid->firstStageUsed=false;
             }
         }
-        return counts[0];
+        return {counts[0],counts[1]};
     }
 
-    void advance(double dt,double time)
+    long long applyPressureFloor() {return applyFloors().pressure;}
+
+    FloorRepairs advance(double dt,double time,bool repairDensity=false)
     {
         PR_TIMERS("HelioCubed::AMR::advance");
         if(m_effectiveDt.size()!=numLevels()) timestep();
@@ -353,10 +379,11 @@ public:
                 else {PR_TIMERS("HelioCubed::AMR::FourthOrderSubcycled");advanceExtrapolated(dt,time,4);}
             }
             else advanceRungeKuttaSynchronous(dt,time,order);
+            const auto repaired=repairDensity ? applyFloors(false) : FloorRepairs{};
             for(auto* grid : levels())
                 if(!OP::validConservedState(grid->state)) throw std::runtime_error("Invalid conserved AMR state after Runge-Kutta step");
             writeProgress(time+dt);
-            return;
+            return repaired;
         }
         if(subcycle)
         {
@@ -364,10 +391,12 @@ public:
             completeStep(0);
         }
         else advanceSynchronous(dt,time);
+        const auto repaired=repairDensity ? applyFloors(false) : FloorRepairs{};
         for(auto* grid : levels())
             if(!OP::validConservedState(grid->state))
                 throw std::runtime_error("Invalid conserved AMR state after SSPRK2 step");
         writeProgress(time+dt);
+        return repaired;
     }
 
     double timestep()
@@ -409,6 +438,12 @@ public:
     {
         PR_TIMERS("HelioCubed::AMR::regrid");
         const auto start=std::chrono::steady_clock::now();
+        // A step or CME can invalidate pressure after the cadence repair.
+        // Conservative children require admissible parent averages now.
+        const auto repaired=applyFloors();
+        if(repaired.changed())
+            pout(0)<<"AMR regrid floors: density cells = "<<repaired.density
+                <<" pressure cells = "<<repaired.pressure<<" time = "<<formatProgressTime(time)<<std::endl;
         averageDown();
         prepareStates(time);
         std::vector<PatchSet> desired(m_ratios.size()+1);
@@ -1609,7 +1644,7 @@ private:
 #ifdef PR_MPI
         MPI_Allreduce(MPI_IN_PLACE,&invalid,1,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
 #endif
-        if(invalid) throw std::runtime_error("Cannot conservatively refine a parent with negative internal energy");
+        if(invalid) throw std::runtime_error("Cannot conservatively refine a parent with invalid density or internal energy");
     }
 };
 

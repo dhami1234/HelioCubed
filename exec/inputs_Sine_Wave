@@ -93,7 +93,7 @@
 -viscosity_order                5
 # Viscosity scaling: 0=radius-independent, 1=radius-scaled.
 -scale_viscosity_with_r         1
-# Apply the pressure-floor repair every this many steps.
+# Pressure-repair cadence; AMR also repairs density and enforces floors at regrids.
 -P_floor_cadence                5000000
 
 # === State conversion and block boundaries ===

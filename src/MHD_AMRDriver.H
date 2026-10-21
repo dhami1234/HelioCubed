@@ -190,11 +190,15 @@ inline void runCubedSphereAMR()
             for(++iteration;iteration<=lastIteration && time<maximum;++iteration)
             {
                 const auto start=std::chrono::steady_clock::now();
-                if(iteration%ParseInputs::get_P_floor_cadence()==0)
+                const bool floorDue=iteration%ParseInputs::get_P_floor_cadence()==0;
+                if(floorDue)
                 {
-                    const auto repaired=simulation.applyPressureFloor();
+                    const auto repaired=simulation.applyFloors();
                     pout(0)<<"AMR pressure floor at iteration "<<iteration
-                        <<": repaired composite cells = "<<repaired<<std::endl;
+                        <<": repaired composite cells = "<<repaired.pressure<<std::endl;
+                    if(repaired.density)
+                        pout(0)<<"AMR density floor at iteration "<<iteration
+                            <<": repaired composite cells = "<<repaired.density<<std::endl;
                 }
                 const double cflDt=simulation.timestep();
                 dt=std::min(convergence ? fixedDt : cflDt,maximum-time);
@@ -203,7 +207,10 @@ inline void runCubedSphereAMR()
                 if(reachesCME) dt=event-time;
                 if(!std::isfinite(dt) || !(dt>0) || !(time+dt>time))
                     throw std::runtime_error("Invalid AMR timestep");
-                simulation.advance(dt,time);
+                const auto repaired=simulation.advance(dt,time,floorDue);
+                if(repaired.changed())
+                    pout(0)<<"AMR density repair after iteration "<<iteration
+                        <<": density cells = "<<repaired.density<<" pressure cells = "<<repaired.pressure<<std::endl;
                 completed=iteration;
                 time=reachesCME ? event : dt>=maximum-time ? maximum : time+dt;
                 const bool inserted=simulation.insertCME(time);
