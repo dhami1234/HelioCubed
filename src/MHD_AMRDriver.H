@@ -149,11 +149,13 @@ inline void runCubedSphereAMR()
         int iteration=simulation.restartIteration;
         bool giveSpace=true;
         const bool insertedAtStart=simulation.insertCME(time);
-        if(insertedAtStart && mode<3)
+        if(mode<3)
         {
-            simulation.write(iteration,time,dt,false);simulation.write(iteration,time,dt,true);
+            simulation.write(iteration,time,dt,false);
+            if(insertedAtStart) simulation.write(iteration,time,dt,true);
             if(slices) simulation.writeSlices(iteration,time);
-            simulation.writeProbes(iteration,time,giveSpace);giveSpace=false;
+            if(insertedAtStart)
+            {simulation.writeProbes(iteration,time,giveSpace);giveSpace=false;}
         }
         if(mode==3 || mode==4)
         {
