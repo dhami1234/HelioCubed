@@ -6,6 +6,9 @@ template<bool DivB>
 inline void CubedSphereAMR::writePlot(HDF5Handler& h5,const std::string& prefix,double time)
 {
     prepareStates(time);
+    const bool cartesian=ParseInputs::get_output_coordinates()==1;
+    const bool scaled=ParseInputs::get_scale_data_with_r()==1;
+    const auto shell=cubedSphereShellGeometry();
     using PlotLevel=MBLevelBoxData<double,NUMCOMPS+2+int(DivB),HOST>;
     std::vector<std::unique_ptr<PlotLevel>> storage;
     std::vector<const PlotLevel*> output;
@@ -17,6 +20,8 @@ inline void CubedSphereAMR::writePlot(HDF5Handler& h5,const std::string& prefix,
         OP::GeometryScope geometry(grid->geometry);
         for(auto index : grid->layout)
         {
+            const auto block=grid->layout.block(index);
+            const auto sizes=grid->layout.domain().getBlock(block).sizes();
             State fourth;
             if(fourthOrder()) fourth=fourthOrderPrimitives(*grid,index);
             Scalar divergence;
@@ -30,6 +35,15 @@ inline void CubedSphereAMR::writePlot(HDF5Handler& h5,const std::string& prefix,
                 for(int c=0;c<NUMCOMPS;++c)
                     plot[index](p,c)=fourthOrder() ? fourth(p,c) : grid->primitive[index](p,c);
                 plot[index](p,iBX)+=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
+                if(!cartesian || scaled)
+                {
+                    Array<double,DIM> xi,position;double jacobian;
+                    for(int d=0;d<DIM;++d) xi[d]=(p[d]+0.5)/sizes[d];
+                    f_cubedSphereMap(position,jacobian,xi,block,shell);
+                    auto values=plot[index].var(p);
+                    formatCartesianOutput(values,position[0],position[1],position[2],
+                        ParseInputs::get_gamma(),cartesian,scaled);
+                }
                 plot[index](p,NUMCOMPS)=covered(grid->number,p,grid->layout.block(index)) ? 0 : 1;
                 plot[index](p,NUMCOMPS+1)=grid->number;
                 if constexpr(DivB) plot[index](p,NUMCOMPS+2)=divergence(p);
@@ -37,8 +51,9 @@ inline void CubedSphereAMR::writePlot(HDF5Handler& h5,const std::string& prefix,
         }
         output.push_back(&plot);maps.push_back(&grid->map);
     }
-    std::vector<std::string> names={"density","Vx","Vy","Vz","P","Bx","By","Bz","active","amr_level"};
-    if constexpr(DivB) names.push_back("divB"); // Physical G/cm; AMR primitives retain their Cartesian CGS format.
+    auto names=outputPrimitiveNames();
+    names.push_back("active");names.push_back("amr_level");
+    if constexpr(DivB) names.push_back("divB"); // Always physical G/cm.
     const std::vector<Point> ratios(m_ratios.begin(),m_ratios.begin()+numLevels()-1);
     h5.writeMBAMRData(names,maps,output,ratios,prefix);
 }

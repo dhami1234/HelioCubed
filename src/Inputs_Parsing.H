@@ -99,6 +99,7 @@ private:
             else if (token == "R") slice_R = true;
         }
     }
+    int output_coordinates = 0; // Volume/slice vectors: 0=spherical, 1=Cartesian.
     int scale_data_with_r = 0; // 0: No scaling, 1: Scale with r
     int output_divB = 0; // 0: Do not write div(B), 1: Append div(B) to data output
     int max_checkpoint_files = 1;
@@ -226,6 +227,7 @@ public:
     static bool get_slice_Y() { return getInstance().slice_Y; }
     static bool get_slice_Z() { return getInstance().slice_Z; }
     static bool get_slice_R() { return getInstance().slice_R; }
+    static int get_output_coordinates() {return getInstance().output_coordinates;}
     static int get_scale_data_with_r() {return getInstance().scale_data_with_r;}
     static int get_output_divB() {return getInstance().output_divB;}
     static int get_max_checkpoint_files() {return getInstance().max_checkpoint_files;}
@@ -344,6 +346,7 @@ public:
         args.add("data_file_prefix", data_file_prefix);
         args.add("checkpoint_file_prefix", checkpoint_file_prefix);
         args.add("slices", slices_raw);
+        args.add("output_coordinates", output_coordinates);
         args.add("scale_data_with_r", scale_data_with_r);
         args.add("output_divB", output_divB);
         args.add("max_checkpoint_files", max_checkpoint_files);
@@ -435,6 +438,9 @@ public:
         }
         if (state_conversion != 0 && state_conversion != 1) {
             throw std::invalid_argument("state_conversion must be 0 (symmetry preserving) or 1 (Cartesian).");
+        }
+        if (output_coordinates != 0 && output_coordinates != 1) {
+            throw std::invalid_argument("output_coordinates must be 0 (spherical) or 1 (Cartesian).");
         }
         if (BC_conserved_averages != 0 && BC_conserved_averages != 1) {
             throw std::invalid_argument("BC_conserved_averages must be 0 or 1.");
@@ -564,6 +570,8 @@ public:
         pout(0) << "data_file_prefix: " << data_file_prefix << endl;
         pout(0) << "checkpoint_file_prefix: " << checkpoint_file_prefix << endl;
         pout(0) << "Slices: " << slices_raw << endl;
+        pout(0) << "output_coordinates: " << output_coordinates
+                << (output_coordinates == 0 ? " (spherical)" : " (Cartesian)") << endl;
         pout(0) << "scale_data_with_r: " << scale_data_with_r << endl;
         pout(0) << "output_divB: " << output_divB << endl;
         pout(0) << "max_checkpoint_files: " << max_checkpoint_files << endl;

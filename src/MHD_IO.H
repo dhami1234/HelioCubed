@@ -4,6 +4,7 @@
 #include "Inputs_Parsing.H"
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_Constants.H"
+#include "MHD_Output.H"
 #include <iomanip>
 #include <iostream>
 #include <string.h>
@@ -687,7 +688,7 @@ void writeTecplotSlice_spherical(
             for (int j=lo[1]; j<=hi[1]+1; ++j)
             for (int i=lo[0]; i<=hi[0]+1; ++i) {
                 Point pn(i,j,k);
-                if (!cellBox.containsPoint(pn)) continue; // consider overlap region
+                if (!mapBox.containsPoint(pn)) continue;
                 const double x = mapPatch(pn, Xc);
                 const double y = mapPatch(pn, Yc);
                 const double z = mapPatch(pn, Zc);
@@ -1173,7 +1174,30 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
         }
       },W_sph_out[dit],W,radiusLev[dit],gamma,scale_data_with_r);
   }
-  
+
+  const auto outputNames = HelioCubed::outputPrimitiveNames();
+  if (ParseInputs::get_output_coordinates() == 1)
+  {
+    // The established writer has already formed and scaled spherical fields.
+    // Rotate those presentation values without modifying the evolved state.
+    for (auto dit : layout)
+    {
+      const auto block = layout.block(dit);
+      const auto dx = eulerOp[dit].dx();
+      auto position = forall_p<double,DIM,HOST>(f_cubedSphereMap3,
+          layout[dit],radiusLev[dit],dx,0.5,0.5,block);
+      forallInPlace([] PROTO_LAMBDA(
+          Var<double,NUMCOMPS,HOST>& out,
+          const Var<double,DIM,HOST>& position)
+        {
+          const double radius = sqrt(position(0)*position(0)
+              + position(1)*position(1) + position(2)*position(2));
+          HelioCubed::sphericalOutputToCartesian(out,
+              position(0)/radius,position(1)/radius,position(2)/radius);
+        },W_sph_out[dit],position);
+    }
+  }
+
   if (write_data && ParseInputs::get_output_divB() == 1){
     MBLevelBoxData<double, 1, HOST> divB(layout, Point::Zeros());
     for (auto dit : layout)
@@ -1201,14 +1225,14 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     }
 
     std::string output_file = ParseInputs::get_data_file_prefix() + "." + std::to_string(iter);
-    h5.writeMBLevel(
-        {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp", "divB"},
-        map,W_sph_divB_out,output_file);
+    auto names = outputNames;
+    names.push_back("divB");
+    h5.writeMBLevel(names,map,W_sph_divB_out,output_file);
     pout(0) << "Data file with divB written at iteration " << iter << endl;
   }
   else if (write_data){
     std::string output_file = ParseInputs::get_data_file_prefix() + "." + std::to_string(iter); 
-    h5.writeMBLevel({"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, map, W_sph_out, output_file);
+    h5.writeMBLevel(outputNames, map, W_sph_out, output_file);
     pout(0) << "Data file written at iteration " << iter << endl;
     // Print this for more detailed output
     // h5.writeMBLevel({"density", "VxPerp", "VyPerp", "VzPerp", "P", "BxPerp", "ByPerp", "BzPerp","Vr","Br"}, map, Wout, "W_" + to_string(iter));
@@ -1260,19 +1284,19 @@ void Write_W(MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
 
     if (ParseInputs::get_slice_X()){
       std::string tecplot_slice_file_x = ParseInputs::get_data_file_prefix() + ".x." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, outputNames, tecplot_slice_file_x, physical_time,time,iter, 0, 0.0);
     }
     if (ParseInputs::get_slice_Y()){
       std::string tecplot_slice_file_y = ParseInputs::get_data_file_prefix() + ".y." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, outputNames, tecplot_slice_file_y, physical_time,time,iter, 1, 0.0);
     }
     if (ParseInputs::get_slice_Z()){
       std::string tecplot_slice_file_z = ParseInputs::get_data_file_prefix() + ".z." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
+      writeTecplotSlice_plane(*sliceMap, W_sph_out_ghost, outputNames, tecplot_slice_file_z, physical_time,time,iter, 2, 0.0);
     }
     if (ParseInputs::get_slice_R()){
       std::string tecplot_spherical_slice_file = ParseInputs::get_data_file_prefix() + ".r." + std::to_string(iter) + ".dat";
-      writeTecplotSlice_spherical(*sliceMap, W_sph_out_ghost, {"density", "Vr", "Vt", "Vp", "P", "Br", "Bt", "Bp"}, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13);
+      writeTecplotSlice_spherical(*sliceMap, W_sph_out_ghost, outputNames, tecplot_spherical_slice_file, physical_time, time, iter, /*radius=*/1.5e13);
     }
     pout(0) << "Tecplot slice files written at iteration " << iter << endl;                                     
   }

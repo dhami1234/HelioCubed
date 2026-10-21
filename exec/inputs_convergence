@@ -162,6 +162,8 @@
 -data_file_prefix               data
 # Full-volume HDF5 output every this many steps.
 -write_cadence                  1
+# Volume/slice vector components: 0=spherical, 1=Cartesian.
+-output_coordinates            0
 # Append physical div(B) to volume output: 0=no, 1=yes.
 -output_divB                    0
 

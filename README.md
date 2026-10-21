@@ -237,13 +237,32 @@ in the Subset/SIL selection and raise any MultiresControl resolution setting to
 the finest level before adding a Mesh plot. A file may contain only L0 if no
 criterion has tagged cells.
 
-AMR volume variables are Cartesian primitives `density`, `Vx`, `Vy`, `Vz`, `P`,
-`Bx`, `By`, and `Bz`, in CGS units, plus `active` and `amr_level`.
-`output_divB=1` adds physical `divB` in G/cm. AMR volume fields remain in CGS
-regardless of `scale_data_with_r`; slice and probe outputs have their own
-presentation conventions. `slices` selects any combination of `X Y Z R`;
-AMR slices omit covered coarse cells. Probes sample the finest available level
-at each trajectory position.
+`output_coordinates` selects the vector components written in **both volume
+files and slices**, with the same behavior for uniform grids and AMR:
+
+| Setting | Velocity fields | Magnetic fields |
+| --- | --- | --- |
+| `0` (default) | `Vr`, `Vt`, `Vp` | `Br`, `Bt`, `Bp` |
+| `1` | `Vx`, `Vy`, `Vz` | `Bx`, `By`, `Bz` |
+
+Spherical components use the orthonormal radial, colatitude, and azimuthal
+directions. Both choices also write `density` and `P`; AMR volumes add `active`
+and `amr_level`. This setting controls output independently of the solver's
+`state_conversion` setting. The mesh geometry remains the physical shell.
+
+`scale_data_with_r=0` writes raw CGS values in either coordinate basis. With
+`1`, write density multiplied by `(r/AU)^2/c_MP`, pressure by
+`(r/AU)^(2*gamma)*1e12`, and velocity in km/s. Magnetic fields are converted to
+microgauss with radial components multiplied by `(r/AU)^2` and transverse
+components by `r/AU`. For Cartesian output this magnetic scaling is applied
+in the spherical basis before rotating back to Cartesian components.
+`output_divB=1` always adds physical `divB` in G/cm.
+
+`slices` selects any combination of `X Y Z R`; AMR slices omit covered coarse
+cells. Checkpoints retain conservative state, and probes retain their RTN
+columns and units. Probes sample the finest available level at each trajectory
+position. The bundled solar-wind slice plotting defaults use spherical field
+names.
 
 Slices from both uniform-grid and AMR runs are self-contained **Tecplot ASCII
 `.dat` files**, for example `data.z.100.dat` or `data.r.100.dat`. They include

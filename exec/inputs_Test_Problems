@@ -170,6 +170,8 @@
 -slice_time_cadence             1800.0
 # Slice selection: any combination of X, Y, Z (planes) and R (shell).
 -slices                         Z
+# Volume/slice vector components: 0=spherical, 1=Cartesian.
+-output_coordinates            0
 # Output: 0=unscaled CGS, 1=radius scaling and presentation units.
 -scale_data_with_r              0
 # Append physical div(B) to volume output: 0=no, 1=yes.

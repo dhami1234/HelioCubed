@@ -22,8 +22,9 @@ inline void writeAMRSliceFile(const std::string& filename,const std::string& zon
     if(procID()==0)
     {
         file<<std::setprecision(17)<<"TITLE = \"t="<<time<<" step="<<iteration<<"\"\n"
-            <<"VARIABLES=\"X\" \"Y\" \"Z\" \"density\" \"Vr\" \"Vt\" \"Vp\" \"P\" \"Br\" \"Bt\" \"Bp\"\n"
-            <<"DATASETAUXDATA PhysTime = \""<<getPhysTime(time)<<"\"\n";
+            <<"VARIABLES=\"X\" \"Y\" \"Z\"";
+        for(const auto& name : outputPrimitiveNames()) file<<" \""<<name<<"\"";
+        file<<"\nDATASETAUXDATA PhysTime = \""<<getPhysTime(time)<<"\"\n";
         file.write(zones.data(),zones.size());
     }
 #ifdef PR_MPI
@@ -68,6 +69,7 @@ inline void CubedSphereAMR::writeSlices(int iteration,double time)
         {-1,1,2},{1,-1,2},{-1,1,2}};
     const char* labels[] = {"x","y","z","r"};
     const bool scaled=ParseInputs::get_scale_data_with_r()==1;
+    const bool cartesian=ParseInputs::get_output_coordinates()==1;
     for(int axis=0;axis<4;++axis)
     {
         if(!requested[axis]) continue;
@@ -163,25 +165,9 @@ inline void CubedSphereAMR::writeSlices(int iteration,double time)
                         Array<double,DIM> xi,position;double jacobian;
                         for(int d=0;d<DIM;++d) xi[d]=d==normal ? cut : (p[d]+0.5)/sizes[d];
                         f_cubedSphereMap(position,jacobian,xi,block,geometry);
-                        const double r=std::hypot(position[0],position[1],position[2]);
-                        const double nx=position[0]/r,ny=position[1]/r,nz=position[2]/r;
-                        const double phi=atan2(ny,nx),cp=cos(phi),sp=sin(phi),st=std::hypot(nx,ny);
-                        for(int start : {iVX,iBX})
-                        {
-                            const double x=value[start],y=value[start+1],z=value[start+2];
-                            value[start]=nx*x+ny*y+nz*z;
-                            value[start+1]=nz*(cp*x+sp*y)-st*z;
-                            value[start+2]=-sp*x+cp*y;
-                        }
-                        if(scaled)
-                        {
-                            const double rOverAU=r/c_AU;
-                            value[iRHO]*=rOverAU*rOverAU/c_MP;
-                            value[iP]*=pow(rOverAU,2*ParseInputs::get_gamma())*1e12;
-                            for(int d=0;d<DIM;++d) value[iVX+d]*=1e-5;
-                            value[iBX]*=rOverAU*rOverAU*1e6;
-                            value[iBY]*=rOverAU*1e6;value[iBZ]*=rOverAU*1e6;
-                        }
+                        auto presentation=[&](int c)->double& {return value[c];};
+                        formatCartesianOutput(presentation,position[0],position[1],position[2],
+                            ParseInputs::get_gamma(),cartesian,scaled);
                         for(double v : value) if(!std::isfinite(v)) invalid=1;
                         values.push_back(value);
                     }
