@@ -182,6 +182,8 @@ inline void runCubedSphereAMR()
             const int lastIteration=int(maximumSteps)+(convergence && !split && ParseInputs::get_CME_type()==1 ? 1 : 0);
             double writeTrigger=floor(time/ParseInputs::get_write_time_cadence()),probeTrigger=-1;
             double sliceTrigger=floor(time/ParseInputs::get_slice_time_cadence());
+            const double regridTimeCadence=ParseInputs::get_amr_regrid_time_cadence();
+            double regridTimeTrigger=regridTimeCadence>0 ? floor(time/regridTimeCadence) : 0;
             int completed=iteration;
             for(++iteration;iteration<=lastIteration && time<maximum;++iteration)
             {
@@ -204,7 +206,13 @@ inline void runCubedSphereAMR()
                 time=reachesCME ? event : dt>=maximum-time ? maximum : time+dt;
                 const bool inserted=simulation.insertCME(time);
                 const int cadence=ParseInputs::get_amr_regrid_interval();
-                if(!inserted && cadence && iteration%cadence==0) simulation.regrid(time);
+                const double nextRegridTimeTrigger=regridTimeCadence>0 ? floor(time/regridTimeCadence) : 0;
+                const bool timeRegrid=regridTimeCadence>0
+                    && (nextRegridTimeTrigger!=regridTimeTrigger || !std::isfinite(nextRegridTimeTrigger));
+                // Regrid only synchronized states; crossing several time
+                // intervals in one coarse step still needs just one regrid.
+                if(!inserted && ((cadence && iteration%cadence==0) || timeRegrid)) simulation.regrid(time);
+                regridTimeTrigger=nextRegridTimeTrigger;
                 const bool last=iteration==lastIteration || time==maximum;
                 const double nextTrigger=floor(time/ParseInputs::get_write_time_cadence());
                 if(last || inserted || iteration%ParseInputs::get_write_cadence()==0 || nextTrigger!=writeTrigger)

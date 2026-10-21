@@ -122,6 +122,8 @@ private:
     int amr_subcycling = 1;
     int amr_verbosity = 1; // 0: coarse steps, 1: level summaries, 2: individual events.
     int amr_regrid_interval = 4;
+    double amr_regrid_time_cadence = 0;
+    string amr_regrid_time_cadence_raw;
     int amr_buffer = 2;
     // Legacy fallback for density/pressure when their individual options are
     // omitted. Negative thresholds disable a criterion; zero tags any change.
@@ -236,6 +238,7 @@ public:
     static int get_amr_subcycling() {return getInstance().amr_subcycling;}
     static int get_amr_verbosity() {return getInstance().amr_verbosity;}
     static int get_amr_regrid_interval() {return getInstance().amr_regrid_interval;}
+    static double get_amr_regrid_time_cadence() {return getInstance().amr_regrid_time_cadence;}
     static int get_amr_buffer() {return getInstance().amr_buffer;}
     static double get_amr_threshold() {return getInstance().amr_threshold;}
     static double get_amr_refine_density_thresh() {return getInstance().amr_refine_density_thresh;}
@@ -361,6 +364,7 @@ public:
         args.add("amr_subcycling", amr_subcycling);
         args.add("amr_verbosity", amr_verbosity);
         args.add("amr_regrid_interval", amr_regrid_interval);
+        args.add("amr_regrid_time_cadence", amr_regrid_time_cadence_raw);
         args.add("amr_buffer", amr_buffer);
         args.add("amr_threshold", amr_threshold);
         args.add("amr_refine_density_thresh", amr_refine_density_thresh_raw);
@@ -466,6 +470,10 @@ public:
                 throw std::invalid_argument(string(name) + " must be finite.");
             return value;
         };
+        amr_regrid_time_cadence = parsePreciseValue(amr_regrid_time_cadence_raw,
+            "amr_regrid_time_cadence", 0);
+        if (!std::isfinite(amr_regrid_time_cadence) || amr_regrid_time_cadence < 0)
+            throw std::invalid_argument("amr_regrid_time_cadence must be finite and nonnegative (0 disables it).");
         amr_refine_density_thresh = refinementThreshold(amr_refine_density_thresh_raw,
             "amr_refine_density_thresh", amr_threshold);
         amr_refine_pressure_thresh = refinementThreshold(amr_refine_pressure_thresh_raw,
@@ -567,7 +575,8 @@ public:
                     << ", angular ratios " << amr_ref_ratio_nonrad << (temporal_order==4 ? ", RK4 with " : temporal_order==3 ? ", RK3 with " : ", SSPRK2 with ")
                     << (amr_subcycling ? "CFL-based time subcycling" : "a common timestep")
                     << "; regrid interval "
-                    << amr_regrid_interval << ", buffer " << amr_buffer << endl;
+                    << amr_regrid_interval << " base steps, time cadence " << amr_regrid_time_cadence
+                    << "(s), buffer " << amr_buffer << endl;
             auto criterion = [&](const char* name, double threshold, int maxLevel) {
                 pout(0) << "AMR relative-change criterion " << name << ": ";
                 if (threshold < 0 || maxLevel == 0) pout(0) << "disabled";

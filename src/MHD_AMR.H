@@ -251,7 +251,7 @@ public:
         configureHierarchy();
         MBDisjointBoxLayout layout(m_domain,m_boxSize);
         m_levels.push_back(std::make_unique<GridLevel>(layout,0,!m_ratios.empty()));
-        if(!restart.empty()) {read(restart);writeGridSummary("restart");return;}
+        if(!restart.empty()) {read(restart);writeGridSummary("restart",restartTime);return;}
         initialize(*m_levels[0]);
         regrid(0,true);
     }
@@ -407,6 +407,7 @@ public:
     void regrid(double time,bool initial=false)
     {
         PR_TIMERS("HelioCubed::AMR::regrid");
+        const auto start=std::chrono::steady_clock::now();
         averageDown();
         prepareStates(time);
         std::vector<PatchSet> desired(m_ratios.size()+1);
@@ -429,7 +430,11 @@ public:
                 for(auto key : taggedPatches(l)) newTags=desired[l+1].insert(key).second||newTags;
             if(!newTags) break;
         }
-        if(changed || initial) writeGridSummary("regrid");
+        if(initial || changed || ParseInputs::get_amr_verbosity())
+        {
+            const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+            writeGridSummary("regrid",time,seconds,changed);
+        }
     }
 
     void averageDown()
@@ -552,7 +557,7 @@ private:
     struct LevelProgress
     {
         unsigned long long steps=0,refluxCalls=0;
-        double minDt=std::numeric_limits<double>::max(),maxDt=0,refluxSeconds=0;
+        double minDt=std::numeric_limits<double>::max(),maxDt=0;
     };
     std::vector<LevelProgress> m_progress;
     unsigned m_progressPasses=1;
@@ -770,7 +775,7 @@ private:
             prepare(level(l),level(l).state,time,l ? &level(l-1) : nullptr);
     }
 
-    void writeGridSummary(const char* event) const
+    void writeGridSummary(const char* event,double time,double seconds=-1,bool changed=false) const
     {
         if(procID()!=0) return;
         auto coverage=[&](unsigned l)
@@ -786,6 +791,10 @@ private:
         lines<<"AMR "<<event<<": levels="<<numLevels();
         for(const auto& grid : m_levels)
             lines<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes();
+        if(seconds>=0) lines<<" changed = "<<(changed ? "yes" : "no");
+        lines<<" time = "<<formatProgressTime(time);
+        // Wall times are root-local, like iteration timing; no added barriers.
+        if(seconds>=0) lines<<formatProgressElapsed(seconds);
         lines<<'\n'<<std::fixed<<std::setprecision(2)
             <<"AMR base grid refined = "<<(numLevels()>1 ? coverage(1) : 0.0L)<<'%';
         if(numLevels()>2)
@@ -821,25 +830,21 @@ private:
         const char* phase,int stage=0)
     {
         const bool report=ParseInputs::get_amr_verbosity() && procID()==0;
-        const auto start=report ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         m_registers[coarse]->applyRefluxCorrection(destination,scale);
         if(!report) return;
-        const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
-        auto& progress=m_progress[coarse];++progress.refluxCalls;progress.refluxSeconds+=seconds;
+        ++m_progress[coarse].refluxCalls;
         if(ParseInputs::get_amr_verbosity()<2) return;
         std::ostringstream line;
         line<<"AMR reflux coarse_level = "<<coarse<<" fine_level = "<<coarse+1
             <<" phase = "<<phase;
         if(stage) line<<" stage = "<<stage;
-        line<<" time = "<<formatProgressTime(time)<<formatProgressElapsed(seconds)<<'\n';
+        line<<" time = "<<formatProgressTime(time)<<'\n';
         pout(0)<<line.str();
     }
 
     void writeProgress(double time) const
     {
         if(!ParseInputs::get_amr_verbosity() || procID()!=0) return;
-        // Times are root-local, as in the ordinary step timing. Reporting
-        // never introduces an MPI reduction or barrier.
         std::ostringstream lines;
         for(unsigned l=0;l<m_progress.size();++l)
         {
@@ -852,8 +857,7 @@ private:
             if(progress.refluxCalls)
             {
                 lines<<"AMR reflux coarse_level = "<<l<<" fine_level = "<<l+1
-                    <<" calls = "<<progress.refluxCalls<<" time = "<<formatProgressTime(time)
-                    <<formatProgressElapsed(progress.refluxSeconds)<<'\n';
+                    <<" calls = "<<progress.refluxCalls<<" time = "<<formatProgressTime(time)<<'\n';
             }
         }
         pout(0)<<lines.str();

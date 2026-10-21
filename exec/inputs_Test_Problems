@@ -120,8 +120,9 @@
 -amr_ref_ratio_rad              2
 -amr_ref_ratio_nonrad           2
 -amr_subcycling                 1
-# Regrid every N base steps (0=initial mesh only); buffer is in parent cells.
+# Regrid by base steps or simulation seconds (0 disables each); buffer is in parent cells.
 -amr_regrid_interval            4
+-amr_regrid_time_cadence        0
 -amr_buffer                     2
 # Convergence compares conservative composite projections; convTestType=1/2
 # runs three AMR meshes. convergence_level=0/1/2 runs one; 3 compares saved runs.
