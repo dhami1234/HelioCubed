@@ -434,27 +434,9 @@ int main(int argc, char *argv[])
         pout(0) << "Probed at iteration " << iter << endl;
       }
       
-      std::string timeStr = getPhysTime_duration(time);
-      std::string dateStr = getPhysTime_date(time);
-      char outStr[512];
       auto end = chrono::steady_clock::now();
       std::chrono::duration<double> elapsed_seconds = end-start;
-      snprintf(outStr, sizeof(outStr),"iter = %d dt = %.6f(s) time = %.3e(s) (%s) phystime: %s Time_taken = %.3f(s)",
-            iter,
-            dt,
-            time,
-            timeStr.c_str(),
-            dateStr.c_str(),
-            elapsed_seconds.count());
-      if (init_condition_type != 0 && init_condition_type != 1) {
-        snprintf(outStr, sizeof(outStr),"iter = %d dt = %0.6e(s) time = %0.3e(s)  Time taken = %.3f(s)",
-            iter,
-            dt,
-            time,
-            elapsed_seconds.count());
-      }
-      std::string out_string(outStr);
-      pout(0) << out_string << endl;
+      pout(0) << formatIterationProgress(iter,dt,time,elapsed_seconds.count()) << endl;
       if (time_exceeded) {
         pout(0) << "Maximum simulation time reached. Ending simulation." << endl;
         break;

@@ -120,9 +120,9 @@ inline void CubedSphereAMR::advanceExtrapolated(double dt,double time,int order)
         if(ParseInputs::get_amr_verbosity()>=2 && procID()==0)
         {
             std::ostringstream line;
-            line<<std::setprecision(17)<<"AMR extrapolation pass = "<<divisions
-                <<" coarse_steps = "<<divisions<<" dt = "<<step
-                <<" time = "<<time<<" target_time = "<<time+dt<<'\n';
+            line<<"AMR extrapolation pass = "<<divisions
+                <<" coarse_steps = "<<divisions<<" dt = "<<formatProgressDt(step)
+                <<" time = "<<formatProgressTime(time)<<" target_time = "<<formatProgressTime(time+dt)<<'\n';
             pout(0)<<line.str();
         }
         for(int part=0;part<divisions;++part)

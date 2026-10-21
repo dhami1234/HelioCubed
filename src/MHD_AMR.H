@@ -788,8 +788,8 @@ private:
         progress.minDt=std::min(progress.minDt,dt);progress.maxDt=std::max(progress.maxDt,dt);
         if(ParseInputs::get_amr_verbosity()<2) return;
         std::ostringstream line;
-        line<<std::setprecision(17)<<"AMR advance level = "<<l<<" dt = "<<dt
-            <<" time = "<<time<<" target_time = "<<time+dt<<'\n';
+        line<<"AMR advance level = "<<l<<" dt = "<<formatProgressDt(dt)
+            <<" time = "<<formatProgressTime(time)<<" target_time = "<<formatProgressTime(time+dt)<<'\n';
         pout(0)<<line.str();
     }
 
@@ -804,10 +804,10 @@ private:
         auto& progress=m_progress[coarse];++progress.refluxCalls;progress.refluxSeconds+=seconds;
         if(ParseInputs::get_amr_verbosity()<2) return;
         std::ostringstream line;
-        line<<std::setprecision(17)<<"AMR reflux coarse_level = "<<coarse<<" fine_level = "<<coarse+1
+        line<<"AMR reflux coarse_level = "<<coarse<<" fine_level = "<<coarse+1
             <<" phase = "<<phase;
         if(stage) line<<" stage = "<<stage;
-        line<<" time = "<<time<<" Time_taken = "<<seconds<<'\n';
+        line<<" time = "<<formatProgressTime(time)<<formatProgressElapsed(seconds)<<'\n';
         pout(0)<<line.str();
     }
 
@@ -816,20 +816,20 @@ private:
         if(!ParseInputs::get_amr_verbosity() || procID()!=0) return;
         // Times are root-local, as in the ordinary step timing. Reporting
         // never introduces an MPI reduction or barrier.
-        std::ostringstream lines;lines<<std::setprecision(17);
+        std::ostringstream lines;
         for(unsigned l=0;l<m_progress.size();++l)
         {
             const auto& progress=m_progress[l];
             lines<<"AMR level = "<<l<<" steps = "<<progress.steps;
-            if(progress.minDt==progress.maxDt) lines<<" dt = "<<progress.minDt;
-            else lines<<" dt_min = "<<progress.minDt<<" dt_max = "<<progress.maxDt;
+            if(progress.minDt==progress.maxDt) lines<<" dt = "<<formatProgressDt(progress.minDt);
+            else lines<<" dt_min = "<<formatProgressDt(progress.minDt)<<" dt_max = "<<formatProgressDt(progress.maxDt);
             if(m_progressPasses>1) lines<<" extrapolation_passes = "<<m_progressPasses;
-            lines<<" time = "<<time<<'\n';
+            lines<<" time = "<<formatProgressTime(time)<<'\n';
             if(progress.refluxCalls)
             {
                 lines<<"AMR reflux coarse_level = "<<l<<" fine_level = "<<l+1
-                    <<" calls = "<<progress.refluxCalls<<" time = "<<time
-                    <<" Time_taken = "<<progress.refluxSeconds<<'\n';
+                    <<" calls = "<<progress.refluxCalls<<" time = "<<formatProgressTime(time)
+                    <<formatProgressElapsed(progress.refluxSeconds)<<'\n';
             }
         }
         pout(0)<<lines.str();

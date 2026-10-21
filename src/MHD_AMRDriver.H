@@ -223,8 +223,8 @@ inline void runCubedSphereAMR()
                     if(last || inserted || nextProbe!=probeTrigger)
                     {simulation.writeProbes(iteration,time,giveSpace);giveSpace=false;probeTrigger=nextProbe;}
                 }
-                pout(0)<<"AMR iter = "<<iteration<<" dt = "<<std::setprecision(17)<<dt<<" time = "<<time
-                    <<" Time_taken = "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<std::endl;
+                const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+                pout(0)<<formatIterationProgress(iteration,dt,time,seconds)<<std::endl;
                 if(last) break;
             }
             if(convergence) writeAMRConvergenceProjection(simulation,study,

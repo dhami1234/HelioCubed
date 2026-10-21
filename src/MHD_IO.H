@@ -18,6 +18,7 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <cstdio>
 
 double getPhysTime(double a_time)
 {
@@ -50,6 +51,42 @@ std::string getPhysTime_duration(double a_time)
 std::string getPhysTime_date(double a_time)
 {
   return formatUTCEpoch(advanceCalendarEpoch(ParseInputs::get_BC_start_epoch(), a_time));
+}
+
+inline bool progressUsesCalendarTime()
+{
+    const int problem=ParseInputs::get_init_condition_type();
+    return problem==0 || problem==1;
+}
+
+inline std::string formatProgressDt(double dt)
+{
+    char value[128];
+    std::snprintf(value,sizeof(value),progressUsesCalendarTime() ? "%.6f(s)" : "%.6e(s)",dt);
+    return value;
+}
+
+inline std::string formatProgressTime(double time)
+{
+    char value[128];
+    std::snprintf(value,sizeof(value),"%.3e(s)",time);
+    if(progressUsesCalendarTime())
+        return std::string(value)+" ("+getPhysTime_duration(time)+") phystime: "+getPhysTime_date(time);
+    return value;
+}
+
+inline std::string formatProgressElapsed(double seconds)
+{
+    char value[128];
+    std::snprintf(value,sizeof(value),progressUsesCalendarTime()
+        ? " Time_taken = %.3f(s)" : "  Time taken = %.3f(s)",seconds);
+    return value;
+}
+
+inline std::string formatIterationProgress(int iteration,double dt,double time,double seconds)
+{
+    return "iter = "+std::to_string(iteration)+" dt = "+formatProgressDt(dt)
+        +" time = "+formatProgressTime(time)+formatProgressElapsed(seconds);
 }
 
 template<
