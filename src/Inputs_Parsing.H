@@ -120,6 +120,7 @@ private:
     string amr_ref_ratio_rad = "2";
     string amr_ref_ratio_nonrad = "2";
     int amr_subcycling = 1;
+    int amr_verbosity = 1; // 0: coarse steps, 1: level summaries, 2: individual events.
     int amr_regrid_interval = 4;
     int amr_buffer = 2;
     // Legacy fallback for density/pressure when their individual options are
@@ -233,6 +234,7 @@ public:
     static const string& get_amr_ref_ratio_rad() {return getInstance().amr_ref_ratio_rad;}
     static const string& get_amr_ref_ratio_nonrad() {return getInstance().amr_ref_ratio_nonrad;}
     static int get_amr_subcycling() {return getInstance().amr_subcycling;}
+    static int get_amr_verbosity() {return getInstance().amr_verbosity;}
     static int get_amr_regrid_interval() {return getInstance().amr_regrid_interval;}
     static int get_amr_buffer() {return getInstance().amr_buffer;}
     static double get_amr_threshold() {return getInstance().amr_threshold;}
@@ -357,6 +359,7 @@ public:
         args.add("amr_ref_ratio_rad", amr_ref_ratio_rad);
         args.add("amr_ref_ratio_nonrad", amr_ref_ratio_nonrad);
         args.add("amr_subcycling", amr_subcycling);
+        args.add("amr_verbosity", amr_verbosity);
         args.add("amr_regrid_interval", amr_regrid_interval);
         args.add("amr_buffer", amr_buffer);
         args.add("amr_threshold", amr_threshold);
@@ -413,6 +416,9 @@ public:
         }
         if (amr_subcycling != 0 && amr_subcycling != 1) {
             throw std::invalid_argument("amr_subcycling must be 0 or 1.");
+        }
+        if (amr_verbosity < 0 || amr_verbosity > 2) {
+            throw std::invalid_argument("amr_verbosity must be 0, 1, or 2.");
         }
         if (limiter < 0 || limiter > 3) {
             throw std::invalid_argument("limiter must be 0 (unlimited), 1 (O4 limiter; minmod at O2), 2 (minmod), or 3 (MC at O2).");

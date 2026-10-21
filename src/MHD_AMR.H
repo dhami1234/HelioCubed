@@ -343,6 +343,7 @@ public:
         if(ParseInputs::get_amr_subcycling())
             for(unsigned l=1;l<numLevels();++l)
                 if(dt>m_effectiveDt.at(l)) {subcycle=true;break;}
+        startProgress(subcycle && order>=3 ? order-1 : 1);
         if(order>=3)
         {
             if(subcycle)
@@ -353,6 +354,7 @@ public:
             else advanceRungeKuttaSynchronous(dt,time,order);
             for(auto* grid : levels())
                 if(!OP::validConservedState(grid->state)) throw std::runtime_error("Invalid conserved AMR state after Runge-Kutta step");
+            writeProgress(time+dt);
             return;
         }
         if(subcycle)
@@ -364,6 +366,7 @@ public:
         for(auto* grid : levels())
             if(!OP::validConservedState(grid->state))
                 throw std::runtime_error("Invalid conserved AMR state after SSPRK2 step");
+        writeProgress(time+dt);
     }
 
     double timestep()
@@ -439,37 +442,6 @@ public:
         for(unsigned l=numLevels()-1;l>0;--l)
             restrictTo(l,level(l).state,level(l-1).state);
     }
-
-    Array<double,NUMCOMPS> integral() const
-    {
-        Array<double,NUMCOMPS+1> local; local.fill(0);
-        for (auto* level : levels())
-        {
-            auto dx=level->layout.dx(0);
-            const double dv=dx[0]*dx[1]*dx[2];
-            for (auto index : level->layout)
-            {
-                const auto& state=level->state[index];
-                const auto block=level->layout.block(index);
-                for (auto p : level->layout[index])
-                {
-                    if (covered(level->number,p,block)) continue;
-                    for (int c=0;c<NUMCOMPS;++c) local[c]+=dv*state(p,c);
-                }
-            }
-        }
-        local[NUMCOMPS]=m_localBoundaryMass;
-        Array<double,NUMCOMPS+1> global=local;
-#ifdef PR_MPI
-        MPI_Allreduce(local.data(),global.data(),NUMCOMPS+1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-#endif
-        m_boundaryMass=global[NUMCOMPS];
-        Array<double,NUMCOMPS> result;
-        for(int c=0;c<NUMCOMPS;++c) result[c]=global[c];
-        return result;
-    }
-
-    double boundaryMass() const {return m_boundaryMass;}
 
     void write(int iteration,double time,double dt,bool checkpoint)
     {
@@ -582,8 +554,13 @@ private:
     std::vector<int> m_extrapolationSubsteps;
     bool m_captureInitial=false,m_reuseInitial=false;
     std::vector<std::pair<std::string,unsigned>> m_checkpoints;
-    double m_localBoundaryMass=0;
-    mutable double m_boundaryMass=0;
+    struct LevelProgress
+    {
+        unsigned long long steps=0,refluxCalls=0;
+        double minDt=std::numeric_limits<double>::max(),maxDt=0,refluxSeconds=0;
+    };
+    std::vector<LevelProgress> m_progress;
+    unsigned m_progressPasses=1;
 
     static int maxRatio(Point ratio)
     {int result=1;for(int d=0;d<DIM;++d) result=std::max(result,ratio[d]);return result;}
@@ -686,7 +663,6 @@ private:
             }
         }
         accumulateFlux(grid,0.5*grid.stepDt);
-        m_localBoundaryMass+=0.5*grid.stepDt*radialMassFlux(&grid);
         if(!stage)
         {
             amrCopyValid(grid.rhs,grid.first);
@@ -703,6 +679,7 @@ private:
         if(!(dt>0) || !(time+dt>time)) throw std::runtime_error("AMR substep cannot advance floating-point time");
         auto& grid=level(l);
         grid.startTime=time;grid.stepDt=dt;grid.timeInterpolated=false;
+        recordLevelStep(l,dt,time);
         if(l+1<numLevels())
         {
             if(!grid.old) grid.old=std::make_unique<Level>(grid.layout,Point::Zeros());
@@ -727,7 +704,7 @@ private:
             auto& child=level(l+1);
             auto& reg=*m_registers[l];
             accumulateInterfaceFlux(l,true,0.5*(dt-child.stepDt));
-            reg.applyRefluxCorrection(*grid.predictor,2.0/dt);
+            applyReflux(l,*grid.predictor,2.0/dt,time,"predictor");
             restrictTo(l+1,l+2<numLevels() ? *child.predictor : child.first,*grid.predictor);
             reg.initCoarseRegisters();reg.initFineRegisters();reg.initIncrement();
             accumulateInterfaceFlux(l,false,0.5*dt);
@@ -753,7 +730,7 @@ private:
             }
             // Both registers contain RK-weighted time integrals. Synchronize
             // this interface only after every descendant reaches the endpoint.
-            m_registers[l]->applyRefluxCorrection(grid.state,1.0);
+            applyReflux(l,grid.state,1.0,grid.startTime+grid.stepDt,"synchronize");
             restrictTo(l+1,level(l+1).state,grid.state);
         }
         grid.timeInterpolated=false;
@@ -761,6 +738,7 @@ private:
 
     void advanceSynchronous(double dt,double time)
     {
+        for(unsigned l=0;l<numLevels();++l) recordLevelStep(l,dt,time);
         for(int stage=0;stage<2;++stage)
         {
             for(auto* grid : levels())
@@ -773,13 +751,12 @@ private:
             for(unsigned l=0;l<numLevels();++l)
                 prepare(level(l),level(l).stage,time+stage*dt,l ? &level(l-1) : nullptr);
             for(auto* grid : levels()) evaluate(*grid);
-            m_localBoundaryMass+=0.5*dt*radialMassFlux();
             for(auto& reg : m_registers)
             {reg->initCoarseRegisters();reg->initFineRegisters();reg->initIncrement();}
             for(auto* grid : levels()) accumulateFlux(*grid,1.0);
             for(unsigned l=numLevels()-1;l>0;--l)
             {
-                m_registers[l-1]->applyRefluxCorrection(level(l-1).rhs,1.0);
+                applyReflux(l-1,level(l-1).rhs,1.0,time+stage*dt,"stage",stage+1);
                 restrictTo(l,level(l).rhs,level(l-1).rhs);
             }
             if(!stage) for(auto* grid : levels()) amrCopyValid(grid->rhs,grid->first);
@@ -798,38 +775,64 @@ private:
             prepare(level(l),level(l).state,time,l ? &level(l-1) : nullptr);
     }
 
-    double radialMassFlux(const GridLevel* selected=nullptr) const
+    void startProgress(unsigned passes)
     {
-        // Track the physical boundary contribution independently of reflux.
-        // Accumulate locally and combine it with the existing integral
-        // reduction, avoiding additional global collectives at RK stages.
-        double sum=0;
-        for(auto* level : levels())
+        if(!ParseInputs::get_amr_verbosity() || procID()!=0) return;
+        m_progress.assign(numLevels(),LevelProgress{});m_progressPasses=passes;
+    }
+
+    void recordLevelStep(unsigned l,double dt,double time)
+    {
+        if(!ParseInputs::get_amr_verbosity() || procID()!=0) return;
+        auto& progress=m_progress[l];++progress.steps;
+        progress.minDt=std::min(progress.minDt,dt);progress.maxDt=std::max(progress.maxDt,dt);
+        if(ParseInputs::get_amr_verbosity()<2) return;
+        std::ostringstream line;
+        line<<std::setprecision(17)<<"AMR advance level = "<<l<<" dt = "<<dt
+            <<" time = "<<time<<" target_time = "<<time+dt<<'\n';
+        pout(0)<<line.str();
+    }
+
+    void applyReflux(unsigned coarse,Level& destination,double scale,double time,
+        const char* phase,int stage=0)
+    {
+        const bool report=ParseInputs::get_amr_verbosity() && procID()==0;
+        const auto start=report ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+        m_registers[coarse]->applyRefluxCorrection(destination,scale);
+        if(!report) return;
+        const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        auto& progress=m_progress[coarse];++progress.refluxCalls;progress.refluxSeconds+=seconds;
+        if(ParseInputs::get_amr_verbosity()<2) return;
+        std::ostringstream line;
+        line<<std::setprecision(17)<<"AMR reflux coarse_level = "<<coarse<<" fine_level = "<<coarse+1
+            <<" phase = "<<phase;
+        if(stage) line<<" stage = "<<stage;
+        line<<" time = "<<time<<" Time_taken = "<<seconds<<'\n';
+        pout(0)<<line.str();
+    }
+
+    void writeProgress(double time) const
+    {
+        if(!ParseInputs::get_amr_verbosity() || procID()!=0) return;
+        // Times are root-local, as in the ordinary step timing. Reporting
+        // never introduces an MPI reduction or barrier.
+        std::ostringstream lines;lines<<std::setprecision(17);
+        for(unsigned l=0;l<m_progress.size();++l)
         {
-            if(selected && selected!=level) continue;
-            unsigned local=0;
-            const auto dx=level->layout.dx(0);
-            for(auto index : level->layout)
+            const auto& progress=m_progress[l];
+            lines<<"AMR level = "<<l<<" steps = "<<progress.steps;
+            if(progress.minDt==progress.maxDt) lines<<" dt = "<<progress.minDt;
+            else lines<<" dt_min = "<<progress.minDt<<" dt_max = "<<progress.maxDt;
+            if(m_progressPasses>1) lines<<" extrapolation_passes = "<<m_progressPasses;
+            lines<<" time = "<<time<<'\n';
+            if(progress.refluxCalls)
             {
-                const Box valid=level->layout[index];
-                const auto block=level->layout.block(index);
-                const Box domain=level->layout.domain().getBlock(block).box();
-                const auto& flux=(*level->flux[local++])[0];
-                for(auto side : {Side::Lo,Side::Hi})
-                {
-                    if(side==Side::Lo ? valid.low()[0]!=domain.low()[0]
-                                      : valid.high()[0]!=domain.high()[0]) continue;
-                    const Point shift=side==Side::Lo ? Point::Zeros() : Point::Basis(0);
-                    const double sign=side==Side::Lo ? 1.0 : -1.0;
-                    for(auto p : valid.face(0,side))
-                    {
-                        if(covered(level->number,p,block)) continue;
-                        sum+=sign*dx[1]*dx[2]*flux(p+shift,iRHO);
-                    }
-                }
+                lines<<"AMR reflux coarse_level = "<<l<<" fine_level = "<<l+1
+                    <<" calls = "<<progress.refluxCalls<<" time = "<<time
+                    <<" Time_taken = "<<progress.refluxSeconds<<'\n';
             }
         }
-        return sum;
+        pout(0)<<lines.str();
     }
     static void trace(const char* message)
     {

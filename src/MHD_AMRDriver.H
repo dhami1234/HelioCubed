@@ -180,8 +180,6 @@ inline void runCubedSphereAMR()
             // An event may split one nominal convergence step. Keep the common
             // end time while allowing that extra synchronized source insertion.
             const int lastIteration=int(maximumSteps)+(convergence && !split && ParseInputs::get_CME_type()==1 ? 1 : 0);
-            const auto initial=simulation.integral();
-            pout(0)<<"AMR initial mass = "<<std::setprecision(17)<<initial[iRHO]<<std::endl;
             double writeTrigger=floor(time/ParseInputs::get_write_time_cadence()),probeTrigger=-1;
             double sliceTrigger=floor(time/ParseInputs::get_slice_time_cadence());
             int completed=iteration;
@@ -225,10 +223,7 @@ inline void runCubedSphereAMR()
                     if(last || inserted || nextProbe!=probeTrigger)
                     {simulation.writeProbes(iteration,time,giveSpace);giveSpace=false;probeTrigger=nextProbe;}
                 }
-                const auto sum=simulation.integral();
                 pout(0)<<"AMR iter = "<<iteration<<" dt = "<<std::setprecision(17)<<dt<<" time = "<<time
-                    <<" mass = "<<sum[iRHO]<<" relative_mass_change = "<<(sum[iRHO]-initial[iRHO])/initial[iRHO]
-                    <<" mass_balance_error = "<<(sum[iRHO]-initial[iRHO]-simulation.boundaryMass())/initial[iRHO]
                     <<" Time_taken = "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<std::endl;
                 if(last) break;
             }
