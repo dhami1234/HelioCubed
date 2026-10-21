@@ -72,7 +72,7 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::reconstructPLM(
 template<typename T, typename MAP, MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::secondOrderOperator(
     State& rhs, Array<State,DIM>& fluxes, const State& state, T scale,
-    bool cartesianPrimitives) const
+    bool cartesianPrimitives,const SecondOrderFaceMask* activeFaces) const
 {
     PR_TIMERS("HelioCubed::secondOrderOperator");
     const int block=this->block();
@@ -155,6 +155,9 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::secondOrderOperator(
                 && w.box().containsBox(faces.shift(Point::Basis(dir))),
                 "Fused PLM requires two normal ghost cells");
             T* output=fluxes[dir].data();T* magneticFlux=powell ? bface.data() : nullptr;
+            PROTO_ASSERT(!activeFaces || (*activeFaces)[dir].box()==faces,
+                "The active AMR face mask must match the flux storage");
+            const unsigned char* active=activeFaces ? (*activeFaces)[dir].data() : nullptr;
             size_t angular=0,offset=0;
             for (int k=low[2]; k<=high[2]; ++k) for (int j=low[1]; j<=high[1]; ++j)
             {
@@ -163,6 +166,14 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::secondOrderOperator(
                     ((j-sourceBox.low()[1])+size_t(sizes[1])*(k-sourceBox.low()[2]));
                 for (int i=low[0]; i<=high[0]; ++i,++offset)
                 {
+                    // Both adjacent coarse cells are replaced by fine-stage
+                    // restriction. Their internal flux is never used by a leaf.
+                    if(active && !active[offset])
+                    {
+                        for(int c=0;c<NUMCOMPS;++c) output[offset+c*stride]=0;
+                        if(powell) magneticFlux[offset]=0;
+                        continue;
+                    }
                     const T* center=source+row+i-low[0];
                     const HelioCubed::StridedFaceState<const T> mm{center-2*step,sourceStride},
                         m{center-step,sourceStride},c{center,sourceStride},p{center+step,sourceStride};

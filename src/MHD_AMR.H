@@ -100,6 +100,10 @@ public:
         // The O2 operator consumes Cartesian primitives; the O4 operators
         // consume native-basis conserved averages and reconstruct W internally.
         Level state,stage,primitive,donor,rhs,first;
+        std::unique_ptr<Level> cflState;
+        std::unique_ptr<ScalarLevel> cflScale;
+        std::unique_ptr<MBLevelBoxData<int,1,HOST>> coveredCells;
+        std::vector<std::unique_ptr<OP::SecondOrderFaceMask>> activeFaces;
         const Level* preparedState=nullptr;
         std::unique_ptr<Level> old,predictor;
         std::unique_ptr<Level> cartesian; // O4 Cartesian conserved averages <U>.
@@ -120,6 +124,7 @@ public:
         bool timeInterpolated=false;
         ScalarLevel volume,jacobian;
         MBInterpOp interp;
+        std::unique_ptr<SecondOrderSeamPlan<double,NUMCOMPS>> secondOrderSeam;
         MBBoundaryRegister<double,NUMCOMPS,HOST> panelFlux;
         std::vector<std::unique_ptr<Array<State,DIM>>> flux;
 
@@ -287,14 +292,15 @@ public:
         const double background=magnetic ? c_TEST_P0 : 0;
         const double b0=magnetic ? testProblemBackgroundBx(ParseInputs::get_init_condition_type()) : 0;
         long long counts[3]={0,0,0}; // Density repairs, pressure repairs, invalid states.
+        cacheCoveredCells();
         for(auto* grid : levels()) for(auto index : grid->layout)
         {
             auto& state=grid->state[index];
             const auto& jacobian=grid->jacobian[index];
-            const auto block=grid->layout.block(index);
+            const auto* mask=grid->coveredCells ? &(*grid->coveredCells)[index] : nullptr;
             for(auto p : grid->layout[index])
             {
-                if(covered(grid->number,p,block)) continue;
+                if(mask && (*mask)(p)) continue;
                 const double j=jacobian(p);
                 if(!(j>0) || !std::isfinite(j)) {++counts[2];continue;}
                 const double inverseJ=1/j;
@@ -411,20 +417,28 @@ public:
                 m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFL(grid->state,grid->interp,grid->volume);
                 continue;
             }
-            Level cflState(grid->layout,Point::Zeros());
+            if(!grid->cflState)
+            {
+                grid->cflState=std::make_unique<Level>(grid->layout,Point::Zeros());
+                grid->cflScale=std::make_unique<ScalarLevel>(grid->layout,Point::Zeros());
+                for(auto index : grid->layout)
+                {
+                    const double h=grid->op[index].dx()[1];
+                    auto det=CubedSphereShell::detA<double,HOST>(grid->layout[index],h,0);
+                    for(auto p : grid->layout[index])
+                        (*grid->cflScale)[index](p)=grid->volume[index](p)*det(p)/grid->jacobian[index](p);
+                }
+            }
             for(auto index : grid->layout)
             {
-                const double h=grid->op[index].dx()[1];
-                auto det=CubedSphereShell::detA<double,HOST>(grid->layout[index],h,0);
-                auto& out=cflState[index];
+                auto& out=(*grid->cflState)[index];
                 const auto& state=grid->state[index];
-                const auto& volume=grid->volume[index];
-                const auto& jacobian=grid->jacobian[index];
+                const auto& scale=(*grid->cflScale)[index];
                 for(auto p : grid->layout[index])
                     for(int c=0;c<NUMCOMPS;++c)
-                        out(p,c)=state(p,c)*(volume(p)*det(p)/jacobian(p));
+                        out(p,c)=state(p,c)*scale(p);
             }
-            m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFLSecondOrderHost(cflState,grid->volume);
+            m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFLSecondOrderHost(*grid->cflState,grid->volume);
         }
         for(unsigned l=numLevels()-1;l>0;--l)
         {
@@ -786,7 +800,7 @@ private:
                 restrictTo(l,level(l).stage,level(l-1).stage);
             for(unsigned l=0;l<numLevels();++l)
                 prepare(level(l),level(l).stage,time+stage*dt,l ? &level(l-1) : nullptr);
-            for(auto* grid : levels()) evaluate(*grid);
+            for(auto* grid : levels()) evaluate(*grid,true);
             for(auto& reg : m_registers)
             {reg->initCoarseRegisters();reg->initFineRegisters();reg->initIncrement();}
             for(auto* grid : levels()) accumulateFlux(*grid,1.0);
@@ -1112,6 +1126,20 @@ private:
             !=*level(l+1).layout.end();
     }
 
+    void cacheCoveredCells()
+    {
+        for(unsigned l=0;l+1<numLevels();++l)
+        {
+            auto& grid=level(l);
+            if(grid.coveredCells) continue;
+            grid.coveredCells=std::make_unique<MBLevelBoxData<int,1,HOST>>(
+                grid.layout,amrPatchGhosts(Point::Ones()));
+            for(auto index : grid.layout)
+                for(auto p : (*grid.coveredCells)[index].box())
+                    (*grid.coveredCells)[index](p)=covered(l,p,grid.layout.block(index));
+        }
+    }
+
     static PatchKey patchKey(MBPoint patch)
     {return {int(patch.block),patch.point[0],patch.point[1],patch.point[2]};}
 
@@ -1203,6 +1231,12 @@ private:
                 for(auto p : out.box())
                 {
                     const double j=jacobian(p);
+                    if(valid.containsPoint(p))
+                    {
+                        out(p,NUMCOMPS)=j;
+                        for(int c=0;c<NUMCOMPS;++c) out(p,c)=state(p,c);
+                        continue;
+                    }
                     double ke=0,me=0;
                     out(p,NUMCOMPS)=j;
                     out(p,iRHO)=j*w(p,iRHO);
@@ -1215,11 +1249,6 @@ private:
                     }
                     out(p,iE)=j*((w(p,iP)-(magnetic ? c_TEST_P0 : 0))/(gamma-1)
                         +ke+me+b0*w(p,iBX)/(4*M_PI));
-                    if(valid.containsPoint(p))
-                    {
-                        out(p,NUMCOMPS)=jacobian(p);
-                        for(int c=0;c<NUMCOMPS;++c) out(p,c)=state(p,c);
-                    }
                 }
             }
             const Point ratio=level.ratio;
@@ -1296,16 +1325,46 @@ private:
                 ParseInputs::get_gamma(),magnetic,testProblemBackgroundBx(ParseInputs::get_init_condition_type()));
         level.donor.exchange();
         for (auto index : level.layout) level.donor[index].copyTo(level.primitive[index]);
-        level.interp.apply(level.primitive,level.donor);
+        if(!level.secondOrderSeam || !level.secondOrderSeam->matches(level.primitive,level.donor,level.interp))
+            level.secondOrderSeam=std::make_unique<SecondOrderSeamPlan<double,NUMCOMPS>>(
+                level.primitive,level.donor,level.interp);
+        level.secondOrderSeam->apply();
         for (auto index : level.layout)
             forallInPlace([] PROTO_LAMBDA(Var<double,NUMCOMPS,HOST>& w)
             {w(iRHO)=std::max(w(iRHO),double(RHO00));w(iP)=std::max(w(iP),0.0);},level.primitive[index]);
         OP::fillRadialPrimitiveBoundaries(level.primitive,level.volume,time);
     }
 
-    void evaluate(GridLevel& level)
+    void evaluate(GridLevel& level,bool restrictCovered=false)
     {
         PR_TIMERS("HelioCubed::AMR::evaluate");
+        // Synchronous stages restrict the fine RHS before any coarse update.
+        // Retain all physical/panel and coarse-fine interface faces. Keep the
+        // complete operator for magnetic-test equilibrium subtraction.
+        const bool maskFaces=restrictCovered && !fourthOrder() && level.number+1<numLevels()
+            && !isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
+        if(maskFaces && level.activeFaces.empty())
+        {
+            cacheCoveredCells();
+            unsigned local=0;
+            for(auto index : level.layout)
+            {
+                auto mask=std::make_unique<OP::SecondOrderFaceMask>();
+                const auto& covered=(*level.coveredCells)[index];
+                const Box domain=level.layout.getBlock(level.layout.block(index)).domain().box();
+                for(int d=0;d<DIM;++d)
+                {
+                    (*mask)[d].defineForOverwrite((*level.flux[local])[d].box());
+                    for(auto p : (*mask)[d].box())
+                    {
+                        const auto left=p-Point::Basis(d);
+                        (*mask)[d](p)=!(domain.containsPoint(p) && domain.containsPoint(left)
+                            && covered(p) && covered(left));
+                    }
+                }
+                level.activeFaces.push_back(std::move(mask));++local;
+            }
+        }
         amrSetValLocal(level.rhs,0);
         level.panelFlux.clear();
         unsigned local=0;
@@ -1319,7 +1378,8 @@ private:
             }
             if(fourthOrder() && ParseInputs::get_spatial_operator()==2)
                 for(int d=0;d<DIM;++d) (*level.flux[local])[d].setVal(0);
-            op(level.rhs[index],*level.flux[local],level.primitive[index],1.0,1.0,-1,!fourthOrder());
+            op(level.rhs[index],*level.flux[local],level.primitive[index],1.0,1.0,-1,!fourthOrder(),
+                maskFaces ? level.activeFaces[local].get() : nullptr);
             if(fourthOrder() && (ParseInputs::get_linear_viscosity() || ParseInputs::get_nonlinear_viscosity()))
             {
                 Array<State,DIM> viscosity;
@@ -1486,6 +1546,7 @@ private:
             grid->restrictionCopy.reset();grid->coarseCopy2.reset();grid->coarseCopy4.reset();
             grid->restricted.reset();grid->coarseMapped2.reset();
             grid->coarseSource2.reset();grid->coarseSource4.reset();
+            grid->coveredCells.reset();grid->activeFaces.clear();
         }
         m_effectiveDt.clear();
     }

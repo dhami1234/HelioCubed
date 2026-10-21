@@ -285,6 +285,7 @@ public:
   using LayoutT = MBDisjointBoxLayout;
   using MapT = decltype(CubedSphereShell::Map(std::declval<const LayoutT&>(),Point()));
   using OpT = decltype(CubedSphereShell::Operator<BoxOp_EulerCubedSphere, double, HOST>(std::declval<MapT&>()));
+  using SecondOrderFaceMask = Array<BoxData<unsigned char,1,HOST>,DIM>;
 
   // Short-lived derived values from one final face state. The caller owns
   // these inside the current patch/direction/stage scratch scope.
@@ -309,10 +310,13 @@ public:
     return values;
   }
 
+  struct SecondOrderCFLCache;
   struct LevelGeometry
   {
     std::unique_ptr<MapT> map;
     std::unique_ptr<OpT> op;
+    // AMR alternates layouts; each level retains its own immutable CFL metrics.
+    std::shared_ptr<SecondOrderCFLCache> secondOrderCFL;
   };
 
   // An AMR hierarchy owns several geometries simultaneously. Bind its level
@@ -347,6 +351,7 @@ public:
     static LevelGeometry cached;
     if (!cached.map || &cached.map->layout().partition() != &layout.partition())
     {
+      cached.secondOrderCFL.reset();
       cached.op.reset();
       cached.map = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
       cached.op = std::make_unique<OpT>(
@@ -394,8 +399,8 @@ public:
                         uint a_block) const;
 
   // New factorization of the operator starts here.
-  // New operator() - calls RadialMetrics from inside the operator. The final
-  // flag is used only by O2 RK stages prepared as Cartesian primitives.
+  // O2 stages may supply Cartesian primitives and a mask of faces needed by
+  // the composite AMR update. Other callers evaluate every face.
 
   inline void operator()
   (
@@ -405,7 +410,8 @@ public:
    T                               a_dt,
    T                               a_scale = 1.0,
    int                             a_counter = -1,
-   bool                            a_cartesianPrimitives = false) const;
+   bool                            a_cartesianPrimitives = false,
+   const SecondOrderFaceMask*       a_activeFaces = nullptr) const;
 
   inline void BertaOperator
   (
@@ -524,7 +530,8 @@ public:
                          bool a_restoreTestBackground = true) const;
 
   inline void secondOrderOperator(State& rhs, Array<State,DIM>& fluxes,
-      const State& state, T scale, bool cartesianPrimitives = false) const;
+      const State& state, T scale, bool cartesianPrimitives = false,
+      const SecondOrderFaceMask* activeFaces = nullptr) const;
   inline void reconstructPLM(State& left, State& right,
       const State& primitive, const Box& faces, int dir) const;
 

@@ -14,7 +14,8 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
    T                               a_dt,
    T                               a_scale,
    int                             a_counter,
-   bool                            a_cartesianPrimitives) const
+   bool                            a_cartesianPrimitives,
+   const SecondOrderFaceMask*       a_activeFaces) const
 {
   PR_TIMERS("BoxOp_EulerCubedSphere::operator()");
   // Magnetized test problems evolve perturbations about a uniform Cartesian
@@ -71,7 +72,7 @@ BoxOp_EulerCubedSphere<T,MAP,MEM>::operator()
 
   if (ParseInputs::get_spatial_order() == 2)
   {
-    secondOrderOperator(a_Rhs,a_fluxes,a_USph,a_scale,a_cartesianPrimitives);
+    secondOrderOperator(a_Rhs,a_fluxes,a_USph,a_scale,a_cartesianPrimitives,a_activeFaces);
     if (subtractBackground)
     {
       a_Rhs -= m_testBackgroundRhs;

@@ -26,7 +26,7 @@ inline void CubedSphereAMR::advanceRungeKuttaSynchronous(double dt,double time,i
         }
         for(unsigned l=numLevels()-1;l>0;--l) restrictTo(l,level(l).stage,level(l-1).stage);
         for(unsigned l=0;l<numLevels();++l) prepare(level(l),level(l).stage,time+c[stage]*dt,l ? &level(l-1) : nullptr);
-        for(auto* grid : levels()) evaluate(*grid);
+        for(auto* grid : levels()) evaluate(*grid,true);
         for(auto& reg : m_registers) {reg->initCoarseRegisters();reg->initFineRegisters();reg->initIncrement();}
         for(auto* grid : levels()) accumulateFlux(*grid,1.0);
         for(unsigned l=numLevels()-1;l>0;--l)
