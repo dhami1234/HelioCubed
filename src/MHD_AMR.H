@@ -251,7 +251,7 @@ public:
         configureHierarchy();
         MBDisjointBoxLayout layout(m_domain,m_boxSize);
         m_levels.push_back(std::make_unique<GridLevel>(layout,0,!m_ratios.empty()));
-        if(!restart.empty()) {read(restart);return;}
+        if(!restart.empty()) {read(restart);writeGridSummary("restart");return;}
         initialize(*m_levels[0]);
         regrid(0,true);
     }
@@ -429,12 +429,7 @@ public:
                 for(auto key : taggedPatches(l)) newTags=desired[l+1].insert(key).second||newTags;
             if(!newTags) break;
         }
-        if(changed || initial)
-        {
-            pout(0)<<"AMR regrid: levels="<<numLevels();
-            for(auto* grid : levels()) pout(0)<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes();
-            pout(0)<<std::endl;
-        }
+        if(changed || initial) writeGridSummary("regrid");
     }
 
     void averageDown()
@@ -773,6 +768,35 @@ private:
     {
         for(unsigned l=0;l<numLevels();++l)
             prepare(level(l),level(l).state,time,l ? &level(l-1) : nullptr);
+    }
+
+    void writeGridSummary(const char* event) const
+    {
+        if(procID()!=0) return;
+        auto coverage=[&](unsigned l)
+        {
+            // Normalize valid fine cells by the full logical domain at that
+            // level. Nested levels overlap, so overall refinement is L1 alone.
+            long double cells=level(l).layout.numBoxes(),total=6;
+            const Point sizes=m_domains[l].getBlock(0).sizes();
+            for(int d=0;d<DIM;++d) {cells*=m_boxSizes[l][d];total*=sizes[d];}
+            return 100*cells/total;
+        };
+        std::ostringstream lines;
+        lines<<"AMR "<<event<<": levels="<<numLevels();
+        for(const auto& grid : m_levels)
+            lines<<", L"<<grid->number<<" patches="<<grid->layout.numBoxes();
+        lines<<'\n'<<std::fixed<<std::setprecision(2)
+            <<"AMR base grid refined = "<<(numLevels()>1 ? coverage(1) : 0.0L)<<'%';
+        if(numLevels()>2)
+        {
+            lines<<" (";
+            for(unsigned l=1;l<numLevels();++l)
+                lines<<(l>1 ? ", " : "")<<'L'<<l<<" = "<<coverage(l)<<'%';
+            lines<<')';
+        }
+        lines<<'\n';
+        pout(0)<<lines.str();
     }
 
     void startProgress(unsigned passes)
