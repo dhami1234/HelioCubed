@@ -90,9 +90,13 @@ inline void runCubedSphereAMR()
         throw std::invalid_argument("convergence_dt must be -1 or a finite positive value");
     if(convergence && !split && !ParseInputs::get_restart_file().empty())
         throw std::invalid_argument("AMR convergence restart requires a single convergence_level=0, 1, or 2");
-    if(ParseInputs::get_slice_X() || ParseInputs::get_slice_Y() || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R()
-        || ParseInputs::get_P_floor_cadence()<=ParseInputs::get_max_iter())
-        throw std::invalid_argument("AMR slices and pressure-floor events are not yet supported; use slices=none and P_floor_cadence>max_iter");
+    if(ParseInputs::get_P_floor_cadence()<=ParseInputs::get_max_iter())
+        throw std::invalid_argument("AMR pressure-floor events are not yet supported; use P_floor_cadence>max_iter");
+    const bool slices=ParseInputs::get_slice_X() || ParseInputs::get_slice_Y()
+        || ParseInputs::get_slice_Z() || ParseInputs::get_slice_R();
+    if(slices && (ParseInputs::get_slice_cadence()<=0
+        || !std::isfinite(ParseInputs::get_slice_time_cadence()) || ParseInputs::get_slice_time_cadence()<=0))
+        throw std::invalid_argument("AMR slice cadences must be finite and positive");
     if(ParseInputs::get_output_divB()!=0 && ParseInputs::get_output_divB()!=1)
         throw std::invalid_argument("output_divB must be 0 or 1");
     if(ParseInputs::get_CME_type()==1)
@@ -148,11 +152,13 @@ inline void runCubedSphereAMR()
         if(insertedAtStart && mode<3)
         {
             simulation.write(iteration,time,dt,false);simulation.write(iteration,time,dt,true);
+            if(slices) simulation.writeSlices(iteration,time);
             simulation.writeProbes(iteration,time,giveSpace);giveSpace=false;
         }
         if(mode==3 || mode==4)
         {
             simulation.write(iteration,time,0,false);simulation.write(iteration,time,0,true);
+            if(slices) simulation.writeSlices(iteration,time);
             simulation.writeProbes(iteration,time,giveSpace);
             if(mode==3) writeAMRConvergenceProjection(simulation,study,iteration,time,0);
         }
@@ -177,6 +183,7 @@ inline void runCubedSphereAMR()
             const auto initial=simulation.integral();
             pout(0)<<"AMR initial mass = "<<std::setprecision(17)<<initial[iRHO]<<std::endl;
             double writeTrigger=floor(time/ParseInputs::get_write_time_cadence()),probeTrigger=-1;
+            double sliceTrigger=floor(time/ParseInputs::get_slice_time_cadence());
             int completed=iteration;
             for(++iteration;iteration<=lastIteration && time<maximum;++iteration)
             {
@@ -200,6 +207,12 @@ inline void runCubedSphereAMR()
                 {simulation.write(iteration,time,dt,false);writeTrigger=nextTrigger;}
                 if(last || inserted || iteration%ParseInputs::get_checkpoint_cadence()==0)
                     simulation.write(iteration,time,dt,true);
+                if(slices)
+                {
+                    const double nextSlice=floor(time/ParseInputs::get_slice_time_cadence());
+                    if(last || inserted || iteration%ParseInputs::get_slice_cadence()==0 || nextSlice!=sliceTrigger)
+                    {simulation.writeSlices(iteration,time);sliceTrigger=nextSlice;}
+                }
                 if(ParseInputs::get_num_probes())
                 {
                     const double nextProbe=floor(time/ParseInputs::get_Probe_cadence());

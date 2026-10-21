@@ -268,6 +268,7 @@ public:
     std::pair<int,std::array<double,NUMCOMPS>> sampleProbe(const Array<double,DIM>& position,double time)
     {prepareStates(time);return samplePreparedProbe(position);}
     void writeProbes(int iteration,double time,bool giveSpace);
+    void writeSlices(int iteration,double time);
 
     void advance(double dt,double time)
     {
@@ -1530,6 +1531,7 @@ inline void runCubedSphereAMR()
 #include "MHD_AMRRungeKutta.H"
 #include "MHD_AMRFourthOrder.H"
 #include "MHD_AMRDiagnostics.H"
+#include "MHD_AMRSlices.H"
 #include "MHD_AMRCME.H"
 #include "MHD_AMRDriver.H"
 #endif

@@ -116,8 +116,8 @@
 
 # 0=single level; N allows fine levels L1,...,LN. Requires PR_AMR.
 # O2: RK2/3. O4: RK3/4, state_conversion=1, domainSize>=20.
-# AMR needs boundary_reflux=1, slices=none and P_floor_cadence>max_iter.
-# Convergence, CME insertion, finest-level probes and output_divB are supported.
+# AMR needs boundary_reflux=1 and P_floor_cadence>max_iter.
+# Convergence, CME, finest-level probes, slices and output_divB are supported.
 -amr_max_level                  0
 # One ratio for all interfaces, or a list such as 2,4,8; 1 leaves a direction alone.
 -amr_ref_ratio_rad              2
