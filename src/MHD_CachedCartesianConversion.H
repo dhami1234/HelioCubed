@@ -13,8 +13,11 @@ struct NativeAngularCoefficients
 {
     Proto::Box box;
     std::vector<std::array<T,27>> values;
+    // Only AMR boundary extension needs the forward matrix. Keep its storage
+    // separate so uniform conversion retains the original coefficient layout.
+    std::vector<std::array<T,9>> matrices;
 
-    NativeAngularCoefficients(const Proto::Box& a_output,T a_h,unsigned a_block)
+    NativeAngularCoefficients(const Proto::Box& a_output,T a_h,unsigned a_block,bool retainMatrix=false)
     {
         using namespace Proto;
         const Point lo = a_output.low(),hi = a_output.high();
@@ -30,6 +33,7 @@ struct NativeAngularCoefficients
         BoxData<T,DIM,HOST,DIM> first = Stencil<T>::Derivative(1,1)(matrix,output);
         BoxData<T,DIM,HOST,DIM> second = Stencil<T>::Derivative(1,2)(matrix,output);
         values.resize(box.size());
+        if(retainMatrix) matrices.resize(box.size());
         for (auto point : box)
         {
             auto& coefficient = values[index(point[1],point[2])];
@@ -37,6 +41,7 @@ struct NativeAngularCoefficients
                 for (unsigned col = 0; col < DIM; ++col)
                 {
                     coefficient[3*row+col] = inverse(point,row,col);
+                    if(retainMatrix) matrices[index(point[1],point[2])][3*row+col]=matrix(point,row,col);
                     if (output.containsPoint(point))
                     {
                         coefficient[9+3*row+col] = first(point,row,col);
@@ -53,6 +58,10 @@ struct NativeAngularCoefficients
     const std::array<T,27>& at(int a_j,int a_k) const
     {
         return values[index(a_j,a_k)];
+    }
+    const std::array<T,9>& matrixAt(int a_j,int a_k) const
+    {
+        return matrices[index(a_j,a_k)];
     }
 };
 
@@ -110,6 +119,17 @@ inline void nativeCorrectedLine(
     }
 }
 
+template<typename T>
+struct NativeConversionCache
+{
+    Proto::MBDisjointBoxLayout layout;
+    Proto::Point ghost;
+    bool retainMatrix;
+    std::map<int,NativeAngularCoefficients<T>> patches;
+    NativeConversionCache(const Proto::MBDisjointBoxLayout& grid,Proto::Point g,bool keepMatrix=false)
+        :layout(grid),ghost(g),retainMatrix(keepMatrix) {}
+};
+
 // The same fourth-order quotient as cellMatrixQuotientMatAndInv, with the
 // two vector groups sharing derivatives and radius-independent coefficients.
 template<typename T,unsigned C>
@@ -117,28 +137,26 @@ inline void cachedNativeConversion(
     Proto::BoxData<T,C,Proto::HOST>& a_output,
     const Proto::BoxData<T,C,Proto::HOST>& a_cart,
     const Proto::MBDisjointBoxLayout& a_layout,
-    Proto::Point a_ghost,int a_index,unsigned a_block,T a_h)
+    Proto::Point a_ghost,int a_index,unsigned a_block,T a_h,
+    NativeConversionCache<T>* retained=nullptr)
 {
     using namespace Proto;
     PR_TIMERS("Cartesian conversion: cached U to Usph");
     static_assert(DIM == 3 && C == 8);
-    struct Cache
+    static std::unique_ptr<NativeConversionCache<T>> fallback;
+    if(!retained)
     {
-        MBDisjointBoxLayout layout;
-        Point ghost;
-        std::map<int,NativeAngularCoefficients<T>> patches;
-        Cache(const MBDisjointBoxLayout& a_layout,Point a_ghost)
-          : layout(a_layout),ghost(a_ghost) {}
-    };
-    static std::unique_ptr<Cache> cache;
-    if (!cache || &cache->layout.partition() != &a_layout.partition()
-        || cache->ghost != a_ghost)
-        cache = std::make_unique<Cache>(a_layout,a_ghost);
-    auto entry = cache->patches.find(a_index);
-    if (entry == cache->patches.end())
-        entry = cache->patches.emplace(std::piecewise_construct,
+        if(!fallback || &fallback->layout.partition()!=&a_layout.partition() || fallback->ghost!=a_ghost)
+            fallback=std::make_unique<NativeConversionCache<T>>(a_layout,a_ghost);
+        retained=fallback.get();
+    }
+    PROTO_ASSERT(&retained->layout.partition()==&a_layout.partition() && retained->ghost==a_ghost,
+        "Native conversion geometry must match its AMR level");
+    auto entry = retained->patches.find(a_index);
+    if (entry == retained->patches.end())
+        entry = retained->patches.emplace(std::piecewise_construct,
             std::forward_as_tuple(a_index),
-            std::forward_as_tuple(a_output.box(),a_h,a_block)).first;
+            std::forward_as_tuple(a_output.box(),a_h,a_block,retained->retainMatrix)).first;
     const auto& geometry = entry->second;
     const Box outputBox = a_output.box();
     const Box quotientBox = outputBox.grow(Point(0,1,1));

@@ -24,9 +24,12 @@ inline void CubedSphereAMR::prepareFourthOrder(GridLevel& grid,const Level& stat
         }
         auto& source=*grid.coarseSource4;
         grid.coarseCopy4->copy(*parent->cartesian,source);
+        if(grid.fourthOrderGhosts.empty())
+            for(auto index : grid.layout) grid.fourthOrderGhosts.emplace_back(grid.donor[index].box(),grid.ratio);
+        unsigned local=0;
         for(auto index : grid.layout)
         {
-            auto interpolated=amrInterpolateFourthOrder<NUMCOMPS>(source[index],grid.donor[index].box(),grid.ratio);
+            auto interpolated=amrInterpolateFourthOrder<NUMCOMPS>(source[index],grid.fourthOrderGhosts[local++]);
             for(auto p : grid.donor[index].box())
             {
                 if(grid.layout[index].containsPoint(p)) continue;
@@ -90,12 +93,14 @@ inline void CubedSphereAMR::prepareFourthOrder(GridLevel& grid,const Level& stat
     for(auto index : grid.layout) grid.donor[index].copyTo((*grid.cartesian)[index]);
     grid.interp.apply(*grid.cartesian,grid.donor);
     grid.cartesian->exchange0();
+    if(!grid.nativeConversion)
+        grid.nativeConversion=std::make_unique<NativeConversionCache<double>>(grid.layout,grid.primitive.ghost()[0],true);
     for(auto index : grid.layout)
     {
         const auto block=grid.layout.block(index);
         const auto convert=[&](State& output)
         {cachedNativeConversion(output,(*grid.cartesian)[index],grid.layout,
-            grid.primitive.ghost()[0],index.global(),block,grid.op[index].dx()[1]);};
+            grid.primitive.ghost()[0],index.global(),block,grid.op[index].dx()[1],grid.nativeConversion.get());};
         if(!boundaryDataOnly) convert(grid.primitive[index]);
         else
         {
@@ -156,25 +161,23 @@ inline void CubedSphereAMR::prepareFourthOrder(GridLevel& grid,const Level& stat
         else low[0]=std::max(low[0],physical.high()[0]+1);
         const Box box(low,high);
         if(box.empty()) continue;
-        auto matrix=CubedSphereShell::AMatrix<double,HOST>(box.grow(Point(0,1,1)),grid.op[index].dx()[1],block,0);
-        forallInPlace([] PROTO_LAMBDA(Var<double,DIM,HOST,DIM>& a)
-        {for(int row=0;row<DIM;++row) for(int col=1;col<DIM;++col) a(row,col)*=M_PI/2;},matrix);
-        std::array<BoxData<double,DIM,HOST,DIM>,2> dm={Stencil<double>::Derivative(1,1)(matrix,box),
-            Stencil<double>::Derivative(1,2)(matrix,box)};
+        const auto& geometry=grid.nativeConversion->patches.at(index.global());
         std::array<State,2> du={Stencil<double>::Derivative(1,1)(grid.primitive[index],box),
             Stencil<double>::Derivative(1,2)(grid.primitive[index],box)};
         for(auto p : box)
         {
             if(p[0]>=physical.low()[0] && p[0]<=physical.high()[0]) continue;
             const auto& u=grid.primitive[index];auto& cart=(*grid.cartesian)[index];
+            const auto& coefficient=geometry.at(p[1],p[2]);
+            const auto& matrix=geometry.matrixAt(p[1],p[2]);
             cart(p,iRHO)=u(p,iRHO);cart(p,iE)=u(p,iE);
             for(int start : {iMOMX,iBX}) for(int row=0;row<DIM;++row)
             {
                 double value=0;
                 for(int col=0;col<DIM;++col)
                 {
-                    value+=matrix(p,row,col)*u(p,start+col);
-                    for(int d=0;d<2;++d) value+=dm[d](p,row,col)*du[d](p,start+col)/12;
+                    value+=matrix[3*row+col]*u(p,start+col);
+                    for(int d=0;d<2;++d) value+=coefficient[9+9*d+3*row+col]*du[d](p,start+col)/12;
                 }
                 cart(p,start+row)=value;
             }

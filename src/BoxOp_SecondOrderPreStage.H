@@ -74,6 +74,30 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::prepareSecondOrderPrimitives(
 }
 
 template<typename T, typename MAP, MemType MEM>
+struct BoxOp_EulerCubedSphere<T,MAP,MEM>::SecondOrderBoundaryCache
+{
+    LayoutT layout;
+    Point ghost;
+    bool averaged;
+    std::vector<State> strips;
+    SecondOrderBoundaryCache(const LayoutT& l,Point g,bool averages)
+        :layout(l),ghost(g),averaged(averages)
+    {
+        for (auto index : l)
+        {
+            strips.emplace_back();
+            const Box storage=l[index].grow(g);
+            const Box domain=l.getBlock(l.block(index)).domain().box();
+            if (storage.low()[0]>=domain.low()[0]) continue;
+            Point low=storage.low(),high=storage.high();
+            high[0]=domain.low()[0]-1;
+            if (!averages) low[0]=high[0];
+            strips.back().defineForOverwrite(Box(low,high));
+        }
+    }
+};
+
+template<typename T, typename MAP, MemType MEM>
 inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
     MBLevelBoxData<T,NUMCOMPS,MEM>& state,
     MBLevelBoxData<T,1,MEM>& volume,T time)
@@ -85,36 +109,14 @@ inline void BoxOp_EulerCubedSphere<T,MAP,MEM>::fillRadialPrimitiveBoundaries(
     const bool magneticTest=isConstantMagneticFieldTest(ParseInputs::get_init_condition_type());
     const T b0=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
     const T gamma=ParseInputs::get_gamma();
-    struct BoundaryCache
-    {
-        LayoutT layout;
-        Point ghost;
-        bool averaged;
-        std::vector<State> strips;
-        BoundaryCache(const LayoutT& l,Point g,bool averages)
-            :layout(l),ghost(g),averaged(averages)
-        {
-            for (auto index : l)
-            {
-                strips.emplace_back();
-                const Box storage=l[index].grow(g);
-                const Box domain=l.getBlock(l.block(index)).domain().box();
-                if (storage.low()[0]>=domain.low()[0]) continue;
-                Point low=storage.low(),high=storage.high();
-                high[0]=domain.low()[0]-1;
-                if (!averages) low[0]=high[0];
-                strips.back().defineForOverwrite(Box(low,high));
-            }
-        }
-    };
-    static std::unique_ptr<BoundaryCache> boundary;
+    auto& boundary=geometry.secondOrderBoundary;
     State unused;
     if (fileBoundary)
     {
         const bool averaged=ParseInputs::get_BC_conserved_averages()!=0;
         if (!boundary || &boundary->layout.partition()!=&layout.partition()
             || boundary->ghost!=state.ghost()[0] || boundary->averaged!=averaged)
-            boundary=std::make_unique<BoundaryCache>(layout,state.ghost()[0],averaged);
+            boundary=std::make_shared<SecondOrderBoundaryCache>(layout,state.ghost()[0],averaged);
         BC_global.BoxData_to_BC<T,MEM>(state,*geometry.map,time,true,&boundary->strips);
     }
     unsigned local=0;

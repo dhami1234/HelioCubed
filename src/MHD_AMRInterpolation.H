@@ -7,6 +7,34 @@
 
 namespace HelioCubed
 {
+// Retain the original absolute-coordinate arithmetic, including at negative
+// ghost indices and non-power-of-two ratios. Only the data change each stage.
+struct AMRSecondOrderInterpolationPlan
+{
+    struct Coordinate {int parent;std::array<double,3> weights;};
+    Proto::Box target;
+    std::array<std::vector<Coordinate>,DIM> coordinates;
+    std::vector<Proto::Point> offsets;
+
+    AMRSecondOrderInterpolationPlan(const Proto::Box& box,Proto::Point ratio):target(box)
+    {
+        for(int d=0;d<DIM;++d)
+            for(int p=box.low()[d];p<=box.high()[d];++p)
+            {
+                const int q=int(floor(double(p)/ratio[d]));
+                const double x=(p+0.5)/ratio[d]-(q+0.5);
+                const double quadratic=x*x+(1.0/(double(ratio[d])*ratio[d])-1)/12;
+                coordinates[d].push_back({q,{0.5*(quadratic-x),1-quadratic,0.5*(quadratic+x)}});
+            }
+        for(auto offset : Proto::Box::Kernel(1))
+        {
+            bool used=true;
+            for(int d=0;d<DIM;++d) if(ratio[d]==1 && offset[d]) used=false;
+            if(used) offsets.push_back(offset);
+        }
+    }
+};
+
 // Integrate the quartic matching five coarse cell averages over a child cell.
 // The mean of the children is the central coarse average, for any integer
 // ratio. An unrefined direction is the exact identity.
@@ -27,6 +55,39 @@ inline std::array<double,5> amrFourthOrderWeights(int ratio,int child)
     for(int i=0;i<5;++i) for(int n=0;n<5;++n) weight[i]+=moment[n]*inverseMoments[n][i];
     return weight;
 }
+
+struct AMRFourthOrderInterpolationPlan
+{
+    struct Coordinate {int parent;std::array<double,5> weights;};
+    Proto::Box target;
+    Proto::Point radius;
+    std::array<Proto::Box,DIM> passes;
+    std::array<std::vector<Coordinate>,DIM> coordinates;
+
+    AMRFourthOrderInterpolationPlan(const Proto::Box& box,Proto::Point ratio):target(box)
+    {
+        Proto::Point qlo,qhi;
+        for(int d=0;d<DIM;++d)
+        {
+            qlo[d]=int(floor(double(box.low()[d])/ratio[d]));
+            qhi[d]=int(floor(double(box.high()[d])/ratio[d]));
+            radius[d]=ratio[d]>1 ? 2 : 0;
+            std::vector<std::array<double,5>> weights;
+            for(int child=0;child<ratio[d];++child) weights.push_back(amrFourthOrderWeights(ratio[d],child));
+            for(int p=box.low()[d];p<=box.high()[d];++p)
+            {
+                const int q=int(floor(double(p)/ratio[d]));
+                coordinates[d].push_back({q,weights[p-q*ratio[d]]});
+            }
+        }
+        for(int d=0;d<DIM;++d)
+        {
+            auto low=box.low(),high=box.high();
+            for(int axis=d+1;axis<DIM;++axis) {low[axis]=qlo[axis]-radius[axis];high[axis]=qhi[axis]+radius[axis];}
+            passes[d]=Proto::Box(low,high);
+        }
+    }
+};
 
 // All components are Cartesian averages in the same block coordinates.
 template<unsigned C>
@@ -61,34 +122,24 @@ inline bool amrInterpolateFourthOrder(const Proto::BoxData<double,C,Proto::HOST>
 // 125 donor reads per component and ghost cell in every RK stage.
 template<unsigned C>
 inline Proto::BoxData<double,C,Proto::HOST> amrInterpolateFourthOrder(
-    const Proto::BoxData<double,C,Proto::HOST>& source,const Proto::Box& target,Proto::Point ratio)
+    const Proto::BoxData<double,C,Proto::HOST>& source,const AMRFourthOrderInterpolationPlan& plan)
 {
     using namespace Proto;
-    Point qlo,qhi,radius;
-    std::array<std::vector<std::array<double,5>>,DIM> weights;
-    for(int d=0;d<DIM;++d)
-    {
-        qlo[d]=int(floor(double(target.low()[d])/ratio[d]));
-        qhi[d]=int(floor(double(target.high()[d])/ratio[d]));
-        radius[d]=ratio[d]>1 ? 2 : 0;
-        for(int child=0;child<ratio[d];++child) weights[d].push_back(amrFourthOrderWeights(ratio[d],child));
-    }
     BoxData<double,C,HOST> previous;
     for(int d=0;d<DIM;++d)
     {
-        Point low=target.low(),high=target.high();
-        for(int axis=d+1;axis<DIM;++axis) {low[axis]=qlo[axis]-radius[axis];high[axis]=qhi[axis]+radius[axis];}
         BoxData<double,C,HOST> next;
-        next.defineForOverwrite(Box(low,high));
+        next.defineForOverwrite(plan.passes[d]);
         const auto& input=d ? previous : source;
         for(auto p : next.box())
         {
-            Point from=p;from[d]=int(floor(double(p[d])/ratio[d]));
-            const auto& weight=weights[d][p[d]-from[d]*ratio[d]];
+            const auto& coordinate=plan.coordinates[d][p[d]-plan.target.low()[d]];
+            Point from=p;from[d]=coordinate.parent;
+            const auto& weight=coordinate.weights;
             for(unsigned c=0;c<C;++c)
             {
                 double value=0;
-                for(int k=-radius[d];k<=radius[d];++k)
+                for(int k=-plan.radius[d];k<=plan.radius[d];++k)
                 {
                     if(weight[k+2]==0) continue;
                     const Point point=from+Point::Basis(d,k);
@@ -101,5 +152,12 @@ inline Proto::BoxData<double,C,Proto::HOST> amrInterpolateFourthOrder(
         previous=std::move(next);
     }
     return previous;
+}
+
+template<unsigned C>
+inline Proto::BoxData<double,C,Proto::HOST> amrInterpolateFourthOrder(
+    const Proto::BoxData<double,C,Proto::HOST>& source,const Proto::Box& target,Proto::Point ratio)
+{
+    return amrInterpolateFourthOrder(source,AMRFourthOrderInterpolationPlan(target,ratio));
 }
 }

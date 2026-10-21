@@ -311,12 +311,14 @@ public:
   }
 
   struct SecondOrderCFLCache;
+  struct SecondOrderBoundaryCache;
   struct LevelGeometry
   {
     std::unique_ptr<MapT> map;
     std::unique_ptr<OpT> op;
     // AMR alternates layouts; each level retains its own immutable CFL metrics.
     std::shared_ptr<SecondOrderCFLCache> secondOrderCFL;
+    std::shared_ptr<SecondOrderBoundaryCache> secondOrderBoundary;
   };
 
   // An AMR hierarchy owns several geometries simultaneously. Bind its level
@@ -352,6 +354,7 @@ public:
     if (!cached.map || &cached.map->layout().partition() != &layout.partition())
     {
       cached.secondOrderCFL.reset();
+      cached.secondOrderBoundary.reset();
       cached.op.reset();
       cached.map = std::make_unique<MapT>(CubedSphereShell::Map(layout, ghost()));
       cached.op = std::make_unique<OpT>(
@@ -569,7 +572,8 @@ public:
 
   inline static T dtCFLSecondOrderHost(
       const MBLevelBoxData<T,NUMCOMPS,MEM>& state,
-      const MBLevelBoxData<T,1,MEM>& volume);
+      const MBLevelBoxData<T,1,MEM>& volume,
+      const MBLevelBoxData<T,1,MEM>* mappedScale=nullptr);
   
   inline BoxData<T,1,MEM> kineticEnergyW(
                                          const State& a_WPoint,

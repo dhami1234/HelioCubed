@@ -100,19 +100,21 @@ public:
         // The O2 operator consumes Cartesian primitives; the O4 operators
         // consume native-basis conserved averages and reconstruct W internally.
         Level state,stage,primitive,donor,rhs,first;
-        std::unique_ptr<Level> cflState;
         std::unique_ptr<ScalarLevel> cflScale;
         std::unique_ptr<MBLevelBoxData<int,1,HOST>> coveredCells;
         std::vector<std::unique_ptr<OP::SecondOrderFaceMask>> activeFaces;
         const Level* preparedState=nullptr;
         std::unique_ptr<Level> old,predictor;
         std::unique_ptr<Level> cartesian; // O4 Cartesian conserved averages <U>.
+        std::unique_ptr<NativeConversionCache<double>> nativeConversion;
         std::array<std::unique_ptr<Level>,4> rk;
         std::unique_ptr<Level> restricted,coarseSource4,mapped4;
         std::unique_ptr<MBLevelBoxData<double,NUMCOMPS+1,HOST>> coarseMapped2,coarseSource2;
         std::unique_ptr<AMRTransferCopier<NUMCOMPS>> restrictionCopy;
         std::unique_ptr<AMRTransferCopier<NUMCOMPS,true>> coarseCopy4;
         std::unique_ptr<AMRTransferCopier<NUMCOMPS+1,true>> coarseCopy2;
+        std::vector<AMRSecondOrderInterpolationPlan> secondOrderGhosts;
+        std::vector<AMRFourthOrderInterpolationPlan> fourthOrderGhosts;
         Stencil<double> restrictionStencil;
         std::unique_ptr<Level> extrapolatedFirst;
         std::vector<std::unique_ptr<Array<State,DIM>>> initialFlux;
@@ -417,9 +419,8 @@ public:
                 m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFL(grid->state,grid->interp,grid->volume);
                 continue;
             }
-            if(!grid->cflState)
+            if(!grid->cflScale)
             {
-                grid->cflState=std::make_unique<Level>(grid->layout,Point::Zeros());
                 grid->cflScale=std::make_unique<ScalarLevel>(grid->layout,Point::Zeros());
                 for(auto index : grid->layout)
                 {
@@ -429,16 +430,8 @@ public:
                         (*grid->cflScale)[index](p)=grid->volume[index](p)*det(p)/grid->jacobian[index](p);
                 }
             }
-            for(auto index : grid->layout)
-            {
-                auto& out=(*grid->cflState)[index];
-                const auto& state=grid->state[index];
-                const auto& scale=(*grid->cflScale)[index];
-                for(auto p : grid->layout[index])
-                    for(int c=0;c<NUMCOMPS;++c)
-                        out(p,c)=state(p,c)*scale(p);
-            }
-            m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFLSecondOrderHost(*grid->cflState,grid->volume);
+            m_effectiveDt[grid->number]=ParseInputs::get_CFL()*OP::dtCFLSecondOrderHost(
+                grid->state,grid->volume,grid->cflScale.get());
         }
         for(unsigned l=numLevels()-1;l>0;--l)
         {
@@ -1266,24 +1259,24 @@ private:
             auto& source=*level.coarseSource2;
             level.coarseCopy2->copy(mapped,source);
             amrSetValLocal(level.donor,0);
+            if(level.secondOrderGhosts.empty())
+                for(auto index : level.layout) level.secondOrderGhosts.emplace_back(level.donor[index].box(),ratio);
+            unsigned local=0;
             for (auto index : level.layout)
             {
                 const auto& src=source[index];
                 auto& out=level.donor[index];
                 const Box owned=level.layout[index];
+                const auto& plan=level.secondOrderGhosts[local++];
                 for (auto p : out.box())
                 {
                     if(owned.containsPoint(p)) continue;
                     // Floor division is required for physical ghost indices.
-                    Point q;double weights[DIM][3];
+                    Point q;const std::array<double,3>* weights[DIM];
                     for(int d=0;d<DIM;++d)
                     {
-                        q[d]=int(floor(double(p[d])/ratio[d]));
-                        const double x=(p[d]+0.5)/ratio[d]-(q[d]+0.5);
-                        const double quadratic=x*x+(1.0/(double(ratio[d])*ratio[d])-1)/12;
-                        weights[d][0]=0.5*(quadratic-x);
-                        weights[d][1]=1-quadratic;
-                        weights[d][2]=0.5*(quadratic+x);
+                        const auto& coordinate=plan.coordinates[d][p[d]-plan.target.low()[d]];
+                        q[d]=coordinate.parent;weights[d]=&coordinate.weights;
                     }
                     // Extra angular donors on an unrefined angular grid may
                     // extend beyond the parent's panel ghosts. Interpolation
@@ -1293,10 +1286,10 @@ private:
                     LocalFaceState<double> u,w;
                     for(int c=0;c<NUMCOMPS;++c) u(c)=0;
                     double j=0;
-                    for(auto offset : Box::Kernel(1))
+                    for(auto offset : plan.offsets)
                     {
                         double weight=1;
-                        for(int d=0;d<DIM;++d) weight*=weights[d][offset[d]+1];
+                        for(int d=0;d<DIM;++d) weight*=(*weights[d])[offset[d]+1];
                         if(weight==0) continue;
                         j+=weight*src(q+offset,NUMCOMPS);
                         for(int c=0;c<NUMCOMPS;++c) u(c)+=weight*src(q+offset,c);

@@ -99,7 +99,8 @@ struct BoxOp_EulerCubedSphere<T,MAP,MEM>::SecondOrderCFLCache
 template<typename T, typename MAP, MemType MEM>
 inline T BoxOp_EulerCubedSphere<T,MAP,MEM>::dtCFLSecondOrderHost(
     const MBLevelBoxData<T,NUMCOMPS,MEM>& state,
-    const MBLevelBoxData<T,1,MEM>& suppliedVolume)
+    const MBLevelBoxData<T,1,MEM>& suppliedVolume,
+    const MBLevelBoxData<T,1,MEM>* mappedScale)
 {
     static_assert(MEM == HOST && DIM == 3 && NUMCOMPS == 8);
     PR_TIMERS("HelioCubed::dtCFLSecondOrderHost");
@@ -120,28 +121,38 @@ inline T BoxOp_EulerCubedSphere<T,MAP,MEM>::dtCFLSecondOrderHost(
         const auto sizes=storage.sizes();
         const size_t componentStride=storage.size();
         const T* data=state[index].data();
+        PROTO_ASSERT(!mappedScale || (*mappedScale)[index].box()==patch.valid,
+            "Mapped CFL scaling must cover exactly the valid patch");
+        const T* scaling=mappedScale ? (*mappedScale)[index].data() : nullptr;
+        size_t scaleOffset=0;
         unsigned angularIndex=0;
         for (int k=lo[2]; k<=hi[2]; ++k) for (int j=lo[1]; j<=hi[1]; ++j)
         {
             const auto& a=patch.angular[angularIndex++];
             const size_t row=(lo[0]-storage.low()[0])+size_t(sizes[0])*
                 ((j-storage.low()[1])+size_t(sizes[1])*(k-storage.low()[2]));
-            for (int i=lo[0]; i<=hi[0]; ++i)
+            for (int i=lo[0]; i<=hi[0]; ++i,++scaleOffset)
             {
                 const auto& r=patch.radial[i-lo[0]];
                 const size_t offset=row+i-lo[0];
-                T rho=data[offset]*a.inverseDet;
+                // Round JU*scale before the existing CFL arithmetic, exactly
+                // as when the AMR driver materialized a separate state array.
+                T u[NUMCOMPS];
+                for(int c=0;c<NUMCOMPS;++c)
+                    u[c]=scaling ? data[offset+c*componentStride]*scaling[scaleOffset]
+                                 : data[offset+c*componentStride];
+                T rho=u[iRHO]*a.inverseDet;
                 rho*=r.inverseVolume;
                 rho=std::max(rho,T(RHO00));
-                T energy=data[offset+iE*componentStride]*a.inverseDet;
+                T energy=u[iE]*a.inverseDet;
                 energy*=r.inverseVolume;
                 T v[DIM]={},b[DIM]={};
                 for (int d=0; d<DIM; ++d)
                 {
                     for (int q=0; q<DIM; ++q)
                     {
-                        v[d]+=a.inverseDetA[d][q]*data[offset+(iMOMX+q)*componentStride];
-                        b[d]+=a.inverseDetA[d][q]*data[offset+(iBX+q)*componentStride];
+                        v[d]+=a.inverseDetA[d][q]*u[iMOMX+q];
+                        b[d]+=a.inverseDetA[d][q]*u[iBX+q];
                     }
                     v[d]*=r.inverseVolume;b[d]*=r.inverseVolume;
                     v[d]/=rho;
