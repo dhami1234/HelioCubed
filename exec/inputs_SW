@@ -200,7 +200,7 @@
 # Number of recent checkpoints targeted for retention.
 -max_checkpoint_files           3
 # Uncomment to resume from this checkpoint instead of initializing.
--restart_file                  checkpoint_amr_600.amr
+#-restart_file                  checkpoint_amr_600.amr
 
 # === Trajectory probes ===
 

@@ -9,12 +9,21 @@ adaptive mesh refinement (AMR).
 The `CubedSphere` branch includes both uniform-grid and AMR solvers:
 
 - Second-order piecewise linear reconstruction with minmod or MC limiting.
-- Fourth-order finite-volume reconstruction with the standard or Berta WENOZ scheme.
+- Fourth-order finite-volume reconstruction with the standard mapped scheme
+  ([McCorquodale et al., 2015](https://doi.org/10.1016/j.jcp.2015.01.006)) or
+  pointwise Berta WENOZ reconstruction
+  ([Berta et al., 2024](https://arxiv.org/abs/2310.11831)).
 - Rusanov and Roe eight-wave Riemann solvers.
 - Multilevel AMR with conservative prolongation, restriction and refluxing;
   separate radial and angular refinement ratios; optional time subcycling.
 - File-driven or analytic solar wind, solar gravity, scheduled FRiED CME insertion,
   trajectory probes, slices, and mapped HDF5 output.
+
+For high-order refinement background, see
+[McCorquodale and Colella (2011)](https://doi.org/10.2140/camcos.2011.6.1),
+*A high-order finite-volume method for conservation laws on locally refined grids*,
+and [McCorquodale, Ullrich, Johansen, and Colella (2015)](https://doi.org/10.2140/camcos.2015.10.121)
+on adaptive multiblock methods for the shallow-water equations on the sphere.
 
 ## Build
 
@@ -123,9 +132,11 @@ The established input files provide more complete configurations:
 | [inputs_convergence](exec/inputs_convergence) | Spatial and space/time convergence studies |
 | [inputs_local](exec/inputs_local) | Local run configuration |
 
-`inputs_SW` currently resumes `checkpoint_amr_600.amr` and schedules a CME.
-For a fresh run, comment out `restart_file` and check the grid, physical epoch,
-boundary file, CME settings, and output prefixes. With `init_condition_type=0`,
+`inputs_SW` starts from initial conditions by default and schedules a CME;
+its example `restart_file` setting is commented out. Before running, check the
+grid, physical epoch, boundary file, CME settings, and output prefixes.
+Uncomment `restart_file` only when the matching checkpoint set is available.
+With `init_condition_type=0`,
 set `BC_file` to a compatible boundary HDF5 file. The repository includes one
 example in `scripts/` and a [SWiG conversion script](scripts/SWiG_to_HelioCubed_h5_conversion.py).
 `BC_start_time` and `CME_Enter_Time` accept decimal years or
@@ -233,6 +244,23 @@ regardless of `scale_data_with_r`; slice and probe outputs have their own
 presentation conventions. `slices` selects any combination of `X Y Z R`;
 AMR slices omit covered coarse cells. Probes sample the finest available level
 at each trajectory position.
+
+Slices from both uniform-grid and AMR runs are self-contained **Tecplot ASCII
+`.dat` files**, for example `data.z.100.dat` or `data.r.100.dat`. They include
+physical coordinates, mesh connectivity, and cell-centered primitive fields.
+`X`, `Y`, and `Z` select the planes x=0, y=0, and z=0; `R` selects the spherical
+shell at radius `1.5e13` cm. Slice cadence is controlled by `slice_cadence` and
+`slice_time_cadence`.
+
+- **Tecplot:** use **File > Load Data**, choose the Tecplot data loader, and
+  open the slice `.dat` file. Enable contours for a field such as `density` or
+  `P`, and mesh lines to inspect the refinement. See the
+  [Tecplot loading guide](https://tecplot.azureedge.net/products/360/current/help/users_manual/data-loading.html).
+- **ParaView:** use **File > Open**, select the slice file or file series,
+  choose **Tecplot Reader** if prompted, and click **Apply**. Color by a cell
+  field and use **Surface With Edges** to inspect the mesh. ParaView's
+  [Tecplot Reader](https://www.paraview.org/paraview-docs/v5.13.0/python/paraview.simple.TecplotReader.html)
+  supports multiple zones, block-packed cell data, and file series.
 
 An AMR restart checkpoint is a **set** of files:
 
