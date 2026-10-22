@@ -143,6 +143,6 @@ clean:
 	rm -rf d o *.o *.exe *.d $(COMMON)/*.o ../src/*.o $(COMMON)/*.d ../src/*.d
 
 dataclean:
-	rm -rf *.hdf5 *.vtk *.table pout* *.log *.dat *.html *.csv
+	rm -rf *.hdf5 *.vtk *.table pout* *.log *.dat *.html *.csv *.amr
 
 
