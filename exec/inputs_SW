@@ -142,6 +142,10 @@
 -amr_refine_pressure_maxlevel   -1
 -amr_refine_B_maxlevel          -1
 -amr_refine_V_maxlevel          -1
+# Optional tag bounds: r in cm; angles in degrees; longitude may wrap 0.
+#-amr_refine_r_range             1.4964e12,1.61124e13
+#-amr_refine_colat_range         60,120
+#-amr_refine_lon_range           350,20
 # Optional regions: [level,]block,lo_r,lo_j,lo_k,hi_r,hi_j,hi_k (parent cells).
 #-amr_refine_regions            1,5,4,4,4,7,7,7
 # AMR output: *_amr_<step>.hdf5 + .map.hdf5; restart from *_amr_<step>.amr.

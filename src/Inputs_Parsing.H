@@ -12,6 +12,7 @@
 #include "MHD_pout.H"
 #include "MHD_Constants.H"
 #include "MHD_Time.H"
+#include "MHD_AMRTagging.H"
 
 #ifndef GIT_HASH_RAW
 #define GIT_HASH_RAW unknown_hash
@@ -144,6 +145,8 @@ private:
     int amr_refine_B_maxlevel = -1;
     int amr_refine_V_maxlevel = -1;
     string amr_refine_regions;
+    string amr_refine_r_range,amr_refine_colat_range,amr_refine_lon_range;
+    HelioCubed::AMRRefinementBounds amr_refine_bounds;
     string BC_file;
     int num_probes = 0;                                
     std::vector<std::string> probe_filenames;           
@@ -267,6 +270,7 @@ public:
             || (get_amr_refine_V_thresh() >= 0 && get_amr_refine_V_maxlevel() > 0);
     }
     static const string& get_amr_refine_regions() {return getInstance().amr_refine_regions;}
+    static const HelioCubed::AMRRefinementBounds& get_amr_refine_bounds() {return getInstance().amr_refine_bounds;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
     static bool uses_second_order_limiter()
@@ -385,6 +389,9 @@ public:
         args.add("amr_refine_B_maxlevel", amr_refine_B_maxlevel);
         args.add("amr_refine_V_maxlevel", amr_refine_V_maxlevel);
         args.add("amr_refine_regions", amr_refine_regions);
+        args.add("amr_refine_r_range", amr_refine_r_range);
+        args.add("amr_refine_colat_range", amr_refine_colat_range);
+        args.add("amr_refine_lon_range", amr_refine_lon_range);
         args.add("BC_file", BC_file);
         args.add("num_probes", num_probes); 
         constexpr int MAX_PROBES = 32; // or more if needed
@@ -502,6 +509,8 @@ public:
             "amr_refine_pressure_thresh", amr_threshold);
         amr_refine_B_thresh = refinementThreshold(amr_refine_B_thresh_raw, "amr_refine_B_thresh", -1);
         amr_refine_V_thresh = refinementThreshold(amr_refine_V_thresh_raw, "amr_refine_V_thresh", -1);
+        amr_refine_bounds=HelioCubed::AMRRefinementBounds::parse(
+            amr_refine_r_range,amr_refine_colat_range,amr_refine_lon_range);
         if (amr_refine_density_maxlevel < -1 || amr_refine_pressure_maxlevel < -1
             || amr_refine_B_maxlevel < -1 || amr_refine_V_maxlevel < -1)
             throw std::invalid_argument("AMR variable maxlevels must be -1 (hierarchy maximum) or nonnegative.");
@@ -612,6 +621,14 @@ public:
             criterion("pressure", amr_refine_pressure_thresh, get_amr_refine_pressure_maxlevel());
             criterion("|B|", amr_refine_B_thresh, get_amr_refine_B_maxlevel());
             criterion("|v|", amr_refine_V_thresh, get_amr_refine_V_maxlevel());
+            if(amr_refine_bounds.active())
+            {
+                pout(0)<<"AMR physical tag bounds:";
+                if(!amr_refine_r_range.empty()) pout(0)<<" r="<<amr_refine_r_range<<" (cm)";
+                if(!amr_refine_colat_range.empty()) pout(0)<<" colatitude="<<amr_refine_colat_range<<" (deg)";
+                if(!amr_refine_lon_range.empty()) pout(0)<<" longitude="<<amr_refine_lon_range<<" (deg)";
+                pout(0)<<endl;
+            }
         }
         if (spatial_order == 2) {
             const char* name = limiter == 0 ? "unlimited" : limiter == 3 ? "MC (monotonized central)" : "minmod";

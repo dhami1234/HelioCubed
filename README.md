@@ -231,6 +231,30 @@ criterion. Tags grow by `amr_buffer` parent cells and allocate whole fine
 patches. Large patches can therefore refine much more volume than the tagged
 cells alone suggest.
 
+Optional physical bounds restrict where cells can trigger refinement:
+
+```text
+-amr_refine_r_range       1.4964e12,7.482e12
+-amr_refine_colat_range   60,120
+-amr_refine_lon_range     350,20
+```
+
+Radius is in cm. Colatitude is in degrees from the north pole: 0 north,
+90 equator, 180 south. Longitude is in degrees in the simulation's Cartesian
+frame: 0 along +X, 90 along +Y. These are fixed directions in that frame;
+boundary-frame rotation does not rotate the bounds. Longitudes are normalized
+modulo 360, so negative values work and `350,20` crosses 0. A span of at least
+360 degrees, such as `0,360` or `-180,180`, allows every longitude; equal
+endpoints select a single meridian. Longitude does not restrict either pole.
+
+Omit any range to leave that coordinate unrestricted. All supplied ranges
+must contain a parent cell's center for it to tag. The bounds apply to every
+AMR level and to both variable-dependent criteria and `amr_refine_regions`;
+they restrict refinement without forcing it. Buffering, whole-patch allocation
+and nesting support can extend the actual refined mesh beyond the bounds.
+Changing bounds on restart takes effect at the next regrid; the saved mesh
+is restored first. Commented examples are included in the established inputs.
+
 Regridding occurs when either cadence is reached: `amr_regrid_interval` counts
 base steps, and `amr_regrid_time_cadence` measures elapsed simulation seconds.
 Zero disables that cadence. Time-based regrids occur at the first synchronized

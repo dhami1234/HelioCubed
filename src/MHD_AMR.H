@@ -115,6 +115,7 @@ public:
         std::unique_ptr<AMRTransferCopier<NUMCOMPS+1,true>> coarseCopy2;
         std::vector<AMRSecondOrderInterpolationPlan> secondOrderGhosts;
         std::vector<AMRFourthOrderInterpolationPlan> fourthOrderGhosts;
+        std::vector<AMRRefinementMask> tagMasks;
         Stencil<double> restrictionStencil;
         std::unique_ptr<Level> extrapolatedFirst;
         std::vector<std::unique_ptr<Array<State,DIM>>> initialFlux;
@@ -1486,9 +1487,14 @@ private:
             if(region.empty()) return;
             for(auto patch : region.refine(ratio).coarsen(boxSize)) patches.insert({int(block),patch[0],patch[1],patch[2]});
         };
+        const auto& bounds=ParseInputs::get_amr_refine_bounds();
         if(parent<numLevels() && ParseInputs::uses_amr_tagging())
         {
-            const auto& grid=level(parent);
+            auto& grid=level(parent);
+            if(bounds.active() && grid.tagMasks.empty())
+                for(auto index : grid.layout)
+                    grid.tagMasks.emplace_back(grid.layout[index],domain.sizes(),grid.layout.block(index),
+                        bounds,cubedSphereShellGeometry());
             // Each limit is the finest CHILD level that criterion can create.
             const std::array<double,4> thresholds={
                 parent<unsigned(ParseInputs::get_amr_refine_density_maxlevel()) ? ParseInputs::get_amr_refine_density_thresh() : -1,
@@ -1497,13 +1503,17 @@ private:
                 parent<unsigned(ParseInputs::get_amr_refine_V_maxlevel()) ? ParseInputs::get_amr_refine_V_thresh() : -1};
             // Constant-field tests evolve the perturbation; tag the total field.
             const double b0=testProblemBackgroundBx(ParseInputs::get_init_condition_type());
+            unsigned local=0;
             for(auto index : grid.layout)
             {
+                const auto* mask=bounds.active() ? &grid.tagMasks[local++] : nullptr;
+                if(mask && mask->empty()) continue;
                 State fourth;
                 if(fourthOrder()) fourth=fourthOrderPrimitives(grid,index);
                 const auto& w=fourthOrder() ? fourth : grid.primitive[index];
                 for(auto p : grid.layout[index])
                 {
+                    if(mask && !mask->contains(p)) continue;
                     bool refine=false;
                     for(unsigned variable=0;variable<thresholds.size() && !refine;++variable)
                     {
@@ -1526,7 +1536,12 @@ private:
         if(procID()==0) for(const auto& region : m_regions)
             if(region.level==parent+1)
                 for(unsigned block=0;block<6;++block)
-                    if(region.block<0 || unsigned(region.block)==block) tag(region.cells,block);
+                    if(region.block<0 || unsigned(region.block)==block)
+                    {
+                        if(!bounds.active()) tag(region.cells,block);
+                        else AMRRefinementMask(region.cells,domain.sizes(),block,bounds,cubedSphereShellGeometry())
+                            .tagRegions([&](const Box& cells) {tag(cells,block);});
+                    }
         return gatherPatches(std::move(patches));
     }
 
