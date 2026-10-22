@@ -10,6 +10,14 @@
 
 MHDReader BC_global;
 
+void setTimerReportFile(const std::string& stem)
+{
+  // Proto uses the supplied filename verbatim on every rank.
+  std::string filename="/dev/null";
+  if(procID()==0) filename=stem+".time.table";
+  PR_TIMER_SETFILE(filename);
+}
+
 int main(int argc, char *argv[])
 {
   #ifdef PR_MPI
@@ -68,7 +76,7 @@ int main(int argc, char *argv[])
   if (init_condition_type == 0) BC_global.file_to_BoxData_vec(BC_file);
   if (ParseInputs::get_amr_max_level())
   {
-    PR_TIMER_SETFILE("CubedSphere_AMR.time.table");
+    setTimerReportFile("CubedSphere_AMR");
     int status=0;
     try { HelioCubed::runCubedSphereAMR(); }
     catch (const std::exception& error)
@@ -94,8 +102,8 @@ int main(int argc, char *argv[])
   Array<double, DIM> offset = {0., 0., 0.};
   Array<double, DIM> exp = {1., 1., 1.};
   MBLevelBoxData<double, NUMCOMPS, HOST> U_conv_test[3]; 
-  PR_TIMER_SETFILE(to_string(thickness) + "_DIM" + to_string(DIM) +"_"+to_string(boxSize_nonrad) + "_" + to_string(boxSize_rad)//+ "_NProc" + to_string(numProc())
-                   + "_CubeSphereTest.time.table");
+  setTimerReportFile(to_string(thickness) + "_DIM" + to_string(DIM) +"_"+to_string(boxSize_nonrad) + "_" + to_string(boxSize_rad)
+                   + "_CubeSphereTest");
   PR_TIMERS("MMB_MHD");
   int levmax = 3;
   auto domain =

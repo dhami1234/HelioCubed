@@ -5,6 +5,7 @@
 #include "BoxOp_EulerCubedSphere.H"
 #include "MHD_Constants.H"
 #include "MHD_Output.H"
+#include "MHD_Probe.H"
 #include <iomanip>
 #include <iostream>
 #include <string.h>
@@ -1531,13 +1532,9 @@ inline const ProbeTrajectory& probeTrajectory(const string& filename)
 struct ProbeGeometry
 {
   MBDisjointBoxLayout layout;
-  int lastLocalBlock = -1;
   std::map<std::pair<int,int>, double> angularDeterminants;
 
-  explicit ProbeGeometry(const MBDisjointBoxLayout& a_layout) : layout(a_layout)
-  {
-    for (auto index : layout) lastLocalBlock = layout.block(index);
-  }
+  explicit ProbeGeometry(const MBDisjointBoxLayout& a_layout) : layout(a_layout) {}
 
   double determinant(Point point, double spacing)
   {
@@ -1613,25 +1610,30 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   double y = r_now * y_n;
   double z = r_now * z_n;
 
-  double H3_to_RTN_00 = x_n;
-  double H3_to_RTN_01 = y_n;
-  double H3_to_RTN_02 = z_n;
-  double H3_to_RTN_10 = -y_n;
-  double H3_to_RTN_11 = x_n;
-  double H3_to_RTN_12 = 0.0;
-  double H3_to_RTN_20 = -x_n * z_n;
-  double H3_to_RTN_21 = -y_n * z_n;
-  double H3_to_RTN_22 = x_n * x_n + y_n * y_n;
+  const double theta = latitude_now * M_PI / 180;
+  const double phi = longitude_now * M_PI / 180;
 
   const Array<double, DIM> Xcart = {x, y, z};
   Array<double, DIM> Xi;
-  // Array<double, DIM> Xi = a_map.inverse(Xcart); This inverse will work in future
-
   const auto& layout = a_map.layout();
   auto& geometry = HelioCubed::probeGeometry(layout);
-  if (geometry.lastLocalBlock < 0) return;
-  // The previous loop retained only the inverse from its last local block.
-  Xi = a_map.op(geometry.lastLocalBlock).inverse(Xcart);
+  // Select the physical panel independently of the rank's local patches.
+  // The first covering panel owns seam points, so each probe writes one row.
+  int sampleBlock = -1;
+  for (int block = 0; block < 6; ++block)
+  {
+    f_cubedSphereInverseMap(Xi, Xcart, block, cubedSphereShellGeometry());
+    bool inside = true;
+    for (int d = 0; d < DIM; ++d)
+      if (!std::isfinite(Xi[d]) || Xi[d] < -1e-12 || Xi[d] > 1 + 1e-12)
+        inside = false;
+    if (!inside) continue;
+    for (int d = 0; d < DIM; ++d) Xi[d] = std::clamp(Xi[d], 0.0, 1.0);
+    sampleBlock = block;
+    break;
+  }
+  if (sampleBlock < 0) return;
+  const Point size = layout.domain().getBlock(sampleBlock).sizes();
 
   double eta0 = Xi[0];
   double eta1 = Xi[1];
@@ -1644,37 +1646,13 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   int pt0_nearest, pt1_nearest, pt2_nearest;
   int pt0_neigbor, pt1_neigbor, pt2_neigbor;
 
-  pt0_nearest = floor(pt0);
-  pt1_nearest = floor(pt1);
-  pt2_nearest = floor(pt2);
+  pt0_nearest = std::min(int(floor(pt0)), size[0] - 1);
+  pt1_nearest = std::min(int(floor(pt1)), size[1] - 1);
+  pt2_nearest = std::min(int(floor(pt2)), size[2] - 1);
 
-  
-  if (round(pt0) == floor(pt0))
-  {
-    pt0_neigbor = pt0_nearest - 1;
-  }
-  else
-  {
-    pt0_neigbor = pt0_nearest + 1;
-  }
-
-  if (round(pt1) == floor(pt1))
-  {
-    pt1_neigbor = pt1_nearest - 1;
-  }
-  else
-  {
-    pt1_neigbor = pt1_nearest + 1;
-  }
-
-  if (round(pt2) == floor(pt2))
-  {
-    pt2_neigbor = pt2_nearest - 1;
-  }
-  else
-  {
-    pt2_neigbor = pt2_nearest + 1;
-  }
+  pt0_neigbor = pt0_nearest + (pt0 < pt0_nearest + 0.5 ? -1 : 1);
+  pt1_neigbor = pt1_nearest + (pt1 < pt1_nearest + 0.5 ? -1 : 1);
+  pt2_neigbor = pt2_nearest + (pt2 < pt2_nearest + 0.5 ? -1 : 1);
 
   double probed_values[NUMCOMPS];
   double probed_values_primitive[NUMCOMPS];
@@ -1684,7 +1662,6 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
   Point index_n2(pt0_nearest, pt1_nearest, pt2_neigbor);
 
 
-  Point size = layout.domain().getBlock(0).sizes();
   double dxiPerp = 1.0/size[1];
 
   for (auto dit : layout)
@@ -1692,7 +1669,7 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
     auto& JU_i = a_JU[dit];
     const Box dbx0 = JU_i.box();
     const Box dbx1 = layout[dit];
-    if (dbx1.containsPoint(index_cc))
+    if (layout.block(dit) == sampleBlock && dbx1.containsPoint(index_cc))
     {
       BoxData<double,1,HOST> localVolume;
       if (!a_dVolrLev)
@@ -1719,11 +1696,11 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
       {
         probed_values[i] = values[0][i];
         if (dbx0.containsPoint(index_n0))
-          probed_values[i] += (values[1][i] - values[0][i]) * (pt0 - (pt0_nearest + 0.5)) / (pt0_neigbor - (pt0_nearest + 0.5));
+          probed_values[i] += (values[1][i] - values[0][i]) * HelioCubed::probeInterpolationWeight(pt0, pt0_nearest, pt0_neigbor);
         if (dbx0.containsPoint(index_n1))
-          probed_values[i] += (values[2][i] - values[0][i]) * (pt1 - (pt1_nearest + 0.5)) / (pt1_neigbor - (pt1_nearest + 0.5));
+          probed_values[i] += (values[2][i] - values[0][i]) * HelioCubed::probeInterpolationWeight(pt1, pt1_nearest, pt1_neigbor);
         if (dbx0.containsPoint(index_n2))
-          probed_values[i] += (values[3][i] - values[0][i]) * (pt2 - (pt2_nearest + 0.5)) / (pt2_neigbor - (pt2_nearest + 0.5));
+          probed_values[i] += (values[3][i] - values[0][i]) * HelioCubed::probeInterpolationWeight(pt2, pt2_nearest, pt2_neigbor);
       }
 
       double v2 = 0.0;
@@ -1752,15 +1729,8 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
       double By = probed_values_primitive[6] * 1e6;   // microGauss
       double Bz = probed_values_primitive[7] * 1e6;   // microGauss
 
-      double VR, VT, VN, BR, BT, BN;
-
-      VR = H3_to_RTN_00 * Vx + H3_to_RTN_01 * Vy + H3_to_RTN_02 * Vz;
-      VT = H3_to_RTN_10 * Vx + H3_to_RTN_11 * Vy + H3_to_RTN_12 * Vz;
-      VN = H3_to_RTN_20 * Vx + H3_to_RTN_21 * Vy + H3_to_RTN_22 * Vz;
-
-      BR = H3_to_RTN_00 * Bx + H3_to_RTN_01 * By + H3_to_RTN_02 * Bz;
-      BT = H3_to_RTN_10 * Bx + H3_to_RTN_11 * By + H3_to_RTN_12 * Bz;
-      BN = H3_to_RTN_20 * Bx + H3_to_RTN_21 * By + H3_to_RTN_22 * Bz;
+      const auto velocity = HelioCubed::projectProbeVectorToRTN(Vx, Vy, Vz, theta, phi);
+      const auto magnetic = HelioCubed::projectProbeVectorToRTN(Bx, By, Bz, theta, phi);
 
       // if (probed_values[0] != 0) {
       openOutput();
@@ -1769,13 +1739,13 @@ void Probe(const MBLevelBoxData<double, NUMCOMPS, HOST> &a_JU,
                  << setw(11) << setprecision(4) << 90 - latitude_now
                  << setw(11) << setprecision(4) << longitude_now
                  << setw(11) << setprecision(4) << rho
-                 << setw(11) << setprecision(4) << VR
-                 << setw(11) << setprecision(4) << VT
-                 << setw(11) << setprecision(4) << VN
+                 << setw(11) << setprecision(4) << velocity[0]
+                 << setw(11) << setprecision(4) << velocity[1]
+                 << setw(11) << setprecision(4) << velocity[2]
                  << setw(11) << setprecision(4) << p
-                 << setw(11) << setprecision(4) << BR
-                 << setw(11) << setprecision(4) << BT
-                 << setw(11) << setprecision(4) << BN
+                 << setw(11) << setprecision(4) << magnetic[0]
+                 << setw(11) << setprecision(4) << magnetic[1]
+                 << setw(11) << setprecision(4) << magnetic[2]
                  << endl;
       // }
     }

@@ -312,10 +312,19 @@ in the spherical basis before rotating back to Cartesian components.
 `output_divB=1` always adds physical `divB` in G/cm.
 
 `slices` selects any combination of `X Y Z R`; AMR slices omit covered coarse
-cells. Checkpoints retain conservative state, and probes retain their RTN
-columns and units. Probes sample the finest available level at each trajectory
-position. The bundled solar-wind slice plotting defaults use spherical field
-names.
+cells. Checkpoints retain conservative state. Probes sample the finest available
+level at each trajectory position. The bundled solar-wind slice plotting
+defaults use spherical field names.
+
+Probes write orthonormal RTN velocity components (`VR`, `VT`, `VN`) and magnetic
+components (`BR`, `BT`, `BN`) for both uniform-grid and AMR runs, independently
+of the volume/slice `output_coordinates` setting. For plotting in spherical
+components, use `Vr=VR`, `Vtheta=-VN`, and `Vphi=VT`, with the same mapping for B.
+Theta is colatitude, increasing southward.
+Each headerless probe row contains decimal year, radius (AU), latitude (degrees),
+simulation longitude (degrees), number density (cm^-3), three velocity components
+(km/s), pressure (picodyne/cm^2), and three magnetic components (microgauss).
+Probes do not apply the volume/slice radial scaling.
 
 Slices from both uniform-grid and AMR runs are self-contained **Tecplot ASCII
 `.dat` files**, for example `data.z.100.dat` or `data.r.100.dat`. They include

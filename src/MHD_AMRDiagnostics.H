@@ -137,13 +137,10 @@ inline void CubedSphereAMR::writeProbes(int iteration,double time,bool giveSpace
             continue;
         }
         const auto& w=sample.second;
-        // Retain the established probe columns, RTN projection and units.
         auto project=[&](int start,double scale)
         {
             const double x=w[start]*scale,y=w[start+1]*scale,z=w[start+2]*scale;
-            return std::array<double,3>{normal[0]*x+normal[1]*y+normal[2]*z,
-                -normal[1]*x+normal[0]*y,
-                -normal[0]*normal[2]*x-normal[1]*normal[2]*y+(normal[0]*normal[0]+normal[1]*normal[1])*z};
+            return projectProbeVectorToRTN(x,y,z,theta,phi);
         };
         const auto velocity=project(iVX,1e-5),magnetic=project(iBX,1e6);
         int error=0;
