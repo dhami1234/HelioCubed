@@ -66,30 +66,6 @@ The default language standard is C++17. Set `CXXSTD` in your local configuration
 or on the make command line to select another standard (for example,
 `make CXXSTD=c++20 -B -j8`).
 
-On each cluster, copy your saved configuration into `exec/` and select it with
-`CONFIG`. Load the site's compiler/MPI/HDF5/OpenBLAS modules as needed:
-
-```sh
-# Pleiades:
-make CONFIG=config.pleiades.mk -B -j8
-# Anvil:
-make CONFIG=config.anvil.mk -B -j8
-```
-
-Alternatively, name the local configuration `config.mk` on each machine and
-use `make -j8` everywhere. To create a configuration for a new machine, copy
-`config.mk.example` and edit the settings.
-
-Select any other local configuration with `CONFIG`, or override individual
-settings on the command line:
-
-```sh
-make CONFIG=config.workstation.mk -B -j8
-make -B -j8 PROTO=/path/to/proto \
-  HDF5_INC=/path/to/parallel-hdf5/include HDF5_LIB=/path/to/parallel-hdf5/lib \
-  LAPACK_INC=/path/to/openblas/include LAPACK_LIB=/path/to/openblas/lib
-```
-
 The local configuration is optional when dependencies are supplied through
 environment variables or command-line assignments. Command-line assignments
 take precedence over the configuration file. Missing configuration is reported
