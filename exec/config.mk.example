@@ -12,3 +12,6 @@ HDF5_INC = /path/to/parallel-hdf5/include
 HDF5_LIB = /path/to/parallel-hdf5/lib
 LAPACK_INC = /path/to/openblas/include
 LAPACK_LIB = /path/to/openblas/lib
+
+# Optional compiler settings (default: c++17).
+# CXXSTD = c++17

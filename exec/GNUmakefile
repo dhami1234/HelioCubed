@@ -12,7 +12,7 @@ DEPXX ?= $(CXX)
 DIM=3
 USE_HDF5=TRUE
 PROTO ?= ../../proto
-CXXSTD ?= c++20
+CXXSTD ?= c++17
 
 # Radial coordinate index; shell radii and stretching are required in the inputs file.
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0

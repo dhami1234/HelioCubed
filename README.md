@@ -27,7 +27,7 @@ on adaptive multiblock methods for the shallow-water equations on the sphere.
 
 ## Build
 
-You need a C++20 compiler, GNU Make, Proto, OpenBLAS (BLAS/LAPACK), an MPI
+You need a C++17 compiler, GNU Make, Proto, OpenBLAS (BLAS/LAPACK), an MPI
 compiler wrapper, and parallel HDF5 built with the same MPI stack. A single
 `exec/GNUmakefile` supplies the MPI build rules for every machine; local
 configuration files supply the compiler and dependency settings.
@@ -57,6 +57,10 @@ stay local. Commit only the template and shared build rules. `PROTO` defaults
 to `../../proto`, matching the sibling checkout layout above. `HDF5_INC`,
 `HDF5_LIB`, `LAPACK_INC`, and `LAPACK_LIB` are directory paths, not linker flags.
 Always run make from `exec/`, or use `make -C exec` from the repository root.
+
+The default language standard is C++17. Set `CXXSTD` in your local configuration
+or on the make command line to select another standard (for example,
+`make CXXSTD=c++20 -B -j8`).
 
 On each cluster, copy your saved configuration into `exec/` and select it with
 `CONFIG`. Load the site's compiler/MPI/HDF5/OpenBLAS modules as needed:
