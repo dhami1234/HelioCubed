@@ -1,11 +1,9 @@
 VARS_OLD := $(.VARIABLES)
-DEPXX=clang++
-CXX=clang++
-#CXX=mpicxx
+DEPXX=mpicxx
+CXX=mpicxx
 DIM=3
 USE_HDF5=TRUE
-PROTO ?= ../../proto
-COMMON ?= $(PROTO)/examples/_common
+PROTO=../../proto
 
 # Radial coordinate index; shell radii and stretching are required in the inputs file.
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0
@@ -22,9 +20,11 @@ GIT_MESSAGE := $(subst $(comma),_,$(GIT_MESSAGE))
 # Then replace spaces with underscores
 GIT_MESSAGE := $(subst $(space),_,$(GIT_MESSAGE))
 
-LAPACK_LIB=-lblas -llapack
+LAPACK_LIB=/opt/homebrew/opt/openblas/lib
+LAPACK_INC=/opt/homebrew/opt/openblas/include
 #CXXOPTFLAGS=-g
-CXXOPTFLAGS=-O3 -g
+# CXXOPTFLAGS=-O2 -g
+CXXOPTFLAGS=-O3
 # Disable assertions in optimized builds to reduce iteration overhead.
 # Requires the HDF5 assertion fixes in both Proto and MHDReader.
 # For assertion-enabled debugging, remove -DNDEBUG and do a clean rebuild.
@@ -46,20 +46,18 @@ CXXOPTFLAGS+= -DPR_DISABLE_INIT_CHECKS
 CXXOPTFLAGS+=-DPR_MMB
 CXXOPTFLAGS+=-DPR_LAPACK
 CXXOPTFLAGS+=-DPR_CFD
+CXXOPTFLAGS+=-DPR_LAPACK
 CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+= -DCUBED_SPHERE_SHELL_RADIAL_COORD=$(CUBED_SPHERE_SHELL_RADIAL_COORD)
 CXXOPTFLAGS += -DGIT_HASH_RAW=$(GIT_HASH)
 CXXOPTFLAGS += -DGIT_MESSAGE_RAW=$(GIT_MESSAGE)
-HDF5_LIB=/usr/local/lib
-HDF5_INC=/usr/local/include
-CXXOPTFLAGS+=-DPR_CFD
-#HDF5_LIB=/usr/lib
-#HDF5_INC=/usr/include
-#CXXOPTFLAGS+= -DPR_MPI=TRUE
+HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
+HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
+CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 TARGET:=cubedSphereTest.exe
 
-SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(COMMON)/*.cpp)
+SRC=$(patsubst ../src/%,%,$(wildcard ../src/*.cpp)) $(wildcard *.cpp) $(wildcard $(PROTO)/examples/_common/*.cpp) 
 NODIRSRC = $(notdir $(SRC))
 NODIROBJ = $(subst .cpp,.o,$(NODIRSRC))
 OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
@@ -67,17 +65,20 @@ OBJ=$(patsubst %.o,o/%.o, $(NODIROBJ))
 NODIRDEP = $(subst .cpp,.d,$(NODIRSRC))
 DEPENDS=$(patsubst %.d,d/%.d, $(NODIRDEP))
 
-VPATH=o. ../src  $(COMMON)
+VPATH=o. ../src  $(PROTO)/examples/_common
 
 
-CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/tests -I. -I../src -I$(COMMON)
+CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/include/tests -I$(PROTO)/include/lapack -I. -I../src -I$(PROTO)/examples/_common
 CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20
-
-LIBS += $(LAPACK_LIB)
 
 ifdef HDF5_LIB
 LIBS+= -L$(HDF5_LIB) -lhdf5 -lz
 CPPFLAGS+= -I$(HDF5_INC)
+endif
+
+ifdef LAPACK_LIB
+LIBS+= -L$(LAPACK_LIB) -lopenblas
+CPPFLAGS+= -I$(LAPACK_INC)
 endif
 
 ifdef OLCF_HDF5_ROOT
@@ -140,9 +141,7 @@ vars:
 	$(foreach v,$(filter-out $(VARS_OLD) VARS_OLD,$(.VARIABLES)), $(info $(v) = $($(v))))
 
 clean:
-	rm -rf d o *.o *.exe *.d $(COMMON)/*.o ../src/*.o $(COMMON)/*.d ../src/*.d
+	rm -rf d o *.o *.exe *.d $(PROTO)/examples/_common/*.o ../src/*.o ../../common/*.d ../src/*.d
 
 dataclean:
 	rm -rf *.hdf5 *.vtk *.table pout* *.log *.dat *.html *.csv *.amr
-
-

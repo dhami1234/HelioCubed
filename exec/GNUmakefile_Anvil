@@ -1,6 +1,4 @@
 VARS_OLD := $(.VARIABLES)
-#DEPXX=clang++
-#CXX=clang++
 DEPXX=mpicxx
 CXX=mpicxx
 DIM=3
