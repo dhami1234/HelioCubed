@@ -3,6 +3,9 @@
 #include "Proto.H"
 #include "InputParser.H"
 #include <algorithm> // For std::remove
+#include <array>
+#include <fstream>
+#include <map>
 #include <iostream>  // For std::pout(0), etc.
 #include <iomanip>   // For std::setw, etc.
 #include <vector>
@@ -146,7 +149,7 @@ private:
     int amr_refine_V_maxlevel = -1;
     string amr_refine_regions;
     string amr_refine_r_range,amr_refine_colat_range,amr_refine_lon_range;
-    HelioCubed::AMRRefinementBounds amr_refine_bounds;
+    HelioCubed::AMRRefinementRegions amr_refine_bounds;
     string BC_file;
     int num_probes = 0;                                
     std::vector<std::string> probe_filenames;           
@@ -270,7 +273,7 @@ public:
             || (get_amr_refine_V_thresh() >= 0 && get_amr_refine_V_maxlevel() > 0);
     }
     static const string& get_amr_refine_regions() {return getInstance().amr_refine_regions;}
-    static const HelioCubed::AMRRefinementBounds& get_amr_refine_bounds() {return getInstance().amr_refine_bounds;}
+    static const HelioCubed::AMRRefinementRegions& get_amr_refine_bounds() {return getInstance().amr_refine_bounds;}
     static int get_temporal_order() {return getInstance().temporal_order;}
     static int get_divergence_cleaning() {return getInstance().divergence_cleaning;}
     static bool uses_second_order_limiter()
@@ -392,6 +395,44 @@ public:
         args.add("amr_refine_r_range", amr_refine_r_range);
         args.add("amr_refine_colat_range", amr_refine_colat_range);
         args.add("amr_refine_lon_range", amr_refine_lon_range);
+        // Register the numbered keys present in this input, without imposing
+        // a region-count limit or allocating storage for gaps in the indices.
+        struct RegionInput {std::array<string,3> range;std::array<bool,3> present{};};
+        std::map<int,RegionInput> numberedBounds;
+        const std::array<string,3> rangeNames={"amr_refine_r_range","amr_refine_colat_range","amr_refine_lon_range"};
+        auto registerRegion=[&](const string& option)
+        {
+            for(size_t coordinate=0;coordinate<rangeNames.size();++coordinate)
+            {
+                const string prefix="-"+rangeNames[coordinate]+".";
+                if(option.compare(0,prefix.size(),prefix)!=0) continue;
+                const string suffix=option.substr(prefix.size());
+                const string message=option+" requires a nonnegative integer region index";
+                if(suffix.empty() || !std::all_of(suffix.begin(),suffix.end(),[](char c){return c>='0' && c<='9';}))
+                    throw std::invalid_argument(message);
+                int index;
+                try {index=std::stoi(suffix);} catch(...) {throw std::invalid_argument(message);}
+                auto& region=numberedBounds[index];
+                region.present[coordinate]=true;
+                args.add(option.substr(1),region.range[coordinate]);
+                return true;
+            }
+            return false;
+        };
+        if(argc==2)
+        {
+            std::ifstream file(argv[1]);
+            if(!file) throw std::invalid_argument("Could not open inputs file: "+string(argv[1]));
+            string line,option;
+            while(std::getline(file,line))
+            {
+                std::istringstream row(line);
+                if(row>>option) registerRegion(option);
+            }
+        }
+        else for(int i=1;i<argc;++i)
+            if(registerRegion(argv[i]) && i+1==argc)
+                throw std::invalid_argument(string(argv[i])+" requires two finite numbers: min,max");
         args.add("BC_file", BC_file);
         args.add("num_probes", num_probes); 
         constexpr int MAX_PROBES = 32; // or more if needed
@@ -509,8 +550,22 @@ public:
             "amr_refine_pressure_thresh", amr_threshold);
         amr_refine_B_thresh = refinementThreshold(amr_refine_B_thresh_raw, "amr_refine_B_thresh", -1);
         amr_refine_V_thresh = refinementThreshold(amr_refine_V_thresh_raw, "amr_refine_V_thresh", -1);
-        amr_refine_bounds=HelioCubed::AMRRefinementBounds::parse(
+        const auto legacyBounds=HelioCubed::AMRRefinementBounds::parse(
             amr_refine_r_range,amr_refine_colat_range,amr_refine_lon_range);
+        if(legacyBounds.active() && !numberedBounds.empty())
+            throw std::invalid_argument("Use either unnumbered AMR physical tag bounds or numbered .0, .1, ... regions; do not mix them");
+        amr_refine_bounds.regions.clear();
+        if(legacyBounds.active()) amr_refine_bounds.regions.push_back(legacyBounds);
+        for(const auto& entry : numberedBounds)
+        {
+            const auto& region=entry.second;
+            const string suffix="."+std::to_string(entry.first);
+            for(size_t c=0;c<rangeNames.size();++c)
+                if(region.present[c] && region.range[c].empty())
+                    throw std::invalid_argument(rangeNames[c]+suffix+" requires two finite numbers: min,max");
+            amr_refine_bounds.regions.push_back(HelioCubed::AMRRefinementBounds::parse(
+                region.range[0],region.range[1],region.range[2],suffix));
+        }
         if (amr_refine_density_maxlevel < -1 || amr_refine_pressure_maxlevel < -1
             || amr_refine_B_maxlevel < -1 || amr_refine_V_maxlevel < -1)
             throw std::invalid_argument("AMR variable maxlevels must be -1 (hierarchy maximum) or nonnegative.");
@@ -621,14 +676,16 @@ public:
             criterion("pressure", amr_refine_pressure_thresh, get_amr_refine_pressure_maxlevel());
             criterion("|B|", amr_refine_B_thresh, get_amr_refine_B_maxlevel());
             criterion("|v|", amr_refine_V_thresh, get_amr_refine_V_maxlevel());
-            if(amr_refine_bounds.active())
+            auto printBounds=[&](const string& suffix,const std::array<string,3>& ranges)
             {
-                pout(0)<<"AMR physical tag bounds:";
-                if(!amr_refine_r_range.empty()) pout(0)<<" r="<<amr_refine_r_range<<" (cm)";
-                if(!amr_refine_colat_range.empty()) pout(0)<<" colatitude="<<amr_refine_colat_range<<" (deg)";
-                if(!amr_refine_lon_range.empty()) pout(0)<<" longitude="<<amr_refine_lon_range<<" (deg)";
+                pout(0)<<"AMR physical tag bounds"<<suffix<<":";
+                if(!ranges[0].empty()) pout(0)<<" r="<<ranges[0]<<" (cm)";
+                if(!ranges[1].empty()) pout(0)<<" colatitude="<<ranges[1]<<" (deg)";
+                if(!ranges[2].empty()) pout(0)<<" longitude="<<ranges[2]<<" (deg)";
                 pout(0)<<endl;
-            }
+            };
+            if(legacyBounds.active()) printBounds("",{amr_refine_r_range,amr_refine_colat_range,amr_refine_lon_range});
+            for(const auto& entry : numberedBounds) printBounds("."+std::to_string(entry.first),entry.second.range);
         }
         if (spatial_order == 2) {
             const char* name = limiter == 0 ? "unlimited" : limiter == 3 ? "MC (monotonized central)" : "minmod";

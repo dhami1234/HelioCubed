@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace HelioCubed
@@ -52,17 +53,21 @@ struct AMRRefinementBounds
         return value<0 ? value+360 : value;
     }
 
-    static AMRRefinementBounds parse(const std::string& r,const std::string& theta,const std::string& phi)
+    static AMRRefinementBounds parse(const std::string& r,const std::string& theta,const std::string& phi,
+        const std::string& suffix="")
     {
         AMRRefinementBounds result;
-        result.radius=parseRange(r,"amr_refine_r_range");
-        result.colatitude=parseRange(theta,"amr_refine_colat_range");
-        result.longitude=parseRange(phi,"amr_refine_lon_range");
+        const auto rName="amr_refine_r_range"+suffix;
+        const auto thetaName="amr_refine_colat_range"+suffix;
+        const auto phiName="amr_refine_lon_range"+suffix;
+        result.radius=parseRange(r,rName.c_str());
+        result.colatitude=parseRange(theta,thetaName.c_str());
+        result.longitude=parseRange(phi,phiName.c_str());
         if(result.radius.enabled && (result.radius.low<0 || result.radius.high<result.radius.low))
-            throw std::invalid_argument("amr_refine_r_range requires 0 <= min <= max (cm)");
+            throw std::invalid_argument(rName+" requires 0 <= min <= max (cm)");
         if(result.colatitude.enabled && (result.colatitude.low<0 || result.colatitude.high>180
             || result.colatitude.high<result.colatitude.low))
-            throw std::invalid_argument("amr_refine_colat_range requires 0 <= min <= max <= 180 (degrees)");
+            throw std::invalid_argument(thetaName+" requires 0 <= min <= max <= 180 (degrees)");
         if(result.longitude.enabled)
         {
             result.fullLongitude=std::abs(result.longitude.high-result.longitude.low)>=360;
@@ -88,16 +93,22 @@ struct AMRRefinementBounds
     }
 };
 
+struct AMRRefinementRegions
+{
+    std::vector<AMRRefinementBounds> regions;
+    bool active() const {return !regions.empty();}
+};
+
 // Cache one radial interval and one angular plane per local parent patch.
 // Regrids then filter tags without trigonometry or a full 3D mask per cell.
-class AMRRefinementMask
+class AMRRefinementRegionMask
 {
     Proto::Box m_box;
     int m_low,m_high;
     bool m_empty=false;
     std::vector<unsigned char> m_angular;
 public:
-    AMRRefinementMask(const Proto::Box& box,Proto::Point sizes,unsigned block,
+    AMRRefinementRegionMask(const Proto::Box& box,Proto::Point sizes,unsigned block,
         const AMRRefinementBounds& bounds,const Proto::CubedSphereShellGeometry& geometry)
         :m_box(box),m_low(box.low()[0]),m_high(box.high()[0])
     {
@@ -162,6 +173,46 @@ public:
                 if(j>start) tag(Proto::Box(Proto::Point(m_low,start,k),Proto::Point(m_high,j-1,k)));
             }
         }
+    }
+};
+
+// Keep each region's radial and angular bounds together. Combining radial and
+// angular unions separately would incorrectly include space between regions.
+class AMRRefinementMask
+{
+    std::vector<AMRRefinementRegionMask> m_regions;
+public:
+    AMRRefinementMask(const Proto::Box& box,Proto::Point sizes,unsigned block,
+        const AMRRefinementBounds& bounds,const Proto::CubedSphereShellGeometry& geometry)
+    {
+        AMRRefinementRegionMask mask(box,sizes,block,bounds,geometry);
+        if(!mask.empty()) m_regions.push_back(std::move(mask));
+    }
+
+    AMRRefinementMask(const Proto::Box& box,Proto::Point sizes,unsigned block,
+        const AMRRefinementRegions& bounds,const Proto::CubedSphereShellGeometry& geometry)
+    {
+        m_regions.reserve(bounds.regions.size());
+        if(!bounds.active()) m_regions.emplace_back(box,sizes,block,AMRRefinementBounds{},geometry);
+        for(const auto& region : bounds.regions)
+        {
+            AMRRefinementRegionMask mask(box,sizes,block,region,geometry);
+            if(!mask.empty()) m_regions.push_back(std::move(mask));
+        }
+    }
+
+    bool empty() const {return m_regions.empty();}
+    bool contains(Proto::Point cell) const
+    {
+        for(const auto& region : m_regions) if(region.contains(cell)) return true;
+        return false;
+    }
+
+    template<class Tag> void tagRegions(const Tag& tag) const
+    {
+        // The caller inserts patches into a set, so overlapping regions do
+        // not duplicate fine patches or increase reported coverage.
+        for(const auto& region : m_regions) region.tagRegions(tag);
     }
 };
 

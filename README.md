@@ -109,62 +109,18 @@ lines. Paths in inputs are relative to the directory where the executable runs.
 The program accepts either one input filename or command-line options; it does
 not combine an input filename with extra command-line overrides.
 
-Create an `inputs_run` file with this short analytic solar-wind example, which
-does not need boundary data or a checkpoint:
-
-```text
--init_condition_type       1
--strength                  100
--Sun_gravity               1
--gamma                     1.5
--domainSize                24
--thickness                 24
--inner_radius              1.4964e12
--outer_radius              1.61124e13
--radial_stretch            0
--boxSize_nonrad            12
--boxSize_rad               12
--spatial_order             2
--limiter                   3
--Riemann_solver_type       2
--temporal_order            2
--linear_viscosity          0
--nonlinear_viscosity       0
--boundary_reflux           1
--CFL                       0.5
--max_iter                  5
--max_time                  3600
--amr_max_level             0
--P_floor_cadence           1
--write_cadence             1000
--write_time_cadence        1000000000
--checkpoint_cadence        1000
--data_file_prefix          quickstart
--checkpoint_file_prefix    quickstart_checkpoint
-```
-
 ```sh
-mpirun -np 1 ./cubedSphereTest.exe inputs_run     # one MPI rank
-mpirun -np 8 ./cubedSphereTest.exe inputs_run     # eight MPI ranks
+mpirun -np 1 ./cubedSphereTest.exe inputs_file     # one MPI rank
+mpirun -np 8 ./cubedSphereTest.exe inputs_file     # eight MPI ranks
 ```
 
-Volume output is written at initialization and at the final step. `max_iter`
-and `max_time` are absolute stopping limits, including elapsed steps/time when
-restarting. Time inputs are in seconds and shell radii are in centimeters.
-Every input file must explicitly set `inner_radius`, `outer_radius`, and
-`radial_stretch`; a missing or commented setting stops the run with an error.
-Use `radial_stretch=0` for uniform radial spacing or a nonzero value for
-exponential stretching. These settings do not come from the Makefile.
-
-The established input files provide more complete configurations:
+The established input files provide complete configurations:
 
 | Input file | Purpose |
 | --- | --- |
 | [inputs_SW](exec/inputs_SW) | File-driven solar wind, CME, probes, and AMR |
-| [inputs_Sine_Wave](exec/inputs_Sine_Wave) | Analytic solar wind |
 | [inputs_Test_Problems](exec/inputs_Test_Problems) | Pulse, shock, and blast problems |
 | [inputs_convergence](exec/inputs_convergence) | Spatial and space/time convergence studies |
-| [inputs_local](exec/inputs_local) | Local run configuration |
 
 `inputs_SW` starts from initial conditions by default and schedules a CME;
 its example `restart_file` setting is commented out. Before running, check the
@@ -263,9 +219,12 @@ cells alone suggest.
 Optional physical bounds restrict where cells can trigger refinement:
 
 ```text
--amr_refine_r_range       1.4964e12,7.482e12
--amr_refine_colat_range   60,120
--amr_refine_lon_range     350,20
+-amr_refine_r_range.0       1.4964e12,7.482e12
+-amr_refine_colat_range.0   60,120
+-amr_refine_lon_range.0     350,20
+-amr_refine_r_range.1       7.482e12,1.61124e13
+-amr_refine_colat_range.1   70,110
+-amr_refine_lon_range.1     170,200
 ```
 
 Radius is in cm. Colatitude is in degrees from the north pole: 0 north,
@@ -276,9 +235,14 @@ modulo 360, so negative values work and `350,20` crosses 0. A span of at least
 360 degrees, such as `0,360` or `-180,180`, allows every longitude; equal
 endpoints select a single meridian. Longitude does not restrict either pole.
 
-Omit any range to leave that coordinate unrestricted. All supplied ranges
-must contain a parent cell's center for it to tag. The bounds apply to every
-AMR level and to both variable-dependent criteria and `amr_refine_regions`;
+Ranges with the same suffix form one region. A cell's center must satisfy
+all supplied bounds of at least one region to tag; overlapping regions do
+not duplicate refinement. Omit a range to leave that coordinate unrestricted
+within its region. Region indices are nonnegative integers, may have gaps,
+and are independent of AMR levels. The original unnumbered names still work
+for one region; use either numbered or unnumbered bounds, without mixing.
+The bounds apply to every AMR level and to both variable-dependent criteria
+and `amr_refine_regions`;
 they restrict refinement without forcing it. Buffering, whole-patch allocation
 and nesting support can extend the actual refined mesh beyond the bounds.
 Changing bounds on restart takes effect at the next regrid; the saved mesh
