@@ -29,6 +29,7 @@ blt
 /docs/
 *.jpeg
 *.png
+!/assets/HelioCubed_logo.png
 *.mpg
 *.gif
 pout.*

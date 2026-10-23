@@ -1,5 +1,9 @@
 # HelioCubed
 
+<p align="center">
+  <img src="assets/HelioCubed_logo.png" alt="HelioCubed logo" width="360">
+</p>
+
 HelioCubed solves the ideal magnetohydrodynamic (MHD) equations on a six-panel
 cubed-sphere shell using the [Proto](https://github.com/applied-numerical-algorithms-group-lbnl/proto)
 framework. It supports solar-wind and coronal mass ejection (CME) simulations,
