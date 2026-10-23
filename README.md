@@ -216,7 +216,7 @@ With `amr_subcycling=0`, all levels share the finest required timestep. With
 RK3/RK4 subcycling uses extrapolated SSPRK2 advances, which adds work; its
 performance depends on the refined volume and the level timestep limits.
 
-Refinement uses the MS-FLUKSS relative-gradient magnitude of density, pressure,
+Refinement uses the relative-gradient magnitude of density, pressure,
 magnetic-field magnitude, or speed. For an interior cell, each directional
 contribution is `(q_plus - q_minus) / (q_plus + q_minus)`; the criterion uses
 the Euclidean norm of those contributions. Physical radial boundaries use
