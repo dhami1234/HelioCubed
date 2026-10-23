@@ -1,9 +1,18 @@
 VARS_OLD := $(.VARIABLES)
-DEPXX=mpicxx
-CXX=mpicxx
+# Keep installation-specific settings outside the tracked build rules.
+# Run from exec/ (or use make -C exec). Relative paths are based there.
+CONFIG ?= config.mk
+-include $(CONFIG)
+
+# GNU Make supplies a built-in CXX=g++; use MPI unless the user selected CXX.
+ifneq ($(filter default undefined,$(origin CXX)),)
+CXX = mpicxx
+endif
+DEPXX ?= $(CXX)
 DIM=3
 USE_HDF5=TRUE
-PROTO=../../proto
+PROTO ?= ../../proto
+CXXSTD ?= c++20
 
 # Radial coordinate index; shell radii and stretching are required in the inputs file.
 CUBED_SPHERE_SHELL_RADIAL_COORD ?= 0
@@ -20,11 +29,9 @@ GIT_MESSAGE := $(subst $(comma),_,$(GIT_MESSAGE))
 # Then replace spaces with underscores
 GIT_MESSAGE := $(subst $(space),_,$(GIT_MESSAGE))
 
-LAPACK_LIB=/opt/homebrew/opt/openblas/lib
-LAPACK_INC=/opt/homebrew/opt/openblas/include
 #CXXOPTFLAGS=-g
 # CXXOPTFLAGS=-O2 -g
-CXXOPTFLAGS=-O3
+CXXOPTFLAGS ?= -O3
 # Disable assertions in optimized builds to reduce iteration overhead.
 # Requires the HDF5 assertion fixes in both Proto and MHDReader.
 # For assertion-enabled debugging, remove -DNDEBUG and do a clean rebuild.
@@ -51,8 +58,6 @@ CXXOPTFLAGS+= -DPR_HDF5=TRUE
 CXXOPTFLAGS+= -DCUBED_SPHERE_SHELL_RADIAL_COORD=$(CUBED_SPHERE_SHELL_RADIAL_COORD)
 CXXOPTFLAGS += -DGIT_HASH_RAW=$(GIT_HASH)
 CXXOPTFLAGS += -DGIT_MESSAGE_RAW=$(GIT_MESSAGE)
-HDF5_LIB=/opt/homebrew/opt/hdf5-mpi/lib
-HDF5_INC=/opt/homebrew/opt/hdf5-mpi/include
 CXXOPTFLAGS+= -DPR_MPI=TRUE
 CXXOPTFLAGS+= -DPR_STACK_ALLOC=4294967296
 TARGET:=cubedSphereTest.exe
@@ -69,7 +74,7 @@ VPATH=o. ../src  $(PROTO)/examples/_common
 
 
 CPPFLAGS:=-DDIM=$(DIM) -I$(PROTO)/include -I$(PROTO)/include/base -I$(PROTO)/include/amr -I$(PROTO)/include/mmb -I$(PROTO)/include/lapack -I$(PROTO)/include/utils -I$(PROTO)/include/tests -I$(PROTO)/include/lapack -I. -I../src -I$(PROTO)/examples/_common
-CXXFLAGS:= $(CXXOPTFLAGS) -std=c++20
+CXXFLAGS:= $(CXXOPTFLAGS) -std=$(CXXSTD)
 
 ifdef HDF5_LIB
 LIBS+= -L$(HDF5_LIB) -lhdf5 -lz
@@ -112,6 +117,20 @@ DEPDIR = d
 
 $(TARGET): $(OBJ)
 	$(LINK) -o $(TARGET) $(OBJ) $(LIBS)
+
+# Check before compiling/linking, while keeping clean and print-* usable
+# without installed dependencies. OLCF_HDF5_ROOT remains an alternative.
+$(OBJ) $(TARGET): | check-config
+
+.PHONY: check-config
+check-config:
+	@test -d "$(PROTO)/include" -a -d "$(PROTO)/examples/_common" || \
+		{ echo "Set PROTO to a Proto checkout in $(CONFIG) or on the make command line."; exit 1; }
+	@test -n "$(strip $(HDF5_INC))" -a -n "$(strip $(HDF5_LIB))" || \
+		test -n "$(strip $(OLCF_HDF5_ROOT))" || \
+		{ echo "Set HDF5_INC and HDF5_LIB (or OLCF_HDF5_ROOT) for parallel HDF5 in $(CONFIG)."; exit 1; }
+	@test -n "$(strip $(LAPACK_INC))" -a -n "$(strip $(LAPACK_LIB))" || \
+		{ echo "Set LAPACK_INC and LAPACK_LIB to OpenBLAS directories in $(CONFIG)."; exit 1; }
 
 $(OBJDIR):
 	@if [ ! -d "./$(OBJDIR)" ];then     \

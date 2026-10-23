@@ -43,3 +43,6 @@ visitlog.py
 /test_scripts/
 
 /.venv.nosync/
+
+# Private build settings (tracked templates use the .mk.example suffix).
+/exec/config*.mk

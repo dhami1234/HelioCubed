@@ -1,0 +1,14 @@
+# Copy to config.mk and edit for your installation. config*.mk is ignored by Git.
+# Run make from exec/; all relative paths are interpreted from that directory.
+# Use an MPI compiler wrapper and parallel HDF5 built with the same MPI stack.
+CXX = mpicxx
+DEPXX = $(CXX)
+
+# Proto checkout beside HelioCubed; change this if installed elsewhere.
+PROTO = ../../proto
+
+# These variables are directory paths, not compiler or linker flags.
+HDF5_INC = /path/to/parallel-hdf5/include
+HDF5_LIB = /path/to/parallel-hdf5/lib
+LAPACK_INC = /path/to/openblas/include
+LAPACK_LIB = /path/to/openblas/lib

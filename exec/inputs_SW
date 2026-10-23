@@ -212,21 +212,14 @@
 # === Trajectory probes ===
 
 # Number of trajectory probes; 0 disables probes (up to 32 named entries).
--num_probes                     3
+-num_probes                     1
 # Trajectory-probe sampling interval (s).
 -Probe_cadence                  3600
 # Trajectory file: year, day-of-year, radius (AU), HGI latitude/longitude (deg).
 -probe0.coords                  trajEarth
-# Probe output filename.
 -probe0.filename                Earth.dat
-# Trajectory file: year, day-of-year, radius (AU), HGI latitude/longitude (deg).
--probe1.coords                  traj_0
-# Probe output filename.
--probe1.filename                Probe_0.dat
-# Trajectory file: year, day-of-year, radius (AU), HGI latitude/longitude (deg).
--probe2.coords                  traj_1
-# Probe output filename.
--probe2.filename                Probe_1.dat
+#-probe1.coords                  traj_0
+#-probe1.filename                Probe_0.dat
 
 # === CME insertion ===
 

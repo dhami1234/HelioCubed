@@ -27,13 +27,14 @@ on adaptive multiblock methods for the shallow-water equations on the sphere.
 
 ## Build
 
-You need a C++ compiler compatible with the selected makefile (C++20 for the
-default and local builds), GNU Make, Proto, HDF5, and BLAS/LAPACK. MPI builds also
-need an MPI compiler wrapper and parallel HDF5 built with the same MPI stack.
+You need a C++20 compiler, GNU Make, Proto, OpenBLAS (BLAS/LAPACK), an MPI
+compiler wrapper, and parallel HDF5 built with the same MPI stack. A single
+`exec/GNUmakefile` supplies the MPI build rules for every machine; local
+configuration files supply the compiler and dependency settings.
 
 Use Proto's `integrate/master-cubedSphereDev` branch, which includes the
 multiblock AMR, mapped HDF5, and checkpoint support used here. Proto is a separate
-checkout; it is not downloaded by the HelioCubed makefiles.
+checkout; it is not downloaded by the HelioCubed makefile.
 
 ```sh
 git clone --branch CubedSphere https://github.com/dhami1234/HelioCubed.git
@@ -42,32 +43,52 @@ git clone --branch integrate/master-cubedSphereDev \
 cd HelioCubed/exec
 ```
 
-Choose a makefile and adjust its compiler and dependency paths for your system:
-
-| Makefile in `exec/` | Configuration |
-| --- | --- |
-| `GNUmakefile` | Default Clang, serial build |
-| `GNUmakefile.clang` | Alternate Clang, serial build |
-| `GNUmakefile.gcc` | GCC, serial build |
-| `GNUmakefile_TS` | Local macOS MPI build with Homebrew HDF5/OpenBLAS |
-| `GNUmakefile_Anvil` | Anvil MPI build |
-| `GNUmakefile_Pleiades` | Pleiades MPI build |
-
-For example, build the default serial executable with explicit library paths:
+Copy the configuration template and edit the compiler and dependency paths
+for your installation:
 
 ```sh
-make -B -j8 PROTO=/absolute/path/to/proto \
-  HDF5_INC=/path/to/hdf5/include HDF5_LIB=/path/to/hdf5/lib \
-  LAPACK_LIB="-L/path/to/openblas/lib -lopenblas"
+cp config.mk.example config.mk
+# Edit config.mk, then build:
+make -j8
 ```
 
-For a configured MPI makefile, use, for example:
+`config.mk` and other `exec/config*.mk` files are ignored by Git, so your paths
+stay local. Commit only the template and shared build rules. `PROTO` defaults
+to `../../proto`, matching the sibling checkout layout above. `HDF5_INC`,
+`HDF5_LIB`, `LAPACK_INC`, and `LAPACK_LIB` are directory paths, not linker flags.
+Always run make from `exec/`, or use `make -C exec` from the repository root.
+
+On each cluster, copy your saved configuration into `exec/` and select it with
+`CONFIG`. Load the site's compiler/MPI/HDF5/OpenBLAS modules as needed:
 
 ```sh
-make -f GNUmakefile_TS -B -j8
+# Pleiades:
+make CONFIG=config.pleiades.mk -B -j8
+# Anvil:
+make CONFIG=config.anvil.mk -B -j8
 ```
 
-The executable is `exec/cubedSphereTest.exe`. All supplied makefiles enable
+Alternatively, name the local configuration `config.mk` on each machine and
+use `make -j8` everywhere. To create a configuration for a new machine, copy
+`config.mk.example` and edit the settings.
+
+Select any other local configuration with `CONFIG`, or override individual
+settings on the command line:
+
+```sh
+make CONFIG=config.workstation.mk -B -j8
+make -B -j8 PROTO=/path/to/proto \
+  HDF5_INC=/path/to/parallel-hdf5/include HDF5_LIB=/path/to/parallel-hdf5/lib \
+  LAPACK_INC=/path/to/openblas/include LAPACK_LIB=/path/to/openblas/lib
+```
+
+The local configuration is optional when dependencies are supplied through
+environment variables or command-line assignments. Command-line assignments
+take precedence over the configuration file. Missing configuration is reported
+before compilation; `make check-config` checks the Proto layout and required
+dependency settings without compiling.
+
+The executable is `exec/cubedSphereTest.exe`. The shared makefile enables
 `PR_AMR`; select uniform-grid or adaptive operation at runtime with
 `amr_max_level`. Rebuild with `-B` after changing compiler flags or makefiles so
 existing objects are recompiled. The makefiles are the supported standalone
@@ -115,8 +136,8 @@ does not need boundary data or a checkpoint:
 ```
 
 ```sh
-./cubedSphereTest.exe inputs_run                 # serial build
-mpirun -np 8 ./cubedSphereTest.exe inputs_run     # MPI build
+mpirun -np 1 ./cubedSphereTest.exe inputs_run     # one MPI rank
+mpirun -np 8 ./cubedSphereTest.exe inputs_run     # eight MPI ranks
 ```
 
 Volume output is written at initialization and at the final step. `max_iter`
