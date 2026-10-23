@@ -1,7 +1,7 @@
 # HelioCubed
 
 <p align="center">
-  <img src="assets/HelioCubed_logo.png" alt="HelioCubed logo" width="300">
+  <img src="https://github.com/user-attachments/assets/97dbd3f7-b4e7-486a-86aa-5984fee436ab" alt="HelioCubed logo" width="300">
 </p>
 
 HelioCubed solves the ideal magnetohydrodynamic (MHD) equations on a six-panel
