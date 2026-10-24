@@ -6,8 +6,7 @@
 
 HelioCubed solves the ideal magnetohydrodynamic (MHD) equations on a six-panel
 cubed-sphere shell using the [Proto](https://github.com/applied-numerical-algorithms-group-lbnl/proto)
-framework. It supports solar-wind and coronal mass ejection (CME) simulations,
-idealized test problems, and convergence studies, with MPI parallelism and
+framework. It supports solar-wind and coronal mass ejection (CME) simulations, with MPI parallelism and
 adaptive mesh refinement (AMR).
 
 The `CubedSphere` branch includes both uniform-grid and AMR solvers:
